@@ -14,12 +14,13 @@ import type {
   SummaryQuery,
   SummaryRow,
 } from '../contracts/records';
-import { CURRENT_USER_ID, MOCK_NOW, MOCK_TODAY, objects, users } from './definitions';
+import { MOCK_NOW, MOCK_TODAY, objects, users } from './definitions';
 import { dataset } from './generate';
 import { createCaptureApi } from './capture';
 import { createInboxApi } from './inbox';
 import { createReportsApi } from './reports';
 import { createSequencesApi, enrollFromWorkflow } from './sequences';
+import { activeUsers, assertAllowed, assertCan, createTeamApi, currentAccess, session, visible } from './team';
 import { type WorkflowDeps, createWorkflowsApi, fire } from './workflows';
 
 /** In-memory implementation of `CrmApi`. Everything the pages know about data comes through here. */
@@ -64,7 +65,7 @@ function monthEdge(offset: number, edge: 'start' | 'end'): string {
 function resolveToken(value: string): string {
   switch (value) {
     case '$me':
-      return CURRENT_USER_ID;
+      return session.userId;
     case '$today':
       return MOCK_TODAY;
     case '$tomorrow':
@@ -137,6 +138,8 @@ function select(query: { objectId: string; viewId?: string; filters?: Filter[]; 
   const needle = query.search?.trim().toLowerCase();
   const all = dataset().byObject.get(query.objectId) ?? [];
   return all.filter((item) => {
+    // What the person may see comes first; filters and search only narrow it.
+    if (!visible(item)) return false;
     if (!filters.every((filter) => matches(item, filter))) return false;
     if (!needle) return true;
     const name = item.properties[object.primaryProperty];
@@ -205,6 +208,7 @@ function references(items: CrmRecord[]): Record<string, Reference> {
 function get(id: string): CrmRecord {
   const item = dataset().byId.get(id);
   if (!item) throw new Error(`Record "${id}" not found`);
+  if (!visible(item)) throw new Error('You don\'t have access to this record.');
   return item;
 }
 
@@ -215,14 +219,16 @@ function related(id: string): RelatedGroup[] {
   for (const definitionOf of definition(item.objectId).properties) {
     if (definitionOf.type !== 'reference' || !definitionOf.referenceObjectId) continue;
     const target = item.properties[definitionOf.id];
-    const found = typeof target === 'string' ? dataset().byId.get(target) : undefined;
+    const linked = typeof target === 'string' ? dataset().byId.get(target) : undefined;
+    // A linked record the person may not see is left out, as if there were none.
+    const found = linked && visible(linked) ? linked : undefined;
     groups.push({ objectId: definitionOf.referenceObjectId, total: found ? 1 : 0, records: found ? [found] : [] });
   }
   // Records of other objects that point at this one.
   for (const object of objects) {
     const pointing = object.properties.filter((candidate) => candidate.type === 'reference' && candidate.referenceObjectId === item.objectId);
     if (pointing.length === 0 || groups.some((group) => group.objectId === object.id)) continue;
-    const found = (dataset().byObject.get(object.id) ?? []).filter((candidate) => pointing.some((ref) => candidate.properties[ref.id] === id));
+    const found = (dataset().byObject.get(object.id) ?? []).filter((candidate) => visible(candidate) && pointing.some((ref) => candidate.properties[ref.id] === id));
     groups.push({ objectId: object.id, total: found.length, records: found.slice(0, RELATED_LIMIT) });
   }
   return groups;
@@ -269,11 +275,11 @@ function activityFor(recordId: string): Activity[] {
       kind: template.kind,
       title: template.title,
       body: template.body,
-      actorId: (users[(seed + index) % users.length] ?? users[0])?.id ?? CURRENT_USER_ID,
+      actorId: (users[(seed + index) % users.length] ?? users[0])?.id ?? session.userId,
       occurredAt: new Date(start + Math.floor((span * (index + 1)) / (count + 1))).toISOString(),
     });
   }
-  generated.push({ id: `act_${recordId}_created`, recordId, kind: 'change', title: 'Record created', actorId: CURRENT_USER_ID, occurredAt: item.createdAt });
+  generated.push({ id: `act_${recordId}_created`, recordId, kind: 'change', title: 'Record created', actorId: session.userId, occurredAt: item.createdAt });
   return [...(createdActivity.get(recordId) ?? []), ...generated].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
 }
 
@@ -423,7 +429,7 @@ function importRecords(input: ImportRequest): ImportResult {
 function logEmail(recordId: string, subject: string, body: string): void {
   if (!dataset().byId.has(recordId)) return;
   sequence += 1;
-  const logged: Activity = { id: `act_new_${sequence}`, recordId, kind: 'email', title: `Email sent: ${subject}`, body, actorId: CURRENT_USER_ID, occurredAt: new Date().toISOString() };
+  const logged: Activity = { id: `act_new_${sequence}`, recordId, kind: 'email', title: `Email sent: ${subject}`, body, actorId: session.userId, occurredAt: new Date().toISOString() };
   createdActivity.set(recordId, [logged, ...(createdActivity.get(recordId) ?? [])]);
 }
 
@@ -444,7 +450,7 @@ let notifications: Notification[] | undefined;
 /** A few notifications to start with, about the signed-in user's own deals. */
 function allNotifications(): Notification[] {
   if (notifications) return notifications;
-  const mine = (dataset().byObject.get('deals') ?? []).filter((deal) => deal.properties.owner === CURRENT_USER_ID).slice(0, 4);
+  const mine = (dataset().byObject.get('deals') ?? []).filter((deal) => deal.properties.owner === session.userId).slice(0, 4);
   const now = Date.parse(MOCK_NOW);
   const messages = ['Jonas mentioned you in a note: “Can you join the pricing call?”', 'A task on this deal is overdue.', 'Priya assigned this deal to you.', 'The contact replied to your email.'];
   notifications = mine.map((deal, index) => ({ id: `ntf_${index + 1}`, message: messages[index] ?? 'Something changed.', recordId: deal.id, createdAt: new Date(now - (index * 5 + 1) * 3_600_000).toISOString(), read: index > 1 }));
@@ -461,6 +467,8 @@ function mergeRecords(input: MergeRecords): CrmRecord {
   const keep = get(input.keepId);
   const merged = get(input.mergeId);
   if (keep.objectId !== merged.objectId) throw new Error('Only two records of the same kind can be merged.');
+  assertCan('edit', keep, definition(keep.objectId).singular.toLowerCase());
+  assertCan('delete', merged, definition(merged.objectId).singular.toLowerCase());
   if (keep.id === merged.id) throw new Error('Choose two different records.');
   const object = definition(keep.objectId);
   const data = dataset();
@@ -489,10 +497,24 @@ function mergeRecords(input: MergeRecords): CrmRecord {
     }
   }
   sequence += 1;
-  const note: Activity = { id: `act_new_${sequence}`, recordId: keep.id, kind: 'change', title: `Merged with ${String(merged.properties[object.primaryProperty] ?? 'another record')}`, actorId: CURRENT_USER_ID, occurredAt: new Date().toISOString() };
+  const note: Activity = { id: `act_new_${sequence}`, recordId: keep.id, kind: 'change', title: `Merged with ${String(merged.properties[object.primaryProperty] ?? 'another record')}`, actorId: session.userId, occurredAt: new Date().toISOString() };
   createdActivity.set(keep.id, [note, ...(createdActivity.get(keep.id) ?? []), ...moved]);
   createdActivity.delete(merged.id);
   return keep;
+}
+
+/** Hands every record one person owns to another. Returns how many moved. */
+function reassignRecords(fromId: string, toId: string): number {
+  let moved = 0;
+  for (const object of objects) {
+    if (!object.properties.some((item) => item.id === 'owner')) continue;
+    for (const item of dataset().byObject.get(object.id) ?? []) {
+      if (item.properties.owner !== fromId) continue;
+      item.properties.owner = toId;
+      moved += 1;
+    }
+  }
+  return moved;
 }
 
 const workflowDeps: WorkflowDeps = {
@@ -509,7 +531,7 @@ const workflowDeps: WorkflowDeps = {
   enroll: enrollFromWorkflow,
   notify: (userId, message, recordId) => {
     // Only the signed-in user has a bell in the mock; other people's notifications have nowhere to show.
-    if (userId === CURRENT_USER_ID) pushNotification(message, recordId);
+    if (userId === session.userId) pushNotification(message, recordId);
   },
 };
 
@@ -534,7 +556,7 @@ function upsertContact(properties: Record<string, PropertyValue>): { record: Crm
 
 function logActivity(recordId: string, kind: 'note' | 'meeting', title: string, body: string): void {
   sequence += 1;
-  const logged: Activity = { id: `act_new_${sequence}`, recordId, kind, title, body, actorId: CURRENT_USER_ID, occurredAt: new Date().toISOString() };
+  const logged: Activity = { id: `act_new_${sequence}`, recordId, kind, title, body, actorId: session.userId, occurredAt: new Date().toISOString() };
   createdActivity.set(recordId, [logged, ...(createdActivity.get(recordId) ?? [])]);
 }
 
@@ -544,7 +566,8 @@ export const mockApi: CrmApi = {
   ...createSequencesApi(respond),
   ...createWorkflowsApi(workflowDeps),
   ...createCaptureApi({ respond, upsertContact, logActivity }),
-  getWorkspace: () => respond(() => ({ name: 'Northwind', objects, users, currentUserId: CURRENT_USER_ID })),
+  ...createTeamApi(respond, reassignRecords),
+  getWorkspace: () => respond(() => ({ name: 'Northwind', objects, users: activeUsers(), currentUserId: session.userId, access: currentAccess() })),
 
   listRecords: (query: ListQuery) =>
     respond(() => {
@@ -592,6 +615,7 @@ export const mockApi: CrmApi = {
   updateRecord: (input) =>
     respond(() => {
       const item = get(input.id);
+      assertCan('edit', item, definition(item.objectId).singular.toLowerCase());
       validate(definition(item.objectId), input.properties, item.id, false);
       const changed = Object.fromEntries(Object.entries(input.properties).filter(([key, value]) => JSON.stringify(item.properties[key] ?? null) !== JSON.stringify(value)));
       Object.assign(item.properties, input.properties);
@@ -602,6 +626,7 @@ export const mockApi: CrmApi = {
 
   createObject: (input) =>
     respond(() => {
+      assertAllowed('manageSettings', 'add objects');
       const id = slug(input.plural, '-');
       if (!id) throw new Error('Give the object a name.');
       if (objects.some((object) => object.id === id) || RESERVED.has(id)) throw new Error(`"${input.plural}" is already in use.`);
@@ -626,6 +651,7 @@ export const mockApi: CrmApi = {
 
   createProperty: (input) =>
     respond(() => {
+      assertAllowed('manageSettings', 'add properties');
       const object = definition(input.objectId);
       const base = slug(input.label, '');
       if (!base) throw new Error('Give the property a name.');
@@ -651,6 +677,7 @@ export const mockApi: CrmApi = {
 
   updateProperty: (input) =>
     respond(() => {
+      assertAllowed('manageSettings', 'change properties');
       const object = definition(input.objectId);
       const found = property(object, input.propertyId);
       if (!found) throw new Error('That property no longer exists.');
@@ -665,6 +692,7 @@ export const mockApi: CrmApi = {
 
   deleteProperty: (input) =>
     respond(() => {
+      assertAllowed('manageSettings', 'delete properties');
       const object = definition(input.objectId);
       const found = property(object, input.propertyId);
       if (!found) return object;
@@ -684,6 +712,11 @@ export const mockApi: CrmApi = {
       const data = dataset();
       const doomed = new Set(ids);
       let deleted = 0;
+      // Check every record before removing any, so a refusal leaves nothing half done.
+      for (const id of ids) {
+        const item = data.byId.get(id);
+        if (item) assertCan('delete', item, definition(item.objectId).singular.toLowerCase());
+      }
       for (const id of ids) {
         const item = data.byId.get(id);
         if (!item) continue;
@@ -745,7 +778,7 @@ export const mockApi: CrmApi = {
   createActivity: (input) =>
     respond(() => {
       sequence += 1;
-      const created: Activity = { id: `act_new_${sequence}`, actorId: CURRENT_USER_ID, occurredAt: new Date().toISOString(), ...input };
+      const created: Activity = { id: `act_new_${sequence}`, actorId: session.userId, occurredAt: new Date().toISOString(), ...input };
       createdActivity.set(input.recordId, [created, ...(createdActivity.get(input.recordId) ?? [])]);
       return created;
     }),

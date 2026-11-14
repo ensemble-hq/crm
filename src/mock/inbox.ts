@@ -1,7 +1,8 @@
 import type { Conversation, ConversationQuery, EmailTemplate, InboxApi, Message } from '../contracts/inbox';
 import type { CrmRecord, Reference } from '../contracts/records';
-import { CURRENT_USER_ID, MOCK_NOW, OPEN_STAGES, users } from './definitions';
+import { MOCK_NOW, OPEN_STAGES, users } from './definitions';
 import { dataset, mulberry32 } from './generate';
+import { session } from './team';
 
 /** Generated email threads over the mock deals and contacts, and an in-memory inbox on top of them. */
 
@@ -141,7 +142,7 @@ function referencesFor(conversations: Conversation[]): Record<string, Reference>
 function inFolder(conversation: Conversation, folder: ConversationQuery['folder']): boolean {
   switch (folder) {
     case 'mine':
-      return conversation.status === 'open' && conversation.assigneeId === CURRENT_USER_ID;
+      return conversation.status === 'open' && conversation.assigneeId === session.userId;
     case 'unassigned':
       return conversation.status === 'open' && conversation.assigneeId === null;
     case 'open':
@@ -205,7 +206,7 @@ export function createInboxApi(respond: <T>(compute: () => T) => Promise<T>, log
         const body = input.body.trim();
         if (!body) throw new Error('Write something before sending.');
         const conversation = find(input.conversationId);
-        const me = users.find((user) => user.id === CURRENT_USER_ID) ?? users[0];
+        const me = users.find((user) => user.id === session.userId) ?? users[0];
         sequence += 1;
         const message: Message = {
           id: `${conversation.id}_new_${sequence}`,
@@ -224,7 +225,7 @@ export function createInboxApi(respond: <T>(compute: () => T) => Promise<T>, log
         conversation.messageCount = list.length;
         conversation.unread = false;
         // Replying to something in the shared queue takes it.
-        if (conversation.assigneeId === null) conversation.assigneeId = CURRENT_USER_ID;
+        if (conversation.assigneeId === null) conversation.assigneeId = session.userId;
         logEmail(conversation.contactId, conversation.subject, body);
         if (conversation.dealId) logEmail(conversation.dealId, conversation.subject, body);
         return message;

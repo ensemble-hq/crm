@@ -602,9 +602,11 @@ export function RecordList() {
               <Upload size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Import
             </Link>
           )}
-          <button type="button" className="m-button" data-size="sm" style={toolbarButton} disabled={exporting} onClick={() => void exportView()} title={`Download "${view.name}" as a CSV file`}>
-            <Download size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> {exporting ? 'Exporting…' : 'Export'}
-          </button>
+          {workspace.access.exportRecords ? (
+            <button type="button" className="m-button" data-size="sm" style={toolbarButton} disabled={exporting} onClick={() => void exportView()} title={`Download "${view.name}" as a CSV file`}>
+              <Download size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> {exporting ? 'Exporting…' : 'Export'}
+            </button>
+          ) : null}
           <button type="button" className="m-button" data-variant="primary" data-size="sm" onClick={() => setCreating(true)}>
             <Plus size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> {object.singular}
           </button>

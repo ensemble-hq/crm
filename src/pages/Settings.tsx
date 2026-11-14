@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, ChevronRight, Pencil, Plus, Settings as SettingsIcon, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronRight, Pencil, Plus, Settings as SettingsIcon, Trash2, Users } from 'lucide-react';
 import { type CSSProperties, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
@@ -290,9 +290,11 @@ export function ObjectSettings() {
       icon={SettingsIcon}
       crumbs={[{ label: 'Settings', to: '/settings' }, { label: object.plural }]}
       actions={
-        <button type="button" className="m-button" data-variant="primary" data-size="sm" onClick={() => setEditing('new')}>
-          <Plus size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Property
-        </button>
+        workspace.access.manageSettings ? (
+          <button type="button" className="m-button" data-variant="primary" data-size="sm" onClick={() => setEditing('new')}>
+            <Plus size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Property
+          </button>
+        ) : null
       }
     >
       <div className="m-stack" data-gap="4">
@@ -343,7 +345,7 @@ export function ObjectSettings() {
                       )}
                     </td>
                     <td>
-                      {property.system ? (
+                      {!workspace.access.manageSettings ? null : property.system ? (
                         <span style={small}>Automatic</span>
                       ) : (
                         <span className="m-cluster" data-gap="1" style={{ flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
@@ -455,12 +457,30 @@ export function Settings() {
       icon={SettingsIcon}
       crumbs={[{ label: 'Settings' }]}
       actions={
-        <button type="button" className="m-button" data-size="sm" style={toolbarButton} onClick={() => setCreating(true)}>
-          <Plus size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Object
-        </button>
+        workspace.access.manageSettings ? (
+          <button type="button" className="m-button" data-size="sm" style={toolbarButton} onClick={() => setCreating(true)}>
+            <Plus size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Object
+          </button>
+        ) : null
       }
     >
       <div className="m-stack" data-gap="4">
+        <section className="m-card" aria-label="Workspace" style={{ padding: 0, overflow: 'hidden' }}>
+          <Link to="/settings/people" className="m-cluster" data-gap="3" style={{ flexWrap: 'nowrap', padding: 'var(--m-space-3) var(--m-space-4)', color: 'inherit', textDecoration: 'none' }}>
+            <span style={{ display: 'grid', placeItems: 'center', inlineSize: 32, blockSize: 32, flexShrink: 0, borderRadius: 'var(--m-radius-md)', background: 'var(--m-color-bg-sunken)' }}>
+              <Users size={ICON.nav} strokeWidth={ICON.strokeWidth} aria-hidden />
+            </span>
+            <span className="m-stack" data-gap="0" style={{ flex: 1, minInlineSize: 0 }}>
+              <span style={medium}>People and permissions</span>
+              <span style={small}>
+                {workspace.users.length} people · you are {/^[aeiou]/i.test(workspace.access.roleName) ? 'an' : 'a'} {workspace.access.roleName}
+              </span>
+            </span>
+            <span style={{ display: 'inline-flex', color: 'var(--m-color-fg-subtle)' }}>
+              <ChevronRight size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />
+            </span>
+          </Link>
+        </section>
         <div className="m-stack" data-gap="1">
           <h1 style={{ ...figure, fontVariantNumeric: 'normal' }}>Objects and properties</h1>
           <p style={{ color: 'var(--m-color-fg-muted)' }}>What this CRM keeps records of, and the information on each. You can also ask the assistant: “add a renewal date to deals”.</p>

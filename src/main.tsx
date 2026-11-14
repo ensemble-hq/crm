@@ -13,6 +13,7 @@ import { FormBuilder, Forms, PublicForm } from './pages/Forms';
 import { ImportPage } from './pages/Import';
 import { Inbox } from './pages/Inbox';
 import { Meetings, PublicBooking } from './pages/Meetings';
+import { People } from './pages/People';
 import { RecordDetail } from './pages/RecordDetail';
 import { RecordList } from './pages/RecordList';
 import { ReportBuilder, Reports } from './pages/Reports';
@@ -49,6 +50,7 @@ createRoot(root).render(
             <Route path="meetings" element={<Meetings />} />
             <Route path="settings" element={<Settings />} />
             <Route path="settings/objects/:objectId" element={<ObjectSettings />} />
+            <Route path="settings/people" element={<People />} />
             <Route path=":objectId" element={<RecordList />} />
             <Route path=":objectId/:recordId" element={<RecordDetail />} />
             <Route path="*" element={<ComingSoon />} />

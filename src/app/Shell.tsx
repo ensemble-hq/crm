@@ -1,6 +1,6 @@
-import { BarChart3, Bookmark, CalendarDays, FileText, House, Inbox, type LucideIcon, Monitor, Moon, PanelLeft, PanelLeftOpen, Search, Send, Settings, Sparkles, Sun, Workflow } from 'lucide-react';
+import { BarChart3, Bookmark, CalendarDays, Eye, FileText, House, Inbox, type LucideIcon, Monitor, Moon, PanelLeft, PanelLeftOpen, Search, Send, Settings, Sparkles, Sun, Workflow } from 'lucide-react';
 import { type CSSProperties, useEffect, useState } from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api, useQuery } from '../api';
 import { AssistantBar } from '../assistant/AssistantBar';
 import { AssistantProvider } from '../assistant/AssistantProvider';
@@ -216,6 +216,34 @@ function Sidebar({ collapsed, onToggle, onSearch }: { collapsed: boolean; onTogg
   );
 }
 
+/** Shown across the top while an admin is looking at the CRM as someone else, with the way back. */
+function ViewingAs() {
+  const workspace = useWorkspace();
+  const navigate = useNavigate();
+  if (!workspace.access.viewedBy) return null;
+
+  async function exit() {
+    await api.viewAs(null);
+    await workspace.reload();
+    workspace.touch();
+    navigate('/settings/people');
+  }
+
+  return (
+    <output className="m-cluster" data-justify="between" data-gap="3" style={{ padding: 'var(--m-space-2) var(--m-space-3)', background: 'var(--m-color-warning-bg)', color: 'var(--m-color-warning-fg)' }}>
+      <span className="m-cluster" data-gap="2">
+        <Eye size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />
+        <span>
+          You are viewing the CRM as <strong>{workspace.currentUser.name}</strong> ({workspace.access.roleName}). What you see and can change is what they can.
+        </span>
+      </span>
+      <button type="button" className="m-button" data-size="sm" onClick={() => void exit()}>
+        Back to yourself
+      </button>
+    </output>
+  );
+}
+
 /** The app frame: a dark navigation rail around a white page, as the Keel design language sets out. */
 export function Shell() {
   const [collapsed, setCollapsed] = useState(() => {
@@ -291,6 +319,7 @@ export function Shell() {
             overflow: 'clip',
           }}
         >
+          <ViewingAs />
           <Outlet />
         </div>
       </div>

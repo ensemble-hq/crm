@@ -3,6 +3,7 @@ import type { CaptureApi } from './capture';
 import type { InboxApi } from './inbox';
 import type { ReportsApi } from './reports';
 import type { SequencesApi } from './sequences';
+import type { Access, TeamApi } from './team';
 import type { WorkflowsApi } from './workflows';
 import { type CreateObject, type CreateProperty, type ObjectDefinition, type SaveView, type UpdateProperty, type User, type ViewDefinition, filterSchema, propertyValueSchema, sortSchema } from './metadata';
 
@@ -152,9 +153,17 @@ export const notificationSchema = z.object({
 });
 export type Notification = z.infer<typeof notificationSchema>;
 
-export type Workspace = { name: string; objects: ObjectDefinition[]; users: User[]; currentUserId: string };
+export type Workspace = {
+  name: string;
+  objects: ObjectDefinition[];
+  /** Everyone records can be given to. People who have been deactivated are left out. */
+  users: User[];
+  /** Who the CRM is being used as: the signed-in person, or the one they are viewing as. */
+  currentUserId: string;
+  access: Access;
+};
 
-export interface CrmApi extends InboxApi, ReportsApi, SequencesApi, WorkflowsApi, CaptureApi {
+export interface CrmApi extends InboxApi, ReportsApi, SequencesApi, WorkflowsApi, CaptureApi, TeamApi {
   getWorkspace(): Promise<Workspace>;
   listRecords(query: ListQuery): Promise<ListResult>;
   summarize(query: SummaryQuery): Promise<SummaryRow[]>;
