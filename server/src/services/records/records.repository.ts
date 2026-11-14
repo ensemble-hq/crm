@@ -69,6 +69,32 @@ export class RecordsRepository extends DrizzleRepository<RecordRow> {
     return this.one(ctx, id);
   }
 
+  /** Every record of an object by one property's text, lower-cased: for matching a file's rows to what is already here. */
+  async index(ctx: Context, objectId: string, propertyId: string): Promise<Map<string, string>> {
+    const rows = await this.rows<{ key: string; id: string }>(
+      sql`select lower(records.properties->>${propertyId}::text) as key, records.id from records where ${this.scope(ctx, sql`records.object_id = ${objectId}`, sql`jsonb_typeof(records.properties->${propertyId}::text) = 'string'`, sql`records.properties->>${propertyId}::text <> ''`)}`,
+    );
+    return new Map(rows.map((row) => [row.key, row.id]));
+  }
+
+  /** Adds many records in one statement. */
+  async insertMany(ctx: Context, records: Array<{ id: string; objectId: string; properties: Record<string, PropertyValue> }>): Promise<void> {
+    if (records.length === 0) return;
+    await this.db.execute(sql`
+      insert into records (id, tenant_id, object_id, properties)
+      select item.id, ${ctx.tenantId}, item."objectId", item.properties
+      from jsonb_to_recordset(${JSON.stringify(records)}::jsonb) as item(id text, "objectId" text, properties jsonb)`);
+  }
+
+  /** Merges changes into many records in one statement. */
+  async patchMany(ctx: Context, changes: Array<{ id: string; changes: Record<string, PropertyValue> }>): Promise<void> {
+    if (changes.length === 0) return;
+    await this.db.execute(sql`
+      update records set properties = records.properties || item.changes, updated_at = now()
+      from jsonb_to_recordset(${JSON.stringify(changes)}::jsonb) as item(id text, changes jsonb)
+      where ${this.scope(ctx, sql`records.id = item.id`)}`);
+  }
+
   /** Hands every record one person owns to another. */
   async reassign(ctx: Context, fromId: string, toId: string): Promise<number> {
     const rows = await this.rows<{ id: string }>(

@@ -6,6 +6,7 @@ import { type Operation, operations } from '../../../src/contracts/operations';
 import { ActivityRepository } from './activity/activity.repository';
 import { ActivityService } from './activity/activity.service';
 import { BriefService } from './brief/brief.service';
+import { ImportService } from './import/import.service';
 import { NotificationsRepository } from './notifications/notifications.repository';
 import { NotificationsService } from './notifications/notifications.service';
 import { actingContext } from './people/access';
@@ -42,7 +43,8 @@ export function createServices(deps: ServiceDeps) {
   const runsRepository = new WorkflowRunsRepository(deps.db);
   const workflows = new WorkflowsService(workflowsRepository, runsRepository, records, recordsRepository, workspace);
   const runner = new WorkflowRunner(workflowsRepository, runsRepository, recordsRepository, events, workspace, people, notifications);
-  return { people, workspace, records, activity, brief, notifications, workflows, runner };
+  const importer = new ImportService(recordsRepository, events, workspace, people);
+  return { people, workspace, records, activity, brief, notifications, workflows, runner, importer };
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: each handler's input is checked against its operation's schema before it runs
@@ -53,7 +55,7 @@ type Handler = (ctx: Context, input: any) => Promise<unknown>;
  * is left out of what the server offers.
  */
 export function registerServices(communication: CommunicationLayer, deps: ServiceDeps): Operation[] {
-  const { people, workspace, records, activity, brief, notifications, workflows } = createServices(deps);
+  const { people, workspace, records, activity, brief, notifications, workflows, importer } = createServices(deps);
 
   const handlers: Record<string, Handler> = {
     'workspace.get': (ctx) => workspace.get(ctx),
@@ -64,6 +66,7 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     'records.create': (ctx, input) => records.create(ctx, input),
     'records.update': (ctx, input) => records.update(ctx, input),
     'records.delete': (ctx, input) => records.remove(ctx, input),
+    'records.import': (ctx, input) => importer.run(ctx, input),
     'activity.list': (ctx, input) => activity.list(ctx, input),
     'activity.create': (ctx, input) => activity.create(ctx, input),
     'brief.get': (ctx, input) => brief.get(ctx, input),

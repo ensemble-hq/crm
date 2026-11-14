@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { briefSchema } from './brief';
 import { filterSchema, objectDefinitionSchema, userSchema } from './metadata';
-import { activitySchema, createActivitySchema, notificationSchema, referenceSchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi } from './records';
+import { activitySchema, createActivitySchema, importRequestSchema, importResultSchema, notificationSchema, referenceSchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi } from './records';
 import { workflowDetailSchema, workflowSchema, workflowSettingsSchema } from './workflows';
 import { accessSchema, deactivateMemberSchema, directorySchema, inviteMemberSchema, memberSchema, roleSchema, saveRoleSchema, saveTeamSchema, teamSchema, updateMemberSchema } from './team';
 
@@ -26,6 +26,8 @@ export type Operation = {
   input: z.ZodTypeAny;
   output: z.ZodTypeAny;
   effect: Effect;
+  /** Takes a whole file's worth of data, so the server allows a larger request than usual. */
+  large?: boolean;
 };
 
 export const workspaceSchema = z.object({
@@ -113,6 +115,17 @@ export const operations: Operation[] = [
     input: z.array(z.string()).min(1).max(500),
     output: z.object({ deleted: z.number().int() }),
     effect: 'destructive',
+  },
+  {
+    name: 'records.import',
+    method: 'importRecords',
+    title: 'Import rows as records',
+    description:
+      'Creates or updates many records of one object from rows of text, as from a spreadsheet. Each row maps property ids to the text in that cell; the server turns text into each property\'s type (a choice by its label, a person by name or email, a linked record by its name, dates and numbers by parsing). Give `matchOn` (usually email for contacts, domain for companies) so rows that are already in the CRM are skipped or updated and no duplicates are made. Always call it first with `dryRun: true`: nothing is written and the result says what would be created, updated and skipped, and why.',
+    input: importRequestSchema,
+    output: importResultSchema,
+    effect: 'write',
+    large: true,
   },
   {
     name: 'activity.list',

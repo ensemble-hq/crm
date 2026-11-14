@@ -283,9 +283,10 @@ Decided:
 Built so far (in `server/`):
 
 - Tables for objects, people, teams, roles, records, activity, workflows and their runs, notifications, and the event outbox. Filters, search and sorting run over JSONB.
-- 28 operations (workspace, records, activity, the record brief, people, teams, roles, "view as", workflows and notifications), served over HTTP at `/api/ops/<name>` and as MCP tools at `/api/mcp`, both generated from `src/contracts/operations.ts`.
+- 29 operations (workspace, records, import, activity, the record brief, people, teams, roles, "view as", workflows and notifications), served over HTTP at `/api/ops/<name>` and as MCP tools at `/api/mcp`, both generated from `src/contracts/operations.ts`.
 - Every operation first works out who it runs as, and the records service turns that person's role into SQL, so the app, the API and an agent over MCP all get exactly what the person may see and change.
 - Every record write records an event in the same transaction. The worker (`server/src/worker.ts`) relays events through Redis and runs workflows from them; an event delivered twice runs a workflow once, and what a workflow changes never sets off another workflow.
+- Import reads everything a file needs in a few queries, writes in bulk and announces each record, so 5,000 rows take about two seconds and workflows run for imported records. A dry run writes nothing and says what would happen.
 - Sign-in behind an interface with `dev` and `jwt` providers, and a seed of the demo company.
 - The web app's live mode sends those operations to the server and everything else to the mock.
 
