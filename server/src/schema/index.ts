@@ -16,3 +16,5 @@ export * from './workflows';
 export { eventOutboxTable } from '@mariachi/events/outbox';
 // Agents sign in with keys. Only a key's hash is stored.
 export { apiKeysTable } from '@mariachi/auth/schema';
+// Every change, kept in a table that only accepts new rows.
+export { auditLogsTable } from '@mariachi/audit/schema';

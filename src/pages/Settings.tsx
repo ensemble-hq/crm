@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, ChevronRight, Pencil, Plus, Settings as SettingsIcon, Trash2, Users } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronRight, Pencil, Plus, ScrollText, Settings as SettingsIcon, Trash2, Users } from 'lucide-react';
 import { AssistantSettingsCard } from './AssistantSettings';
 import { type CSSProperties, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
@@ -9,7 +9,7 @@ import type { ObjectDefinition, Option, PropertyDefinition, PropertyType, Tone }
 import { Modal } from '../ui/Modal';
 import { OptionBadge } from '../ui/PropertyValue';
 import { objectIcon, objectIcons } from '../ui/icons';
-import { ICON, figure, medium, small, toolbarButton } from '../ui/styles';
+import { ICON, figure, medium, small, toolbarButton, rowDivider } from '../ui/styles';
 
 const TYPE_LABELS: Record<PropertyType, string> = {
   text: 'Text',
@@ -481,6 +481,20 @@ export function Settings() {
               <ChevronRight size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />
             </span>
           </Link>
+          {workspace.access.managePeople && import.meta.env.VITE_API_URL ? (
+            <Link to="/settings/audit" className="m-cluster" data-gap="3" style={{ flexWrap: 'nowrap', padding: 'var(--m-space-3) var(--m-space-4)', color: 'inherit', textDecoration: 'none', ...rowDivider }}>
+              <span style={{ display: 'grid', placeItems: 'center', inlineSize: 32, blockSize: 32, flexShrink: 0, borderRadius: 'var(--m-radius-md)', background: 'var(--m-color-bg-sunken)' }}>
+                <ScrollText size={ICON.nav} strokeWidth={ICON.strokeWidth} aria-hidden />
+              </span>
+              <span className="m-stack" data-gap="0" style={{ flex: 1, minInlineSize: 0 }}>
+                <span style={medium}>Audit log</span>
+                <span style={small}>Every change, who or what made it, and how</span>
+              </span>
+              <span style={{ display: 'inline-flex', color: 'var(--m-color-fg-subtle)' }}>
+                <ChevronRight size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />
+              </span>
+            </Link>
+          ) : null}
         </section>
         <AssistantSettingsCard />
         <div className="m-stack" data-gap="1">

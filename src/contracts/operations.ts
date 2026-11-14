@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { assistantReplySchema, assistantSettingsSchema, assistantTurnSchema, assistantUsageSchema, saveAssistantSettingsSchema } from './assistant';
+import { auditCheckSchema, auditPageSchema, auditQuerySchema } from './audit';
 import { briefSchema } from './brief';
 import { bookingPageSchema, bookingPageSettingsSchema, daySlotsSchema, formDetailSchema, formSchema, formSettingsSchema, meetingSchema, publicFormSchema } from './capture';
 import { conversationDetailSchema, conversationListSchema, conversationQuerySchema, conversationSchema, emailHealthSchema, emailTemplateSchema, inboxCountsSchema, messageSchema, updateConversationSchema } from './inbox';
@@ -47,6 +48,7 @@ export const workspaceSchema = z.object({
   name: z.string(),
   objects: z.array(objectDefinitionSchema),
   users: z.array(userSchema),
+  former: z.array(userSchema).optional(),
   currentUserId: z.string(),
   access: accessSchema,
 });
@@ -820,6 +822,26 @@ export const operations: Operation[] = [
     input: z.string(),
     output: z.void(),
     effect: 'destructive',
+    internal: true,
+  },
+  {
+    name: 'audit.list',
+    method: 'listAudit',
+    title: 'Read the audit log',
+    description: 'Returns the record of every change made to the CRM, newest first: who or what made it, how, what it was, and whether it went through.',
+    input: auditQuerySchema,
+    output: auditPageSchema,
+    effect: 'read',
+    internal: true,
+  },
+  {
+    name: 'audit.check',
+    method: 'checkAudit',
+    title: 'Check the audit log is intact',
+    description: 'Checks that no entry in the audit log has been removed or altered.',
+    input: none,
+    output: auditCheckSchema,
+    effect: 'read',
     internal: true,
   },
 ];

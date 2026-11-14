@@ -2,6 +2,7 @@ import { createApiServer, hmacSignatureStrategy } from '@mariachi/api-facade';
 import { createCommunication } from '@mariachi/communication';
 import { useConfigSection } from '@mariachi/config';
 import { ConfigError, KEYS } from '@mariachi/core';
+import { installAuditAppendOnly } from '@mariachi/audit/postgres';
 import { createPostgresDatabase, runMigrations } from '@mariachi/database-postgres';
 import { bootstrap } from '@mariachi/lifecycle';
 import { MemoryRateLimiter } from '@mariachi/rate-limit';
@@ -23,6 +24,8 @@ async function main(): Promise<void> {
   container.register(KEYS.Database, database);
   await database.connect();
   if (settings.migrateOnStart) await runMigrations(database.adapter, { migrationsFolder: 'drizzle', logger });
+  // The audit log only ever grows: the database itself refuses to change or delete an entry.
+  await installAuditAppendOnly(database.db);
 
   // One communication layer per process: operations register on it; HTTP and MCP call through it.
   const communication = createCommunication({}, { logger, tracer, metrics });

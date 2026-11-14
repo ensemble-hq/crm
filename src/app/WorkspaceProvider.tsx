@@ -55,7 +55,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       ...data,
       currentUser,
       object: (id) => data.objects.find((object) => object.id === id),
-      user: (id) => (id ? data.users.find((user) => user.id === id) : undefined),
+      // Someone who has left still has a name next to what they did.
+      user: (id) => (id ? (data.users.find((user) => user.id === id) ?? data.former?.find((user) => user.id === id)) : undefined),
       reload,
       revision,
       touch,

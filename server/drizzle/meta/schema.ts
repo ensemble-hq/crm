@@ -4,6 +4,7 @@ import { toDrizzleImports } from '@mariachi/database-postgres';
 
 const compiled = toDrizzleImports(schema) as Record<string, any>;
 export const apiKeysTable = compiled.apiKeysTable;
+export const auditLogsTable = compiled.auditLogsTable;
 export const eventOutboxTable = compiled.eventOutboxTable;
 export const activitiesTable = compiled.activitiesTable;
 export const assistantSettingsTable = compiled.assistantSettingsTable;

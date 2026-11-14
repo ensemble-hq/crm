@@ -17,6 +17,23 @@ CREATE TABLE "api_keys" (
 );
 
 --> statement-breakpoint
+CREATE TABLE "audit_logs" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"actor" text NOT NULL,
+	"action" text NOT NULL,
+	"resource" text NOT NULL,
+	"resource_id" text NOT NULL,
+	"tenant_id" text,
+	"ip_address" text,
+	"user_agent" text,
+	"occurred_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"metadata" jsonb,
+	"prev_hash" text,
+	"entry_hash" text DEFAULT '' NOT NULL,
+	"chain_seq" bigint
+);
+
+--> statement-breakpoint
 CREATE TABLE "mariachi_event_outbox" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"type" text NOT NULL,
@@ -373,6 +390,12 @@ CREATE TABLE "workflows" (
 
 --> statement-breakpoint
 CREATE INDEX "api_keys_tenant_id_idx" ON "api_keys" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX "audit_logs_tenant_occurred_idx" ON "audit_logs" USING btree ("tenant_id","occurred_at");
+--> statement-breakpoint
+CREATE INDEX "audit_logs_resource_idx" ON "audit_logs" USING btree ("resource","resource_id");
+--> statement-breakpoint
+CREATE UNIQUE INDEX "audit_logs_chain_uniq" ON "audit_logs" USING btree ("tenant_id","chain_seq") WHERE chain_seq IS NOT NULL;
 --> statement-breakpoint
 CREATE INDEX "mariachi_event_outbox_pending_idx" ON "mariachi_event_outbox" USING btree ("available_at") WHERE published_at IS NULL;
 --> statement-breakpoint

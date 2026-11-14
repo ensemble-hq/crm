@@ -6,8 +6,21 @@ import type { CrmApi } from '../contracts/records';
  * operation list: calling `api.listRecords(query)` posts the query to `/ops/records.list`.
  */
 
+/** Set while a plan the assistant proposed is being run, so the audit log can say how each change came about. */
+let via: string | undefined;
+
+/** Runs `work` with its requests marked as coming from an approved assistant plan. */
+export async function viaAssistant<T>(work: () => Promise<T>): Promise<T> {
+  via = 'assistant';
+  try {
+    return await work();
+  } finally {
+    via = undefined;
+  }
+}
+
 async function call(base: string, name: string, input: unknown): Promise<unknown> {
-  const response = await fetch(`${base}/ops/${name}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ input }) });
+  const response = await fetch(`${base}/ops/${name}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(via ? { 'x-crm-via': via } : {}) }, body: JSON.stringify({ input }) });
   const body: unknown = response.status === 204 ? undefined : await response.json().catch(() => undefined);
   if (!response.ok) {
     // The server answers every failure with `{ error: { code, message } }`, in words meant for a person.

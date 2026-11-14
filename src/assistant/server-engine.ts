@@ -1,4 +1,5 @@
 import { api } from '../api';
+import { viaAssistant } from '../api/http';
 import { listenToTurn } from '../api/live';
 import type { AssistantEvent } from '../contracts/assistant';
 import { operations } from '../contracts/operations';
@@ -16,7 +17,7 @@ import type { EngineContext } from './mock-engine';
 async function runStep(step: { operation: string; input?: unknown }): Promise<void> {
   const operation = operations.find((item) => item.name === step.operation);
   if (!operation) throw new Error(`The plan asked for something the CRM cannot do (${step.operation}).`);
-  await (api[operation.method as keyof CrmApi] as (input: unknown) => Promise<unknown>)(step.input);
+  await viaAssistant(() => (api[operation.method as keyof CrmApi] as (input: unknown) => Promise<unknown>)(step.input));
 }
 
 async function play(event: AssistantEvent, ctx: EngineContext): Promise<void> {

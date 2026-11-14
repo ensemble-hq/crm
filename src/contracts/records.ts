@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { AssistantApi } from './assistant';
+import type { AuditApi } from './audit';
 import type { BriefApi } from './brief';
 import type { CaptureApi } from './capture';
 import type { InboxApi } from './inbox';
@@ -161,12 +162,14 @@ export type Workspace = {
   objects: ObjectDefinition[];
   /** Everyone records can be given to. People who have been deactivated are left out. */
   users: User[];
+  /** People who have been deactivated and agents that have been removed. Only for showing a name next to what they did. */
+  former?: User[];
   /** Who the CRM is being used as: the signed-in person, or the one they are viewing as. */
   currentUserId: string;
   access: Access;
 };
 
-export interface CrmApi extends InboxApi, ReportsApi, SequencesApi, WorkflowsApi, CaptureApi, TeamApi, SalesApi, BriefApi, AssistantApi {
+export interface CrmApi extends InboxApi, ReportsApi, SequencesApi, WorkflowsApi, CaptureApi, TeamApi, SalesApi, BriefApi, AssistantApi, AuditApi {
   getWorkspace(): Promise<Workspace>;
   listRecords(query: ListQuery): Promise<ListResult>;
   summarize(query: SummaryQuery): Promise<SummaryRow[]>;

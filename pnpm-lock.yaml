@@ -20,6 +20,9 @@ importers:
       '@mariachi/api-facade':
         specifier: link:../../mariachi/packages/api-facade
         version: link:../../mariachi/packages/api-facade
+      '@mariachi/audit':
+        specifier: link:../../mariachi/packages/audit
+        version: link:../../mariachi/packages/audit
       '@mariachi/auth':
         specifier: link:../../mariachi/packages/auth
         version: link:../../mariachi/packages/auth

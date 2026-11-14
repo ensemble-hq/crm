@@ -54,6 +54,12 @@ export class PeopleService {
     return rows.filter((row) => row.status !== 'deactivated').map((row) => ({ id: row.id, name: row.name, email: row.email, ...(row.kind === 'agent' ? { kind: 'agent' as const } : {}) }));
   }
 
+  /** People who were deactivated and agents that were removed: kept only so what they did still has a name. */
+  async former(ctx: Context): Promise<User[]> {
+    const rows = await this.people.findMany(ctx, { status: 'deactivated' }, { limit: 1000 });
+    return rows.map((row) => ({ id: row.id, name: row.name, email: row.email, ...(row.kind === 'agent' ? { kind: 'agent' as const } : {}) }));
+  }
+
   async directory(ctx: Context): Promise<Directory> {
     const [members, teams, roles] = await Promise.all([
       this.people.findMany(ctx, {}, { sort: { field: 'createdAt', direction: 'asc' }, limit: 1000 }),

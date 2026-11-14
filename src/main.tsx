@@ -17,6 +17,7 @@ import { Meetings, PublicBooking } from './pages/Meetings';
 import { People } from './pages/People';
 import { RecordDetail } from './pages/RecordDetail';
 import { RecordList } from './pages/RecordList';
+import { AuditLog } from './pages/AuditLog';
 import { ReportBuilder, Reports } from './pages/Reports';
 import { SequenceDetail, Sequences } from './pages/Sequences';
 import { ObjectSettings, Settings } from './pages/Settings';
@@ -58,6 +59,7 @@ createRoot(root).render(
           <Route path="settings" element={<Settings />} />
           <Route path="settings/objects/:objectId" element={<ObjectSettings />} />
           <Route path="settings/people" element={<People />} />
+          <Route path="settings/audit" element={<AuditLog />} />
           <Route path=":objectId" element={<RecordList />} />
           <Route path=":objectId/:recordId" element={<RecordDetail />} />
           <Route path="*" element={<ComingSoon />} />

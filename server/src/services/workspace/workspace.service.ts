@@ -25,7 +25,7 @@ export class WorkspaceService {
 
   async get(ctx: Context): Promise<Workspace> {
     const actor = actorOf(ctx);
-    const [objects, users] = await Promise.all([this.definitions(ctx), this.people.users(ctx)]);
-    return { name: 'Northwind', objects, users, currentUserId: actor.userId, access: accessOf(actor) };
+    const [objects, users, former] = await Promise.all([this.definitions(ctx), this.people.users(ctx), this.people.former(ctx)]);
+    return { name: 'Northwind', objects, users, former, currentUserId: actor.userId, access: accessOf(actor) };
   }
 }

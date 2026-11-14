@@ -8,6 +8,7 @@ import { createEncryption } from '@mariachi/encryption';
 import { AssistantService, AssistantSettingsRepository, AssistantTurnsRepository, type Push } from '../assistant/assistant.service';
 import { TENANT_ID } from '../config';
 import { conversationChanged, settingsChanged } from '../events';
+import { AuditService } from './audit/audit.service';
 import { ActivityRepository } from './activity/activity.repository';
 import { ActivityService } from './activity/activity.service';
 import { BriefService } from './brief/brief.service';
@@ -60,6 +61,7 @@ export function createServices(deps: ServiceDeps) {
   const teamsRepository = new TeamsRepository(deps.db);
   const rolesRepository = new RolesRepository(deps.db);
   const agents = new AgentsService(deps.db, peopleRepository, teamsRepository, rolesRepository);
+  const audit = new AuditService(deps.db, peopleRepository);
   const people = new PeopleService(peopleRepository, teamsRepository, rolesRepository, (ctx, fromId, toId) => recordsRepository.reassign(ctx, fromId, toId));
   const objectsRepository = new ObjectsRepository(deps.db);
   const workspace = new WorkspaceService(objectsRepository, people);
@@ -88,7 +90,7 @@ export function createServices(deps: ServiceDeps) {
   const sales = new SalesService(new LineItemsRepository(deps.db), records, recordsRepository, events, activityRepository, workspace);
   const capture = new CaptureService(new FormsRepository(deps.db), new SubmissionsRepository(deps.db), new BookingPagesRepository(deps.db), new MeetingsRepository(deps.db), recordsRepository, events, activityRepository, people, workspace);
   const importer = new ImportService(recordsRepository, events, workspace, people);
-  return { people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences, settings, sales, capture, agents };
+  return { people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences, settings, sales, capture, agents, audit };
 }
 
 /** How long a slow operation, such as a turn of the assistant on a model, may run. */
@@ -102,7 +104,7 @@ type Handler = (ctx: Context, input: any) => Promise<unknown>;
  * is left out of what the server offers.
  */
 export function registerServices(communication: CommunicationLayer, deps: ServiceDeps): Operation[] {
-  const { people, workspace, records, activity, brief, notifications, workflows, importer, inbox, mail, reports, sequences, settings, sales, capture, agents } = createServices(deps);
+  const { people, workspace, records, activity, brief, notifications, workflows, importer, inbox, mail, reports, sequences, settings, sales, capture, agents, audit } = createServices(deps);
 
   // The assistant reaches the CRM the way everything else does: through the operations, as the person asking.
   const assistant = new AssistantService(new AssistantSettingsRepository(deps.db), createEncryption({ adapter: 'local', keys: { primary: deps.secretsKey } }), operations, (ctx, operation, input) => communication.call(ctx, operation, input), new AssistantTurnsRepository(deps.db), deps.push);
@@ -162,6 +164,8 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     'properties.delete': (ctx, input) => settings.deleteProperty(ctx, input),
     'views.save': (ctx, input) => settings.saveView(ctx, input),
     'views.delete': (ctx, input) => settings.deleteView(ctx, input),
+    'audit.list': (ctx, input) => audit.list(ctx, input),
+    'audit.check': (ctx) => audit.check(ctx),
     'agents.list': (ctx) => agents.list(ctx),
     'agents.save': (ctx, input) => agents.save(ctx, input),
     'agents.remove': (ctx, input) => agents.remove(ctx, input),
@@ -208,14 +212,26 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
       ...(operation.slow ? { timeoutMs: SLOW_MS } : {}),
       // Every operation starts by working out who it runs as; nothing below this line can skip it. The
       // few a visitor's browser calls run as nobody, in this instance's one tenant.
-      handler: operation.public
-        ? (ctx, input) => handler({ ...ctx, tenantId: TENANT_ID, userId: null }, input)
-        : async (ctx, input) => {
-            const actor = await people.actor(ctx);
+      // Whatever happens, an operation that changes something leaves an entry in the audit log:
+      // carried out, refused or failed, with who asked and how the request arrived.
+      handler: async (ctx, input) => {
+        let actor: Awaited<ReturnType<typeof people.actor>> | undefined;
+        try {
+          let result: unknown;
+          if (operation.public) result = await handler({ ...ctx, tenantId: TENANT_ID, userId: null }, input);
+          else {
+            actor = await people.actor(ctx);
             // An agent is held to what it was set up to do, on top of what its role reaches.
             assertAgentMay(actor, operation);
-            return handler(actingContext(ctx, actor), input);
-          },
+            result = await handler(actingContext(ctx, actor), input);
+          }
+          await audit.record({ ...ctx, tenantId: ctx.tenantId ?? TENANT_ID }, operation, actor, input, { result });
+          return result;
+        } catch (error) {
+          await audit.record({ ...ctx, tenantId: ctx.tenantId ?? TENANT_ID }, operation, actor, input, { error });
+          throw error;
+        }
+      },
     });
   }
 
