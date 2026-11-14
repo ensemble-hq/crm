@@ -628,6 +628,7 @@ export const mockApi: CrmApi = {
   getAssistantSettings: () => respond(() => ({ configured: false, provider: null, model: null, baseUrl: null, hasKey: false, providers: [] })),
   saveAssistantSettings: () => Promise.reject(new Error('Connecting a model needs the server. This is the demo, which runs in your browser.')),
   assistantTurn: () => Promise.reject(new Error('No model is connected.')),
+  getAssistantUsage: () => respond(() => ({ from: MOCK_TODAY, turns: 0, inputTokens: 0, outputTokens: 0, failed: 0, byPerson: [], recent: [] })),
 
   listRelated: (id: string) => respond(() => related(id)),
 

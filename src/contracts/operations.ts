@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { assistantReplySchema, assistantSettingsSchema, assistantTurnSchema, saveAssistantSettingsSchema } from './assistant';
+import { assistantReplySchema, assistantSettingsSchema, assistantTurnSchema, assistantUsageSchema, saveAssistantSettingsSchema } from './assistant';
 import { briefSchema } from './brief';
 import { bookingPageSchema, bookingPageSettingsSchema, daySlotsSchema, formDetailSchema, formSchema, formSettingsSchema, meetingSchema, publicFormSchema } from './capture';
 import { conversationDetailSchema, conversationListSchema, conversationQuerySchema, conversationSchema, emailHealthSchema, emailTemplateSchema, inboxCountsSchema, messageSchema, updateConversationSchema } from './inbox';
@@ -760,5 +760,15 @@ export const operations: Operation[] = [
     effect: 'read',
     internal: true,
     slow: true,
+  },
+  {
+    name: 'assistant.usage',
+    method: 'getAssistantUsage',
+    title: 'See what the assistant has been used for',
+    description: 'Returns the last 30 days of assistant use: how many questions, tokens in and out, by person, and the most recent questions.',
+    input: none,
+    output: assistantUsageSchema,
+    effect: 'read',
+    internal: true,
   },
 ];

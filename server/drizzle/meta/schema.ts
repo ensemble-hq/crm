@@ -6,6 +6,7 @@ const compiled = toDrizzleImports(schema) as Record<string, any>;
 export const eventOutboxTable = compiled.eventOutboxTable;
 export const activitiesTable = compiled.activitiesTable;
 export const assistantSettingsTable = compiled.assistantSettingsTable;
+export const assistantTurnsTable = compiled.assistantTurnsTable;
 export const bookingPagesTable = compiled.bookingPagesTable;
 export const formsTable = compiled.formsTable;
 export const meetingsTable = compiled.meetingsTable;

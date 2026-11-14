@@ -36,6 +36,25 @@ CREATE TABLE "assistant_settings" (
 );
 
 --> statement-breakpoint
+CREATE TABLE "assistant_turns" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"user_id" text NOT NULL,
+	"question" text NOT NULL,
+	"provider" text NOT NULL,
+	"model" text NOT NULL,
+	"input_tokens" integer DEFAULT 0 NOT NULL,
+	"output_tokens" integer DEFAULT 0 NOT NULL,
+	"rounds" integer DEFAULT 0 NOT NULL,
+	"lookups" integer DEFAULT 0 NOT NULL,
+	"planned_steps" integer DEFAULT 0 NOT NULL,
+	"duration_ms" integer DEFAULT 0 NOT NULL,
+	"error" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
 CREATE TABLE "booking_pages" (
 	"id" text PRIMARY KEY NOT NULL,
 	"tenant_id" text NOT NULL,
@@ -339,6 +358,10 @@ CREATE INDEX "mariachi_event_outbox_published_idx" ON "mariachi_event_outbox" US
 CREATE INDEX "activities_record_idx" ON "activities" USING btree ("tenant_id","record_id","occurred_at");
 --> statement-breakpoint
 CREATE INDEX "assistant_settings_tenant_id_idx" ON "assistant_settings" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX "assistant_turns_recent_idx" ON "assistant_turns" USING btree ("tenant_id","created_at");
+--> statement-breakpoint
+CREATE INDEX "assistant_turns_user_idx" ON "assistant_turns" USING btree ("tenant_id","user_id","created_at");
 --> statement-breakpoint
 CREATE INDEX "booking_pages_tenant_id_idx" ON "booking_pages" USING btree ("tenant_id");
 --> statement-breakpoint

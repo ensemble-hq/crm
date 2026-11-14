@@ -9,8 +9,9 @@ import { ICON, cardTitle, small } from '../ui/styles';
  * their own key or endpoint. The key can be set and replaced here but is never shown again.
  */
 export function AssistantSettingsCard() {
-  const { access, touch } = useWorkspace();
+  const { access, touch, user, revision } = useWorkspace();
   const settings = useQuery(() => api.getAssistantSettings(), []);
+  const usage = useQuery(() => api.getAssistantUsage(), [revision]);
   const [provider, setProvider] = useState('');
   const [model, setModel] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
@@ -69,6 +70,23 @@ export function AssistantSettingsCard() {
         <p style={{ ...small, margin: 0 }}>
           The assistant runs on a model you choose, with your own key or your own endpoint. It reads the CRM with the access of whoever is asking, and proposes changes as a plan that person approves; it never changes anything by itself.
         </p>
+        {data.configured && usage.data ? (
+          <div className="m-stack" data-gap="1">
+            <p style={{ margin: 0 }}>
+              <strong>{usage.data.turns.toLocaleString('en-US')}</strong> {usage.data.turns === 1 ? 'question' : 'questions'} in the last 30 days, using <strong>{(usage.data.inputTokens + usage.data.outputTokens).toLocaleString('en-US')}</strong> tokens
+              {usage.data.failed > 0 ? `; ${usage.data.failed} failed` : ''}.
+            </p>
+            {usage.data.byPerson.length > 1 ? (
+              <p style={{ ...small, margin: 0 }}>
+                {usage.data.byPerson
+                  .slice(0, 5)
+                  .map((row) => `${user(row.userId)?.name ?? 'Someone'}: ${row.turns.toLocaleString('en-US')} (${row.tokens.toLocaleString('en-US')} tokens)`)
+                  .join(' · ')}
+              </p>
+            ) : null}
+            <p style={{ ...small, margin: 0 }}>Tokens are what your model provider bills for. This CRM does not add a charge of its own.</p>
+          </div>
+        ) : null}
         {access.manageSettings ? (
           <>
             <div className="m-field">

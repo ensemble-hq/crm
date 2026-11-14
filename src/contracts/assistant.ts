@@ -45,6 +45,8 @@ export const assistantTurnSchema = z.object({
   messages: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string() })).min(1).max(60),
   /** Where the person is, so "this" and "these" mean something. */
   page: z.object({ path: z.string(), objectId: z.string().optional(), recordId: z.string().optional() }),
+  /** A name for this turn chosen by the app. With it, each event is also pushed over the live connection as it happens, so the answer builds up on screen. */
+  turnId: z.string().max(64).optional(),
 });
 export type AssistantTurn = z.infer<typeof assistantTurnSchema>;
 
@@ -68,9 +70,24 @@ export type AssistantEvent = z.infer<typeof assistantEventSchema>;
 export const assistantReplySchema = z.object({ events: z.array(assistantEventSchema), model: z.string(), tokens: z.number().int() });
 export type AssistantReply = z.infer<typeof assistantReplySchema>;
 
+/** What the assistant has been asked and what it used, so the people paying for the model can see where it goes. */
+export const assistantUsageSchema = z.object({
+  /** The last 30 days. */
+  from: z.string(),
+  turns: z.number().int(),
+  inputTokens: z.number().int(),
+  outputTokens: z.number().int(),
+  failed: z.number().int(),
+  byPerson: z.array(z.object({ userId: z.string(), turns: z.number().int(), tokens: z.number().int() })),
+  recent: z.array(z.object({ id: z.string(), userId: z.string(), question: z.string(), model: z.string(), tokens: z.number().int(), lookups: z.number().int(), plannedSteps: z.number().int(), seconds: z.number(), failed: z.boolean(), at: z.string() })),
+});
+export type AssistantUsage = z.infer<typeof assistantUsageSchema>;
+
 export interface AssistantApi {
   getAssistantSettings(): Promise<AssistantSettings>;
   saveAssistantSettings(input: SaveAssistantSettings): Promise<AssistantSettings>;
   /** One turn of the conversation, on the connected model. */
   assistantTurn(input: AssistantTurn): Promise<AssistantReply>;
+  /** Admins see everyone's; anyone else sees their own. */
+  getAssistantUsage(): Promise<AssistantUsage>;
 }

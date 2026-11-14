@@ -28,7 +28,10 @@ async function main(): Promise<void> {
   const communication = createCommunication({}, { logger, tracer, metrics });
   container.register(KEYS.Communication, communication);
   const email = createEmailProvider(settings, database.db);
-  const operations = registerServices(communication, { db: database.db, transaction: database.transaction, source: config.serviceName, email, secretsKey: settings.secretsKey });
+  // Live updates need Redis; without it the CRM works, and browsers simply read on their own.
+  const live = config.redis ? lifecycle.manage('live', createLive(config.redis.url, config.serviceName, { logger, tracer, metrics }), { priority: 40 }) : undefined;
+  const deps = { db: database.db, transaction: database.transaction, source: config.serviceName, email, secretsKey: settings.secretsKey, push: live ? (ctx: Parameters<typeof live.sendToUser>[0], userId: string, data: unknown) => live.sendToUser(ctx, userId, data) : undefined };
+  const operations = registerServices(communication, deps);
 
   const authenticate = createAuthStrategy(settings, { production: config.env === 'production', jwtSecret: config.auth?.jwtSecret, jwtIssuer: config.auth?.jwtIssuer, jwtAudience: config.auth?.jwtAudience });
 
@@ -55,9 +58,8 @@ async function main(): Promise<void> {
 
   // Live updates: browsers hold a WebSocket open on the API's own port, at /api/live, and are told
   // when to read again. The connection is signed in the same way as any request, and only a member gets one.
-  if (config.redis) {
-    const live = lifecycle.manage('live', createLive(config.redis.url, config.serviceName, { logger, tracer, metrics }), { priority: 40 });
-    const { people } = createServices({ db: database.db, transaction: database.transaction, source: config.serviceName, email, secretsKey: settings.secretsKey });
+  if (live) {
+    const { people } = createServices(deps);
     // The server's own setup runs this when it starts listening, which is after the startup hooks were
     // gathered, so the socket layer is started here and stopped by a hook registered outside.
     let sockets: WSAdapter | undefined;

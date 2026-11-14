@@ -5,7 +5,7 @@ import { Outbox } from '@mariachi/events/outbox';
 import { z } from 'zod';
 import { type Operation, operations } from '../../../src/contracts/operations';
 import { createEncryption } from '@mariachi/encryption';
-import { AssistantService, AssistantSettingsRepository } from '../assistant/assistant.service';
+import { AssistantService, AssistantSettingsRepository, AssistantTurnsRepository, type Push } from '../assistant/assistant.service';
 import { TENANT_ID } from '../config';
 import { conversationChanged, settingsChanged } from '../events';
 import { ActivityRepository } from './activity/activity.repository';
@@ -46,6 +46,8 @@ export interface ServiceDeps {
   email: EmailProvider;
   /** Encrypts secrets the CRM stores. */
   secretsKey: string;
+  /** Sends something to one person's open browsers. Absent where there is no live connection. */
+  push?: Push;
 }
 
 /** Every service, built once. The API registers them as operations; the worker uses the runner. */
@@ -98,7 +100,7 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
   const { people, workspace, records, activity, brief, notifications, workflows, importer, inbox, mail, reports, sequences, settings, sales, capture } = createServices(deps);
 
   // The assistant reaches the CRM the way everything else does: through the operations, as the person asking.
-  const assistant = new AssistantService(new AssistantSettingsRepository(deps.db), createEncryption({ adapter: 'local', keys: { primary: deps.secretsKey } }), operations, (ctx, operation, input) => communication.call(ctx, operation, input));
+  const assistant = new AssistantService(new AssistantSettingsRepository(deps.db), createEncryption({ adapter: 'local', keys: { primary: deps.secretsKey } }), operations, (ctx, operation, input) => communication.call(ctx, operation, input), new AssistantTurnsRepository(deps.db), deps.push);
 
   const handlers: Record<string, Handler> = {
     'workspace.get': (ctx) => workspace.get(ctx),
@@ -158,6 +160,7 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     'assistant.settings': (ctx) => assistant.getSettings(ctx),
     'assistant.saveSettings': (ctx, input) => assistant.saveSettings(ctx, input),
     'assistant.turn': (ctx, input) => assistant.turn(ctx, input),
+    'assistant.usage': (ctx) => assistant.usage(ctx),
     'forms.list': (ctx) => capture.listForms(ctx),
     'forms.get': (ctx, input) => capture.getForm(ctx, input),
     'forms.save': (ctx, input) => capture.saveForm(ctx, input),

@@ -3,11 +3,13 @@ import { ConflictError, type Context, ValidationError } from '@mariachi/core';
 import { type DrizzleDb, DrizzleRepository } from '@mariachi/database-postgres';
 import type { Encryption } from '@mariachi/encryption';
 import { z } from 'zod';
-import type { AssistantEvent, AssistantReply, AssistantSettings, AssistantTurn, SaveAssistantSettings } from '../../../src/contracts/assistant';
+import type { AssistantEvent, AssistantReply, AssistantSettings, AssistantTurn, AssistantUsage, SaveAssistantSettings } from '../../../src/contracts/assistant';
 import type { ObjectDefinition } from '../../../src/contracts/metadata';
 import type { Operation } from '../../../src/contracts/operations';
 import type { ListResult, RecordDetail, Workspace } from '../../../src/contracts/records';
-import { type AssistantSettingsRow, assistantSettingsTable } from '../schema';
+import { and, sql } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
+import { type AssistantSettingsRow, type AssistantTurnRow, assistantSettingsTable, assistantTurnsTable } from '../schema';
 import { actorOf, assertAllowed } from '../services/people/access';
 import { modelProvider, modelProviders } from './providers';
 
@@ -32,6 +34,22 @@ export class AssistantSettingsRepository extends DrizzleRepository<AssistantSett
     super(assistantSettingsTable, db);
   }
 }
+
+export class AssistantTurnsRepository extends DrizzleRepository<AssistantTurnRow> {
+  constructor(db: DrizzleDb) {
+    super(assistantTurnsTable, db);
+  }
+
+  async totals(ctx: Context, since: Date, userId: string | undefined): Promise<Array<{ userId: string; turns: number; inputTokens: number; outputTokens: number; failed: number }>> {
+    const who = userId ? sql`assistant_turns.user_id = ${userId}` : sql`true`;
+    return (await this.db.execute(sql`
+      select user_id as "userId", count(*)::int as turns, coalesce(sum(input_tokens), 0)::int as "inputTokens", coalesce(sum(output_tokens), 0)::int as "outputTokens", count(*) filter (where error is not null)::int as failed
+      from assistant_turns where ${and(this.buildWhere(ctx), sql`assistant_turns.created_at >= ${since.toISOString()}::timestamptz`, who)} group by user_id order by 2 desc`)) as unknown as Array<{ userId: string; turns: number; inputTokens: number; outputTokens: number; failed: number }>;
+  }
+}
+
+/** Sends one event of a turn to the browser that asked, as it happens. */
+export type Push = (ctx: Context, userId: string, data: unknown) => Promise<void>;
 
 type Call = (ctx: Context, operation: string, input: unknown) => Promise<unknown>;
 type Tool = { name: string; description: string; schema: z.ZodTypeAny; handler: (input: unknown) => Promise<unknown> };
@@ -59,6 +77,8 @@ export class AssistantService {
     private readonly encryption: Encryption,
     private readonly operations: Operation[],
     private readonly call: Call,
+    private readonly turns: AssistantTurnsRepository,
+    private readonly push?: Push,
   ) {}
 
   private describe(row: AssistantSettingsRow | null): AssistantSettings {
@@ -90,18 +110,76 @@ export class AssistantService {
     return this.describe(existing ? await this.settings.update(ctx, SETTINGS_ID, values) : await this.settings.create(ctx, { id: SETTINGS_ID, ...values }));
   }
 
-  private async adapter(ctx: Context): Promise<{ adapter: AIAdapter; model: string }> {
+  private async adapter(ctx: Context): Promise<{ adapter: AIAdapter; model: string; provider: string }> {
     const row = await this.settings.findById(ctx, SETTINGS_ID);
     if (!row) throw new ConflictError('No model is connected to the assistant yet. An admin can connect one in Settings.');
     const apiKey = row.apiKeyEncrypted ? await this.encryption.decrypt(row.apiKeyEncrypted, { aad: 'assistant:apiKey' }) : undefined;
-    return { adapter: modelProvider(row.provider).create({ model: row.model, apiKey, baseUrl: row.baseUrl ?? undefined }), model: row.model };
+    return { adapter: modelProvider(row.provider).create({ model: row.model, apiKey, baseUrl: row.baseUrl ?? undefined }), model: row.model, provider: row.provider };
   }
 
+  /** One turn: runs it, sends each event to the asker as it happens when they gave the turn a name, and records what it used whether it worked or not. */
   async turn(ctx: Context, input: AssistantTurn): Promise<AssistantReply> {
-    const { adapter, model } = await this.adapter(ctx);
+    const started = Date.now();
+    const asker = actorOf(ctx).signedInId;
+    const question = [...input.messages].reverse().find((message) => message.role === 'user')?.text ?? '';
+    const used = { provider: '', model: '', inputTokens: 0, outputTokens: 0, rounds: 0 };
+    const events: AssistantEvent[] = [];
+    let sent = 0;
+    // Events reach the browser in order; a push that fails is skipped, because the full answer follows in the reply anyway.
+    const flush = async () => {
+      if (!input.turnId || !this.push) return;
+      for (; sent < events.length; sent += 1) await this.push(ctx, asker, { topic: 'assistant', turnId: input.turnId, index: sent, event: events[sent] }).catch(() => undefined);
+    };
+    let failure: string | undefined;
+    try {
+      return await this.run(ctx, input, events, used, flush);
+    } catch (error) {
+      failure = error instanceof Error ? error.message : String(error);
+      throw error;
+    } finally {
+      await this.turns
+        .create(ctx, {
+          id: `turn_${randomUUID().replace(/-/g, '').slice(0, 12)}`,
+          userId: ctx.userId ?? asker,
+          question: question.slice(0, 500),
+          provider: used.provider,
+          model: used.model,
+          inputTokens: used.inputTokens,
+          outputTokens: used.outputTokens,
+          rounds: used.rounds,
+          lookups: events.filter((event) => event.type === 'tool').length,
+          plannedSteps: events.reduce((count, event) => count + (event.type === 'plan' ? event.steps.length : 0), 0),
+          durationMs: Date.now() - started,
+          error: failure ?? null,
+        })
+        .catch((error: unknown) => ctx.logger.error({ error }, 'An assistant turn could not be recorded'));
+    }
+  }
+
+  async usage(ctx: Context): Promise<AssistantUsage> {
+    const actor = actorOf(ctx);
+    // People who run the workspace see everyone's use; anyone else sees their own.
+    const only = actor.role.manageSettings ? undefined : actor.userId;
+    const since = new Date(Date.now() - 30 * 86_400_000);
+    const [totals, recent] = await Promise.all([this.turns.totals(ctx, since, only), this.turns.findMany(ctx, only ? { userId: only } : {}, { sort: { field: 'createdAt', direction: 'desc' }, limit: 20 })]);
+    const sum = (key: 'turns' | 'inputTokens' | 'outputTokens' | 'failed') => totals.reduce((total, row) => total + row[key], 0);
+    return {
+      from: since.toISOString().slice(0, 10),
+      turns: sum('turns'),
+      inputTokens: sum('inputTokens'),
+      outputTokens: sum('outputTokens'),
+      failed: sum('failed'),
+      byPerson: totals.map((row) => ({ userId: row.userId, turns: row.turns, tokens: row.inputTokens + row.outputTokens })),
+      recent: recent.map((row) => ({ id: row.id, userId: row.userId, question: row.question, model: row.model, tokens: row.inputTokens + row.outputTokens, lookups: row.lookups, plannedSteps: row.plannedSteps, seconds: Math.round(row.durationMs / 100) / 10, failed: row.error !== null, at: row.createdAt.toISOString() })),
+    };
+  }
+
+  private async run(ctx: Context, input: AssistantTurn, events: AssistantEvent[], used: { provider: string; model: string; inputTokens: number; outputTokens: number; rounds: number }, flush: () => Promise<void>): Promise<AssistantReply> {
+    const { adapter, model, provider } = await this.adapter(ctx);
+    used.provider = provider;
+    used.model = model;
     const workspace = (await this.call(ctx, 'workspace.get', undefined)) as Workspace;
     const me = workspace.users.find((user) => user.id === workspace.currentUserId);
-    const events: AssistantEvent[] = [];
     const steps: Array<{ label: string; operation: string; input: unknown }> = [];
 
     // Every operation is a tool, apart from the assistant's own and the ones a public page calls.
@@ -145,7 +223,11 @@ export class AssistantService {
     for (let round = 0; round < MAX_ROUNDS; round += 1) {
       const response = await adapter.generate(messages, { model, tools });
       tokens += response.usage.totalTokens;
+      used.inputTokens += response.usage.inputTokens;
+      used.outputTokens += response.usage.outputTokens;
+      used.rounds += 1;
       if (response.content.trim()) events.push({ type: 'say', text: response.content.trim() });
+      await flush();
       const calls = response.toolCalls ?? [];
       if (calls.length === 0) break;
       messages.push({ role: 'assistant', content: response.content, toolCalls: calls });
@@ -175,6 +257,7 @@ export class AssistantService {
         let text = JSON.stringify(result ?? null);
         if (text.length > MAX_RESULT_CHARS) text = JSON.stringify({ cut: true, note: `The result was too long and was cut at ${MAX_RESULT_CHARS} characters. Narrow the query, or ask for a smaller page.`, start: text.slice(0, MAX_RESULT_CHARS) });
         messages.push({ role: 'tool', content: JSON.stringify({ callId: call.id, toolName: call.name, result: JSON.parse(text), isError: failed }) });
+        await flush();
       }
     }
 
@@ -183,6 +266,7 @@ export class AssistantService {
       events.push({ type: 'plan', title: steps.length === 1 ? (steps[0]?.label ?? 'Proposed change') : `${steps.length} proposed changes`, summary: last?.type === 'say' ? last.text.split('\n')[0] ?? '' : 'Nothing has been changed yet.', steps });
     }
     if (!events.some((event) => event.type === 'say')) events.push({ type: 'say', text: steps.length > 0 ? 'I have put a plan beside this conversation. Nothing has been changed yet; run it when you are happy with it.' : 'I looked into it but have nothing to add.' });
+    await flush();
     return { events, model, tokens };
   }
 
