@@ -14,13 +14,14 @@ import { Inbox } from './pages/Inbox';
 import { RecordDetail } from './pages/RecordDetail';
 import { RecordList } from './pages/RecordList';
 import { ReportBuilder, Reports } from './pages/Reports';
+import { SequenceDetail, Sequences } from './pages/Sequences';
 import { ObjectSettings, Settings } from './pages/Settings';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Missing #root element');
 
 /** Areas the navigation links to that have no screen yet. Listed so they don't match `/:objectId`. */
-const PLACEHOLDERS = ['sequences', 'workflows'];
+const PLACEHOLDERS = ['workflows'];
 
 createRoot(root).render(
   <StrictMode>
@@ -35,6 +36,8 @@ createRoot(root).render(
             <Route path="import" element={<ImportPage />} />
             <Route path="reports" element={<Reports />} />
             <Route path="reports/:reportId" element={<ReportBuilder />} />
+            <Route path="sequences" element={<Sequences />} />
+            <Route path="sequences/:sequenceId" element={<SequenceDetail />} />
             <Route path="settings" element={<Settings />} />
             <Route path="settings/objects/:objectId" element={<ObjectSettings />} />
             {PLACEHOLDERS.map((path) => (

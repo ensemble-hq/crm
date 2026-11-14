@@ -74,6 +74,7 @@ export type UpdateConversation = z.infer<typeof updateConversationSchema>;
 export const emailTemplateSchema = z.object({
   id: z.string(),
   name: z.string(),
+  subject: z.string(),
   /** May contain `{{firstName}}` and `{{myName}}`, filled in when the template is used. */
   body: z.string(),
 });

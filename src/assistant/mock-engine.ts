@@ -715,3 +715,53 @@ export function draftReply(input: { subject: string; lastInbound: string | undef
   else answer = 'Thanks for the update. I will take this forward and come back to you with next steps by the end of tomorrow.';
   return `Hi ${first},\n\n${answer}\n\nBest,\n${me}`;
 }
+
+/**
+ * A first draft of a sequence from a sentence describing its purpose. Scripted: it picks one of a
+ * few shapes by keyword. The real assistant writes the steps, and the emails in them, for the goal.
+ */
+export function draftSequence(goal: string): { name: string; steps: Array<{ kind: 'email' | 'call' | 'task'; waitDays: number; templateId?: string; title?: string }> } {
+  const text = goal.toLowerCase();
+  const name = `${goal.trim().slice(0, 1).toUpperCase()}${goal.trim().slice(1, 60)}`.replace(/[.!?]+$/, '');
+  if (/renew|expir|contract end/.test(text)) {
+    return {
+      name: name || 'Renewal',
+      steps: [
+        { kind: 'email', waitDays: 0, templateId: 'tpl_meeting' },
+        { kind: 'task', waitDays: 5, title: 'Prepare the renewal quote' },
+        { kind: 'email', waitDays: 2, templateId: 'tpl_pricing' },
+        { kind: 'call', waitDays: 5, title: 'Call to confirm the renewal' },
+      ],
+    };
+  }
+  if (/quiet|cold|re-?engage|win back|gone dark|lapsed/.test(text)) {
+    return {
+      name: name || 'Win back',
+      steps: [
+        { kind: 'email', waitDays: 0, templateId: 'tpl_nudge' },
+        { kind: 'email', waitDays: 7, templateId: 'tpl_meeting' },
+        { kind: 'task', waitDays: 7, title: 'Decide: keep trying, or close the lead' },
+      ],
+    };
+  }
+  if (/demo|trial|meeting|call/.test(text)) {
+    return {
+      name: name || 'After the meeting',
+      steps: [
+        { kind: 'email', waitDays: 0, templateId: 'tpl_thanks' },
+        { kind: 'email', waitDays: 3, templateId: 'tpl_pricing' },
+        { kind: 'call', waitDays: 4, title: 'Call to answer questions' },
+        { kind: 'email', waitDays: 5, templateId: 'tpl_nudge' },
+      ],
+    };
+  }
+  return {
+    name: name || 'Follow-up',
+    steps: [
+      { kind: 'email', waitDays: 0, templateId: 'tpl_intro' },
+      { kind: 'call', waitDays: 2, title: 'Call to introduce yourself' },
+      { kind: 'email', waitDays: 3, templateId: 'tpl_meeting' },
+      { kind: 'email', waitDays: 5, templateId: 'tpl_nudge' },
+    ],
+  };
+}

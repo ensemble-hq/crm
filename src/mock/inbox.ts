@@ -157,11 +157,13 @@ function find(id: string): Conversation {
   return conversation;
 }
 
-const TEMPLATES: EmailTemplate[] = [
-  { id: 'tpl_thanks', name: 'Thanks, I am on it', body: 'Hi {{firstName}},\n\nThanks for this. I am looking into it and will come back to you by the end of tomorrow.\n\nBest,\n{{myName}}' },
-  { id: 'tpl_meeting', name: 'Offer a call', body: 'Hi {{firstName}},\n\nIt might be quicker to talk this through. Do you have 20 minutes on Tuesday or Wednesday? Here is my calendar if it is easier to pick a time.\n\nBest,\n{{myName}}' },
-  { id: 'tpl_pricing', name: 'Send pricing', body: 'Hi {{firstName}},\n\nI have attached the pricing we discussed. It includes onboarding and support, with no setup fee.\n\nLet me know if you would like me to walk your team through it.\n\nBest,\n{{myName}}' },
-  { id: 'tpl_nudge', name: 'Gentle nudge', body: 'Hi {{firstName}},\n\nI wanted to check whether you had a chance to look at my last message. Happy to answer any questions, or to pick this up later if the timing is off.\n\nBest,\n{{myName}}' },
+/** The team's saved emails. Used for replies in the inbox and for the email steps of sequences. */
+export const emailTemplates: EmailTemplate[] = [
+  { id: 'tpl_intro', name: 'Introduction', subject: 'A quick introduction', body: 'Hi {{firstName}},\n\nI look after new customers at Northwind. I saw you were interested in what we do, and wanted to introduce myself in case I can help.\n\nWould a short call this week be useful?\n\nBest,\n{{myName}}' },
+  { id: 'tpl_thanks', name: 'Thanks, I am on it', subject: 'Thanks for your time', body: 'Hi {{firstName}},\n\nThanks for this. I am looking into it and will come back to you by the end of tomorrow.\n\nBest,\n{{myName}}' },
+  { id: 'tpl_meeting', name: 'Offer a call', subject: 'Shall we talk it through?', body: 'Hi {{firstName}},\n\nIt might be quicker to talk this through. Do you have 20 minutes on Tuesday or Wednesday? Here is my calendar if it is easier to pick a time.\n\nBest,\n{{myName}}' },
+  { id: 'tpl_pricing', name: 'Send pricing', subject: 'Pricing, as promised', body: 'Hi {{firstName}},\n\nI have attached the pricing we discussed. It includes onboarding and support, with no setup fee.\n\nLet me know if you would like me to walk your team through it.\n\nBest,\n{{myName}}' },
+  { id: 'tpl_nudge', name: 'Gentle nudge', subject: 'Checking in', body: 'Hi {{firstName}},\n\nI wanted to check whether you had a chance to look at my last message. Happy to answer any questions, or to pick this up later if the timing is off.\n\nBest,\n{{myName}}' },
 ];
 
 let sequence = 0;
@@ -228,7 +230,7 @@ export function createInboxApi(respond: <T>(compute: () => T) => Promise<T>, log
         return message;
       }),
 
-    listEmailTemplates: () => respond(() => TEMPLATES),
+    listEmailTemplates: () => respond(() => emailTemplates),
 
     inboxCounts: () =>
       respond(() => {

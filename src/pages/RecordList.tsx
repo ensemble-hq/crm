@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Columns3, Download, Filter as FilterIcon, LayoutList, List, Pencil, Plus, Search, SlidersHorizontal, Trash2, Upload, UserPlus, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Columns3, Download, Filter as FilterIcon, LayoutList, List, Pencil, Plus, Search, Send, SlidersHorizontal, Trash2, Upload, UserPlus, X } from 'lucide-react';
 import { type CSSProperties, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, useQuery } from '../api';
@@ -169,6 +169,53 @@ function BulkEditDialog({ object, ids, initialProperty, onClose, onDone }: { obj
   );
 }
 
+/** Put the selected contacts into a sequence. Contacts already in it, or without an email, are left out and named. */
+function EnrollDialog({ ids, onClose, onDone }: { ids: string[]; onClose: () => void; onDone: (message: string) => void }) {
+  const sequences = useQuery(() => api.listSequences(), []);
+  const [sequenceId, setSequenceId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const chosen = sequences.data?.find((sequence) => sequence.id === (sequenceId || sequences.data?.[0]?.id));
+
+  async function enroll() {
+    if (!chosen) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      const result = await api.enrollContacts({ sequenceId: chosen.id, contactIds: ids });
+      const left = result.skipped.length > 0 ? ` ${result.skipped.length.toLocaleString('en-US')} left out: ${result.skipped[0]?.reason ?? ''}${result.skipped.length > 1 ? ` (and ${result.skipped.length - 1} more)` : ''}` : '';
+      onDone(`Enrolled ${result.enrolled.toLocaleString('en-US')} ${result.enrolled === 1 ? 'contact' : 'contacts'} in "${chosen.name}".${left}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The contacts could not be enrolled.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open size="sm" title={`Enrol ${ids.length.toLocaleString('en-US')} ${ids.length === 1 ? 'contact' : 'contacts'}`} submitLabel="Enrol" busy={busy} error={error} onClose={onClose} onSubmit={enroll}>
+      <div className="m-field">
+        <label className="m-field-label" htmlFor="enroll-sequence">
+          Sequence
+        </label>
+        <select className="m-select" id="enroll-sequence" value={chosen?.id ?? ''} onChange={(event) => setSequenceId(event.target.value)}>
+          {(sequences.data ?? []).map((sequence) => (
+            <option key={sequence.id} value={sequence.id}>
+              {sequence.name}
+              {sequence.status === 'paused' ? ' (paused)' : ''}
+            </option>
+          ))}
+        </select>
+        {chosen ? (
+          <p className="m-field-hint">
+            {chosen.steps.length} steps. {chosen.status === 'paused' ? 'It is paused, so nothing is sent until it is started.' : 'The first step runs straight away.'}
+          </p>
+        ) : null}
+      </div>
+    </Modal>
+  );
+}
+
 function RecordTable({
   object,
   columnIds,
@@ -180,6 +227,7 @@ function RecordTable({
   onSort,
   onPage,
   onTotal,
+  onNotice,
 }: {
   object: ObjectDefinition;
   columnIds: string[];
@@ -191,10 +239,11 @@ function RecordTable({
   onSort: (sort: Sort) => void;
   onPage: (page: number) => void;
   onTotal: (total: number) => void;
+  onNotice: (message: string) => void;
 }) {
   const { revision, touch } = useWorkspace();
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulk, setBulk] = useState<{ kind: 'edit'; property?: string } | { kind: 'delete' }>();
+  const [bulk, setBulk] = useState<{ kind: 'edit'; property?: string } | { kind: 'delete' } | { kind: 'enroll' }>();
   const [busy, setBusy] = useState(false);
   const [bulkError, setBulkError] = useState<string>();
   const sortKey = sort ? `${sort.property}:${sort.direction}` : '';
@@ -280,6 +329,11 @@ function RecordTable({
                     <button type="button" className="m-button" data-size="sm" style={toolbarButton} onClick={() => setBulk({ kind: 'edit' })}>
                       <Pencil size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Edit a field
                     </button>
+                    {object.id === 'contacts' ? (
+                      <button type="button" className="m-button" data-size="sm" style={toolbarButton} onClick={() => setBulk({ kind: 'enroll' })}>
+                        <Send size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Enrol in sequence
+                      </button>
+                    ) : null}
                     <button type="button" className="m-button" data-size="sm" style={toolbarButton} onClick={() => setBulk({ kind: 'delete' })}>
                       <Trash2 size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Delete
                     </button>
@@ -384,6 +438,16 @@ function RecordTable({
           {total === undefined ? 'Loading…' : total === 0 ? '0 results' : `${first.toLocaleString('en-US')}–${last.toLocaleString('en-US')} of ${total.toLocaleString('en-US')}`}
         </span>
       </div>
+      {bulk?.kind === 'enroll' ? (
+        <EnrollDialog
+          ids={ids}
+          onClose={() => setBulk(undefined)}
+          onDone={(message) => {
+            onNotice(message);
+            finishBulk();
+          }}
+        />
+      ) : null}
       {bulk?.kind === 'edit' ? <BulkEditDialog object={object} ids={ids} initialProperty={bulk.property} onClose={() => setBulk(undefined)} onDone={finishBulk} /> : null}
       <Modal
         open={bulk?.kind === 'delete'}
@@ -617,6 +681,7 @@ export function RecordList() {
               onSort={(next) => update({ sort: `${next.property}:${next.direction}`, page: undefined })}
               onPage={(next) => update({ page: next > 1 ? String(next) : undefined })}
               onTotal={setTotal}
+              onNotice={setNotice}
             />
           )}
         </section>
