@@ -210,7 +210,8 @@ function generateDeals(random: () => number, companies: CrmRecord[], contactsByC
         contact: people.length > 0 ? pick(random, people).id : null,
         priority: (priorities[weighted(random, [35, 45, 20])] as Option).id,
         source: pickOption(random, sources),
-        lastActivity: isoDate(createdAt + Math.floor(random() * (NOW - createdAt))),
+        // Open deals are mostly being worked; a minority have gone quiet.
+        lastActivity: isoDate(open ? Math.max(createdAt, NOW - Math.floor(random() ** 3 * 45) * DAY) : createdAt + Math.floor(random() * (closeAt - createdAt))),
       }),
     );
   }

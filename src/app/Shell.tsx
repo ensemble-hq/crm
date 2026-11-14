@@ -1,4 +1,4 @@
-import { BarChart3, Bell, Bookmark, CheckSquare, House, Inbox, type LucideIcon, PanelLeft, Search, Send, Settings, Workflow } from 'lucide-react';
+import { BarChart3, Bell, Bookmark, CheckSquare, House, Inbox, type LucideIcon, PanelLeft, Search, Send, Settings, Sparkles, Workflow } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { objectIcon } from '../ui/icons';
@@ -43,6 +43,7 @@ function Sidebar() {
 
   // Objects come from the workspace's definitions, so a custom object appears here by itself.
   const primary: NavItem[] = [
+    { to: '/assistant', label: 'Assistant', icon: Sparkles },
     { to: '/', label: 'Overview', icon: House },
     { to: '/inbox', label: 'Inbox', icon: Inbox, count: 6 },
     { to: '/tasks', label: 'Tasks', icon: CheckSquare, count: 5 },

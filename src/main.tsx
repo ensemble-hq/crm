@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Shell } from './app/Shell';
 import { WorkspaceProvider } from './app/WorkspaceProvider';
+import { AssistantPage } from './pages/Assistant';
 import { ComingSoon } from './pages/ComingSoon';
 import { Dashboard } from './pages/Dashboard';
 import { RecordDetail } from './pages/RecordDetail';
@@ -24,6 +25,7 @@ createRoot(root).render(
         <Routes>
           <Route element={<Shell />}>
             <Route index element={<Dashboard />} />
+            <Route path="assistant" element={<AssistantPage />} />
             {PLACEHOLDERS.map((path) => (
               <Route key={path} path={`${path}/*`} element={<ComingSoon />} />
             ))}
