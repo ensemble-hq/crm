@@ -33,6 +33,9 @@ export function FormView({ form, formId, contacts, onSubmitted }: { form: FormSe
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [done, setDone] = useState(false);
+  // For telling people from programs: when the form appeared, and a field only a program fills in.
+  const [shownAt] = useState(() => Date.now());
+  const [website, setWebsite] = useState('');
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -43,7 +46,7 @@ export function FormView({ form, formId, contacts, onSubmitted }: { form: FormSe
     setBusy(true);
     setError(undefined);
     try {
-      await api.submitForm({ formId, values });
+      await api.submitForm({ formId, values: { ...values, __website: website, __took: String(Date.now() - shownAt) } });
       setDone(true);
       setValues({});
       onSubmitted?.();
@@ -58,6 +61,13 @@ export function FormView({ form, formId, contacts, onSubmitted }: { form: FormSe
     return (
       <div className="m-stack" data-gap="3">
         <h1 style={{ fontSize: 'var(--m-font-size-xl)', fontWeight: 'var(--m-font-weight-medium)', margin: 0 }}>{form.heading}</h1>
+      {/* Hidden from people, by position and from screen readers and the keyboard; programs that fill in every field give themselves away here. */}
+      <div aria-hidden style={{ position: 'absolute', insetInlineStart: -10_000, inlineSize: 1, blockSize: 1, overflow: 'hidden' }}>
+        <label>
+          Website
+          <input type="text" name="website" tabIndex={-1} autoComplete="off" value={website} onChange={(event) => setWebsite(event.target.value)} />
+        </label>
+      </div>
         <output className="m-alert" data-tone="success">
           <div className="m-alert-content">
             <p className="m-alert-body">{form.thanks}</p>

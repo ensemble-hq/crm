@@ -35,6 +35,18 @@ describe('public forms', () => {
     expect(await refusal(crm.visit('forms.submit', { formId, values: { name: 'A', email: 'nope' } }))).toMatch(/not an email address/);
   });
 
+  it('quietly drops submissions that look automated, and keeps a person\'s', async () => {
+    const send = (email: string, more: Record<string, string>) => crm.visit<{ contactId: string }>('forms.submit', { formId, values: { name: 'Some Name', email, ...more } });
+    const known = async (email: string) => (await crm.rows<{ id: string }>(sql`select id from records where properties->>'email' = ${email}`)).length;
+    // Filled in the field people cannot see, or sent the form the instant it appeared.
+    expect(await send('bot1@spam.example', { __website: 'http://spam.example', __took: '9000' })).toEqual({ contactId: '', isNew: false });
+    expect(await send('bot2@spam.example', { __website: '', __took: '300' })).toEqual({ contactId: '', isNew: false });
+    expect(await known('bot1@spam.example')).toBe(0);
+    expect(await known('bot2@spam.example')).toBe(0);
+    expect((await send('person@real.example', { __website: '', __took: '9000' })).contactId).not.toBe('');
+    expect(await known('person@real.example')).toBe(1);
+  });
+
   it('never let a visitor overwrite what the team has on a contact', async () => {
     const again = await crm.visit<{ contactId: string; isNew: boolean }>('forms.submit', { formId, values: { name: 'Someone Else', email: 'VERA@visitor.example', phone: '555-9' } });
     expect(again.isNew).toBe(false);

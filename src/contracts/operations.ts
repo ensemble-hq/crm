@@ -683,7 +683,7 @@ export const operations: Operation[] = [
     name: 'forms.submit',
     method: 'submitForm',
     title: 'Submit a form',
-    description: 'Submits a form as a visitor would: `values` maps the form\'s property ids to what was typed. Creates a contact, or adds missing details to the one with that email.',
+    description: 'Submits a form as a visitor would: `values` maps the form\'s property ids to what was typed. Creates a contact, or adds missing details to the one with that email. From a visitor who is not signed in, a submission that looks automated is quietly dropped: it is answered as if it worked, with an empty contactId.',
     input: z.object({ formId: z.string(), values: z.record(z.string()) }),
     output: z.object({ contactId: z.string(), isNew: z.boolean() }),
     effect: 'write',

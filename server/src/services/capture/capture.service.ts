@@ -100,6 +100,9 @@ function slotsFor(page: BookingPageSettings, meetings: MeetingRow[], today: stri
  * signed-in person, so they take nothing on trust: every value is checked against the form or page
  * as the team set it up, and they give back nothing about anyone else.
  */
+/** A person takes at least this long to fill in a form. */
+const MIN_FILL_MS = 2_000;
+
 export class CaptureService {
   constructor(
     private readonly forms: FormsRepository,
@@ -195,6 +198,17 @@ export class CaptureService {
   /** What the public page calls. Only the form's own fields are taken; anything else in the request is ignored. */
   async submit(ctx: Context, input: { formId: string; values: Record<string, string> }): Promise<{ contactId: string; isNew: boolean }> {
     const row = await this.form(ctx, input.formId);
+    // Two quiet traps for programs that fill in forms, applied to visitors only. The page has a
+    // field people cannot see, which only a program fills in; and it says how long the form was
+    // open, which for a person is never under two seconds. A submission caught by either is told
+    // it worked, so the program learns nothing, and nothing is kept.
+    if (ctx.userId === null) {
+      const took = input.values.__took === undefined ? undefined : Number(input.values.__took);
+      if ((input.values.__website ?? '').trim() !== '' || (took !== undefined && !(took >= MIN_FILL_MS))) {
+        ctx.logger?.info({ formId: row.id }, 'A form submission that looked automated was dropped');
+        return { contactId: '', isNew: false };
+      }
+    }
     const contacts = await this.workspace.definition(ctx, 'contacts');
     const typed: Record<string, PropertyValue> = {};
     const kept: Record<string, string> = {};
