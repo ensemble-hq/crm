@@ -6,6 +6,8 @@ export type WorkspaceValue = Workspace & {
   currentUser: User;
   object(id: string | undefined): ObjectDefinition | undefined;
   user(id: string | null | undefined): User | undefined;
+  /** Fetches the definitions again, after an object or property changed. Resolves once they are in. */
+  reload(): Promise<void>;
 };
 
 /**

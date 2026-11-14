@@ -353,15 +353,16 @@ export function RecordList() {
           )}
         </section>
       </div>
-      <CreateRecordDialog
-        object={object}
-        open={creating}
-        onClose={() => setCreating(false)}
-        onCreated={(record) => {
-          setCreating(false);
-          navigate(`/${object.id}/${record.id}`);
-        }}
-      />
+      {creating ? (
+        <CreateRecordDialog
+          object={object}
+          onClose={() => setCreating(false)}
+          onCreated={(record) => {
+            setCreating(false);
+            navigate(`/${object.id}/${record.id}`);
+          }}
+        />
+      ) : null}
     </Page>
   );
 }

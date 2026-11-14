@@ -1,5 +1,5 @@
 import { api } from '../api';
-import type { ObjectDefinition, PropertyValue, User } from '../contracts/metadata';
+import type { ObjectDefinition, PropertyType, PropertyValue, User } from '../contracts/metadata';
 import type { CrmRecord } from '../contracts/records';
 import { MOCK_TODAY, OPEN_STAGES } from '../mock/definitions';
 import { formatDate } from '../ui/PropertyValue';
@@ -27,6 +27,8 @@ export type EngineContext = {
   show(item: CanvasItemInput): string;
   /** Proposes a plan; nothing runs until the user approves it. */
   propose(plan: { title: string; summary: string; steps: Array<{ label: string; detail?: string; run: () => Promise<void> }>; doneText: string; doneLink?: { to: string; label: string } }): string;
+  /** Fetches the object definitions again, after the assistant changed one. */
+  refreshWorkspace(): Promise<void>;
   /** Runs the plan the user was last shown. False when there is none waiting. */
   runPendingPlan(): Promise<boolean>;
 };
@@ -272,6 +274,50 @@ async function importFile(ctx: EngineContext, file: Attachment): Promise<void> {
   ctx.suggest(['Run the plan']);
 }
 
+/** The type a new field most likely needs, from the words used for it. */
+function guessType(label: string): PropertyType {
+  if (/date|day|deadline|renewal|expir|birthday|anniversary/i.test(label)) return 'date';
+  if (/amount|price|value|revenue|cost|budget|fee|\bmrr\b|\barr\b/i.test(label)) return 'currency';
+  if (/count|number of|score|quantity|seats|headcount/i.test(label)) return 'number';
+  if (/e-?mail/i.test(label)) return 'email';
+  if (/phone|mobile/i.test(label)) return 'phone';
+  if (/website|url|link|linkedin/i.test(label)) return 'url';
+  return 'text';
+}
+
+const TYPE_WORDS: Partial<Record<PropertyType, string>> = { date: 'a date', currency: 'a currency amount', number: 'a number', email: 'an email address', phone: 'a phone number', url: 'a web address', text: 'text' };
+
+/** "Add a renewal date to deals": a new field is data, so the assistant makes it itself. */
+async function addProperty(ctx: EngineContext, label: string, object: ObjectDefinition): Promise<void> {
+  await pause(400);
+  const name = `${label.slice(0, 1).toUpperCase()}${label.slice(1)}`;
+  const type = guessType(label);
+  const existing = object.properties.find((property) => property.label.toLowerCase() === name.toLowerCase());
+  if (existing) {
+    await ctx.say(`${object.plural} already have a property called "${existing.label}". You can change it in Settings.`);
+    return;
+  }
+  const group = object.properties[0]?.group ?? 'About';
+  ctx.propose({
+    title: `Add "${name}" to ${object.plural.toLowerCase()}`,
+    summary: `A new property on every ${object.singular.toLowerCase()}. Nothing changes until you run it.`,
+    steps: [
+      {
+        label: `Create the property "${name}"`,
+        detail: `Type: ${TYPE_WORDS[type] ?? type} · Section: ${group}`,
+        run: async () => {
+          await api.createProperty({ objectId: object.id, label: name, type, group, onCreate: true, addToViews: true });
+        },
+      },
+      { label: `Show it as a column in every ${object.singular.toLowerCase()} view and on the create form`, run: () => ctx.refreshWorkspace() },
+    ],
+    doneText: `Done. Every ${object.singular.toLowerCase()} now has "${name}". It is a column in the ${object.plural.toLowerCase()} list and a field on each record; existing records have it empty.`,
+    doneLink: { to: `/${object.id}`, label: `Open ${object.plural.toLowerCase()}` },
+  });
+  await ctx.say(`I can add that. "${name}" would be ${TYPE_WORDS[type] ?? type} on every ${object.singular.toLowerCase()}. The plan is on the right.`);
+  ctx.suggest(['Run the plan']);
+}
+
 async function customization(ctx: EngineContext, request: string): Promise<void> {
   await pause(400);
   ctx.show({
@@ -286,7 +332,7 @@ async function customization(ctx: EngineContext, request: string): Promise<void>
 async function help(ctx: EngineContext): Promise<void> {
   await pause(300);
   await ctx.say('This is a scripted preview of the assistant, so it understands a few requests. Try one of these. The answers use the real data in this workspace.');
-  ctx.suggest(['How is the pipeline looking?', 'Which big deals have gone quiet?', 'Who has closed the most this year?', 'Import a spreadsheet of leads']);
+  ctx.suggest(['How is the pipeline looking?', 'Which big deals have gone quiet?', 'Import a spreadsheet of leads', 'Add a renewal date to deals', 'Build a customer portal']);
 }
 
 /** Answers one message. Each branch stands in for what the model would decide to do. */
@@ -310,6 +356,11 @@ export async function respond(input: { text: string; attachments: Attachment[] }
   if (/quiet|stale|no activity|cold|stuck|at risk|attention/.test(text)) return quietDeals(ctx);
   if (/closed|won\b|most|leader|best rep/.test(text)) return wonByOwner(ctx);
   if (/pipeline|stage|forecast|chart|graph/.test(text)) return pipelineByStage(ctx);
-  if (/add a |new field|property|i wish|redesign|customi[sz]e|change the (crm|layout|page)/.test(text)) return customization(ctx, input.text);
+  const field = /\badd (?:an? |the )?(.+?)(?: field| property| column)? (?:to|on|for) (?:the |each |every |all )?([a-z ]+?)s?\.?$/.exec(text);
+  if (field?.[1] && field[2]) {
+    const target = ctx.objects.find((object) => object.plural.toLowerCase() === `${field[2]}s` || object.singular.toLowerCase() === field[2] || object.plural.toLowerCase() === field[2]);
+    if (target) return addProperty(ctx, field[1].trim(), target);
+  }
+  if (/portal|redesign|build (a|an|me)|new page|integrat|customi[sz]e|change the (crm|layout|page)|i wish/.test(text)) return customization(ctx, input.text);
   return help(ctx);
 }

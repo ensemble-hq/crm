@@ -11,12 +11,13 @@ import { ComingSoon } from './pages/ComingSoon';
 import { Dashboard } from './pages/Dashboard';
 import { RecordDetail } from './pages/RecordDetail';
 import { RecordList } from './pages/RecordList';
+import { ObjectSettings, Settings } from './pages/Settings';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Missing #root element');
 
 /** Areas the navigation links to that have no screen yet. Listed so they don't match `/:objectId`. */
-const PLACEHOLDERS = ['inbox', 'tasks', 'sequences', 'workflows', 'reports', 'settings'];
+const PLACEHOLDERS = ['inbox', 'tasks', 'sequences', 'workflows', 'reports'];
 
 createRoot(root).render(
   <StrictMode>
@@ -26,6 +27,8 @@ createRoot(root).render(
           <Route element={<Shell />}>
             <Route index element={<Dashboard />} />
             <Route path="assistant" element={<AssistantPage />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="settings/objects/:objectId" element={<ObjectSettings />} />
             {PLACEHOLDERS.map((path) => (
               <Route key={path} path={`${path}/*`} element={<ComingSoon />} />
             ))}

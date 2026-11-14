@@ -7,7 +7,7 @@ import { VoiceMode } from '../assistant/VoiceMode';
 import { useAssistant } from '../assistant/useAssistant';
 import { ICON, small } from '../ui/styles';
 
-const SUGGESTIONS = ['How is the pipeline looking?', 'Which big deals have gone quiet?', 'Who has closed the most this year?', 'Import a spreadsheet of leads', 'Add a renewal date to deals'];
+const SUGGESTIONS = ['How is the pipeline looking?', 'Which big deals have gone quiet?', 'Who has closed the most this year?', 'Import a spreadsheet of leads', 'Add a renewal date to deals', 'Build a customer portal'];
 
 /**
  * The assistant's own page. Empty, it is one question and one message box. Once you ask, the

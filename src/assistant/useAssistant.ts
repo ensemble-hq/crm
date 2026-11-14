@@ -164,6 +164,7 @@ export function useAssistant(): Assistant {
             setCanvas((previous) => [{ kind: 'plan', id, title: plan.title, summary: plan.summary, steps, state: 'proposed', doneLink: plan.doneLink }, ...previous]);
             return id;
           },
+          refreshWorkspace: () => workspace.reload(),
           runPendingPlan: async () => {
             const planId = pendingPlan.current;
             if (!planId) return false;

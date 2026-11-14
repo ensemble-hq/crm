@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { type ObjectDefinition, type User, filterSchema, propertyValueSchema, sortSchema } from './metadata';
+import { type CreateObject, type CreateProperty, type ObjectDefinition, type UpdateProperty, type User, filterSchema, propertyValueSchema, sortSchema } from './metadata';
 
 /**
  * Record contracts and the API the app talks to. The mock in `src/mock/api.ts` implements `CrmApi`
@@ -111,4 +111,9 @@ export interface CrmApi {
   createRecord(input: CreateRecord): Promise<CrmRecord>;
   updateRecord(input: UpdateRecord): Promise<CrmRecord>;
   createActivity(input: CreateActivity): Promise<Activity>;
+  /** Metadata changes. Each returns the object as it now stands. */
+  createObject(input: CreateObject): Promise<ObjectDefinition>;
+  createProperty(input: CreateProperty): Promise<ObjectDefinition>;
+  updateProperty(input: UpdateProperty): Promise<ObjectDefinition>;
+  deleteProperty(input: { objectId: string; propertyId: string }): Promise<ObjectDefinition>;
 }

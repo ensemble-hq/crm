@@ -2,9 +2,11 @@
 
 **A complete CRM that anyone can take on Ensemble, run as their own hosted instance, and change by asking. It covers what teams use HubSpot for, it is built so AI does most of the data entry, and it is the first of several templates on one shared contract.**
 
-Status: frontend mock in progress (2026-11-14). Nothing here is a commitment on dates.
+Status: frontend mock in progress (2026-11-14). On screen so far: overview, contacts, companies, deals (list, board, record), the assistant with voice mode, and settings for objects and properties. Nothing here is a commitment on dates.
 
 ## What we are building
+
+**The standard is functional equivalence or better, not a HubSpot replica.** A team that migrates must be able to do every job it did before, and bring its data. How we do each job is our own design, and AI-first: where HubSpot has a form or a builder, we first ask whether the assistant can do it from a sentence. The job-by-job comparison, with what migrates, is in [EQUIVALENCE.md](EQUIVALENCE.md).
 
 - **A template, not a product to configure.** Each customer gets their own instance (their own VM and database), deployed and hosted by Ensemble, with previews for every change.
 - **For people who are not engineers.** They customize by chat. They never see git, packages or merges.
@@ -141,6 +143,17 @@ The importer reports on what migrators most often lose: unsubscribe and consent 
 - Currency, time zone, fiscal year, branding
 - Backups and restore
 
+### Added after the HubSpot audit (first release)
+- Gmail and Outlook add-ins: log, track, templates and the assistant, inside the user's inbox
+- A lead object, and a "what should I do today" starting point from the assistant
+- Unique-value, validation, conditional and stage-required rules on properties; pipeline rules
+- Forecast categories and rep submissions; goals on any reportable number
+- Booking round robin; repeating tasks
+- Double opt-in and a subscription preferences page
+- Sending-domain setup (DKIM, SPF, DMARC) done by Ensemble for every instance
+- Cookie banner, choice of data region, scheduled report delivery
+- View tracking on shared pages; tracked documents **(L)**; playbooks **(L)**; deal splits **(L)**; approvals as a workflow step **(L)**
+
 ### Later modules
 None of these block the first release. Each is an optional module.
 
@@ -153,7 +166,7 @@ None of these block the first release. Each is an optional module.
 | Social publishing | Gated or paid APIs |
 | SEO tools | Purchased keyword and crawl data |
 | Calling and conversation intelligence | Twilio, with per-country number rules |
-| Payments | Out of scope for the CRM |
+| Billing through Stripe (invoices, payment links, subscriptions) | Free in HubSpot and widely used by small teams, so migrators expect it. We mirror Stripe; we do not process payments. |
 
 ## AI
 
@@ -224,6 +237,8 @@ The assistant (page, bar and voice), record summaries, email drafting, AI fields
 - **How strong the update promise is** for instances whose core code has been changed.
 - **Publishing `@mariachi/design`.** The repo links it from a local checkout today, so nobody else can install it.
 - **Licence and README** for the public repo.
+- **Billing through Stripe:** confirm it moves from out of scope to a later module (the audit recommends it).
+- **The importer's promise:** agree the list of things that do not migrate cleanly (see EQUIVALENCE.md) and how the pre-migration report presents them.
 
 ## Other templates on the same contract
 

@@ -50,6 +50,8 @@ export const propertyDefinitionSchema = z.object({
   system: z.boolean().optional(),
   /** Asked for when a record is created. */
   onCreate: z.boolean().optional(),
+  /** Added in this workspace, not part of the template. Only custom properties can be deleted. */
+  custom: z.boolean().optional(),
 });
 export type PropertyDefinition = z.infer<typeof propertyDefinitionSchema>;
 
@@ -103,6 +105,8 @@ export const objectDefinitionSchema = z.object({
       dateProperty: z.string().optional(),
     })
     .optional(),
+  /** Added in this workspace, not part of the template. */
+  custom: z.boolean().optional(),
 });
 export type ObjectDefinition = z.infer<typeof objectDefinitionSchema>;
 
@@ -112,3 +116,35 @@ export const userSchema = z.object({
   email: z.string(),
 });
 export type User = z.infer<typeof userSchema>;
+
+/** What a new property needs; its id is derived from the label. */
+export const createPropertySchema = z.object({
+  objectId: z.string(),
+  label: z.string().min(1),
+  type: propertyTypeSchema,
+  group: z.string().min(1),
+  options: z.array(optionSchema).optional(),
+  referenceObjectId: z.string().optional(),
+  onCreate: z.boolean().optional(),
+  /** Also show it as a column in every saved view of the object. */
+  addToViews: z.boolean().optional(),
+});
+export type CreateProperty = z.infer<typeof createPropertySchema>;
+
+/** A property's type and id never change once it holds data; everything else can. */
+export const updatePropertySchema = z.object({
+  objectId: z.string(),
+  propertyId: z.string(),
+  label: z.string().min(1).optional(),
+  group: z.string().min(1).optional(),
+  options: z.array(optionSchema).optional(),
+  onCreate: z.boolean().optional(),
+});
+export type UpdateProperty = z.infer<typeof updatePropertySchema>;
+
+export const createObjectSchema = z.object({
+  singular: z.string().min(1),
+  plural: z.string().min(1),
+  icon: z.string(),
+});
+export type CreateObject = z.infer<typeof createObjectSchema>;

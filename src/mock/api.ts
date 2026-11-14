@@ -244,6 +244,16 @@ function activityFor(recordId: string): Activity[] {
 
 let sequence = 0;
 
+/** URL segments the app uses itself, so no object may take them. */
+const RESERVED = new Set(['assistant', 'inbox', 'tasks', 'sequences', 'workflows', 'reports', 'settings']);
+
+/** "Renewal date" becomes `renewalDate` (joiner '') or `renewal-date` (joiner '-'). */
+function slug(text: string, joiner: '' | '-'): string {
+  const words = text.trim().toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  if (joiner === '-') return words.join('-');
+  return words.map((word, index) => (index === 0 ? word : `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`)).join('');
+}
+
 export const mockApi: CrmApi = {
   getWorkspace: () => respond(() => ({ name: 'Northwind', objects, users, currentUserId: CURRENT_USER_ID })),
 
@@ -306,6 +316,81 @@ export const mockApi: CrmApi = {
       Object.assign(item.properties, input.properties);
       item.updatedAt = new Date().toISOString();
       return item;
+    }),
+
+  createObject: (input) =>
+    respond(() => {
+      const id = slug(input.plural, '-');
+      if (!id) throw new Error('Give the object a name.');
+      if (objects.some((object) => object.id === id) || RESERVED.has(id)) throw new Error(`"${input.plural}" is already in use.`);
+      const created: ObjectDefinition = {
+        id,
+        singular: input.singular,
+        plural: input.plural,
+        icon: input.icon,
+        primaryProperty: 'name',
+        properties: [
+          { id: 'name', label: 'Name', type: 'text', group: 'About', onCreate: true },
+          { id: 'owner', label: 'Owner', type: 'user', group: 'About', onCreate: true },
+          { id: 'createdAt', label: 'Created', type: 'date', group: 'Record', system: true },
+        ],
+        views: [{ id: 'all', name: `All ${input.plural.toLowerCase()}`, columns: ['name', 'owner', 'createdAt'], filters: [], sort: { property: 'createdAt', direction: 'desc' } }],
+        custom: true,
+      };
+      objects.push(created);
+      dataset().byObject.set(id, []);
+      return created;
+    }),
+
+  createProperty: (input) =>
+    respond(() => {
+      const object = definition(input.objectId);
+      const base = slug(input.label, '');
+      if (!base) throw new Error('Give the property a name.');
+      if (object.properties.some((item) => item.label.toLowerCase() === input.label.trim().toLowerCase())) throw new Error(`${object.plural} already have a property called "${input.label.trim()}".`);
+      let id = base;
+      for (let suffix = 2; object.properties.some((item) => item.id === id); suffix += 1) id = `${base}${suffix}`;
+      const choice = input.type === 'select' || input.type === 'multiselect';
+      object.properties.push({
+        id,
+        label: input.label.trim(),
+        type: input.type,
+        group: input.group.trim(),
+        options: choice ? (input.options ?? []) : undefined,
+        referenceObjectId: input.type === 'reference' ? input.referenceObjectId : undefined,
+        onCreate: input.onCreate,
+        custom: true,
+      });
+      if (input.addToViews) for (const view of object.views) view.columns.push(id);
+      return object;
+    }),
+
+  updateProperty: (input) =>
+    respond(() => {
+      const object = definition(input.objectId);
+      const found = property(object, input.propertyId);
+      if (!found) throw new Error('That property no longer exists.');
+      if (input.label !== undefined) found.label = input.label.trim();
+      if (input.group !== undefined) found.group = input.group.trim();
+      if (input.options !== undefined) found.options = input.options;
+      if (input.onCreate !== undefined) found.onCreate = input.onCreate;
+      return object;
+    }),
+
+  deleteProperty: (input) =>
+    respond(() => {
+      const object = definition(input.objectId);
+      const found = property(object, input.propertyId);
+      if (!found) return object;
+      if (!found.custom) throw new Error('Properties that come with the CRM can be renamed, but not deleted.');
+      object.properties = object.properties.filter((item) => item.id !== input.propertyId);
+      for (const view of object.views) {
+        view.columns = view.columns.filter((column) => column !== input.propertyId);
+        view.filters = view.filters.filter((filter) => filter.property !== input.propertyId);
+        if (view.sort?.property === input.propertyId) view.sort = undefined;
+      }
+      for (const item of dataset().byObject.get(object.id) ?? []) delete item.properties[input.propertyId];
+      return object;
     }),
 
   createActivity: (input) =>
