@@ -1,4 +1,4 @@
-import { type Context, MariachiError } from '@mariachi/core';
+import { type Context, MariachiError, NotFoundError } from '@mariachi/core';
 import { sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import type { ObjectDefinition, PropertyValue } from '../../../../src/contracts/metadata';
@@ -15,6 +15,7 @@ import { condition, tokens } from '../records/records.query';
 import type { RecordsRepository } from '../records/records.repository';
 import type { SequencesService } from '../sequences/sequences.service';
 import type { WorkspaceService } from '../workspace/workspace.service';
+import { latestSlot, workflowOfToken } from './timing';
 import type { WorkflowRunsRepository, WorkflowsRepository } from './workflows.repository';
 
 /**
@@ -27,6 +28,8 @@ import type { WorkflowRunsRepository, WorkflowsRepository } from './workflows.re
 export type RecordEvent = { kind: 'created'; recordId: string } | { kind: 'changed'; recordId: string; changed: Record<string, PropertyValue> };
 
 const DAY = 86_400_000;
+/** The most records one scheduled run goes through. */
+export const SCHEDULE_LIMIT = 500;
 const id = (prefix: string) => `${prefix}_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
 
 class ActionFailed extends MariachiError {
@@ -47,6 +50,7 @@ export class WorkflowRunner {
     private readonly templates: EmailTemplatesRepository,
     private readonly mail: MailService,
     private readonly sequences: SequencesService,
+    private readonly secret: string,
   ) {}
 
   /** Runs every workflow that is on and fits what happened. Returns how many ran. Safe to call twice for the same event. */
@@ -68,9 +72,68 @@ export class WorkflowRunner {
     return ran;
   }
 
+  /**
+   * Goes through every workflow on a schedule that has come due since it was last dealt with, and
+   * runs it for each record that passes its conditions now. Called on a timer. If the worker was
+   * down when a workflow was due it runs late, once, however many times it was missed. Returns how
+   * many runs there were.
+   */
+  async scheduled(ctx: Context, now = new Date()): Promise<number> {
+    let ran = 0;
+    let objects: ObjectDefinition[] | undefined;
+    for (const workflow of await this.workflows.findMany(ctx, {}, { sort: { field: 'createdAt', direction: 'asc' }, limit: 500 })) {
+      const settings = workflow.settings;
+      if (!settings.on || settings.trigger.kind !== 'schedule') continue;
+      const slot = latestSlot(settings.trigger, now);
+      if (workflow.lastSlot !== null && workflow.lastSlot >= slot) continue;
+      objects ??= await this.workspace.definitions(ctx);
+      const object = objects.find((item) => item.id === settings.objectId);
+      if (object) {
+        const resolve = tokens(ctx.userId);
+        const due = await this.records.select(ctx, [sql`records.object_id = ${object.id}`, ...settings.conditions.map((item) => condition(object, item, resolve))], sql`records.created_at, records.id`, SCHEDULE_LIMIT, 0);
+        for (const record of due) {
+          // If this stops half way and starts again, the records already done are passed over.
+          const eventId = `schedule:${slot}:${record.id}`;
+          if (await this.runs.exists(ctx, { workflowId: workflow.id, eventId })) continue;
+          await this.run(ctx, workflow, record.id, eventId, objects);
+          ran += 1;
+        }
+      }
+      await this.workflows.reached(ctx, workflow.id, slot);
+    }
+    return ran;
+  }
+
+  /**
+   * Another system called a workflow's address. The body names the record, by id or by a contact's
+   * email address, and may carry the caller's own id for the call so a call sent twice runs once.
+   */
+  async called(ctx: Context, token: string, body: { recordId?: string; email?: string; id?: string }): Promise<{ ran: boolean; reason?: string }> {
+    const workflowId = workflowOfToken(this.secret, token);
+    const workflow = workflowId ? await this.workflows.findById(ctx, workflowId) : null;
+    if (!workflow || workflow.settings.trigger.kind !== 'called') throw new NotFoundError('workflow', 'address');
+    const settings = workflow.settings;
+    if (!settings.on) return { ran: false, reason: 'This workflow is switched off.' };
+    const objects = await this.workspace.definitions(ctx);
+    const object = objects.find((item) => item.id === settings.objectId);
+    if (!object) return { ran: false, reason: 'What this workflow works on no longer exists.' };
+    const inObject = sql`records.object_id = ${object.id}`;
+    let record: CrmRecord | undefined;
+    if (body.recordId) record = await this.records.one(ctx, body.recordId, inObject);
+    else if (body.email && object.properties.some((property) => property.id === 'email')) record = await this.records.byText(ctx, object.id, 'email', body.email.trim());
+    else return { ran: false, reason: object.properties.some((property) => property.id === 'email') ? 'Name the record with "recordId" or "email".' : 'Name the record with "recordId".' };
+    if (!record) return { ran: false, reason: `No ${object.singular.toLowerCase()} was found for that.` };
+    if (!(await this.passes(ctx, object, record, settings))) return { ran: false, reason: `That ${object.singular.toLowerCase()} does not meet the workflow's conditions.` };
+    const eventId = `call:${body.id ?? randomUUID()}`;
+    if (await this.runs.exists(ctx, { workflowId: workflow.id, eventId })) return { ran: false, reason: 'This call was already dealt with.' };
+    await this.run(ctx, workflow, record.id, eventId, objects);
+    return { ran: true };
+  }
+
   private triggered(settings: WorkflowSettings, event: RecordEvent, record: CrmRecord): boolean {
     const trigger = settings.trigger;
     if (trigger.kind === 'created') return event.kind === 'created';
+    if (trigger.kind !== 'changed') return false;
     if (event.kind !== 'changed' || !(trigger.property in event.changed)) return false;
     return trigger.to === undefined || record.properties[trigger.property] === trigger.to;
   }

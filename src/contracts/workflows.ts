@@ -12,6 +12,10 @@ export const triggerSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('created') }),
   /** A property changes; optionally only when it changes to one value. */
   z.object({ kind: z.literal('changed'), property: z.string(), to: z.string().optional() }),
+  /** On a schedule: every day, or every week on one weekday (1 Monday to 7 Sunday), at an hour of the day in UTC. It runs for each record that passes the conditions at that moment. */
+  z.object({ kind: z.literal('schedule'), every: z.enum(['day', 'week']), hour: z.number().int().min(0).max(23), weekday: z.number().int().min(1).max(7).optional() }),
+  /** When another system calls the workflow's own address, naming a record. */
+  z.object({ kind: z.literal('called') }),
 ]);
 export type Trigger = z.infer<typeof triggerSchema>;
 
@@ -47,6 +51,8 @@ export const workflowSchema = workflowSettingsSchema.extend({
   id: z.string(),
   runs: z.number().int(),
   lastRunAt: z.string().nullable(),
+  /** For a workflow another system calls: the address to call. Anyone who has it can set the workflow off, so it is shown only to people who manage settings. */
+  hookUrl: z.string().optional(),
 });
 export type Workflow = z.infer<typeof workflowSchema>;
 

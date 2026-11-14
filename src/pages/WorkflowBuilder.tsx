@@ -98,7 +98,7 @@ function startingSettings(object: ObjectDefinition | undefined): WorkflowSetting
   return { name: '', on: false, objectId: object?.id ?? '', trigger: { kind: 'created' }, conditions: [], actions: [] };
 }
 
-function TriggerEditor({ settings, object, objects, onChange }: { settings: WorkflowSettings; object: ObjectDefinition; objects: ObjectDefinition[]; onChange: (changes: Partial<WorkflowSettings>) => void }) {
+function TriggerEditor({ settings, object, objects, hookUrl, onChange }: { settings: WorkflowSettings; object: ObjectDefinition; objects: ObjectDefinition[]; hookUrl?: string; onChange: (changes: Partial<WorkflowSettings>) => void }) {
   const trigger = settings.trigger;
   const watchable = object.properties.filter((property) => !property.system);
   const watched = trigger.kind === 'changed' ? object.properties.find((property) => property.id === trigger.property) : undefined;
@@ -125,12 +125,76 @@ function TriggerEditor({ settings, object, objects, onChange }: { settings: Work
           className="m-select"
           id="workflow-trigger"
           value={trigger.kind}
-          onChange={(event) => setTrigger(event.target.value === 'created' ? { kind: 'created' } : { kind: 'changed', property: watchable.find((property) => property.type === 'select')?.id ?? watchable[0]?.id ?? '' })}
+          onChange={(event) => {
+            const kind = event.target.value;
+            if (kind === 'created') setTrigger({ kind: 'created' });
+            else if (kind === 'schedule') setTrigger({ kind: 'schedule', every: 'day', hour: 9 });
+            else if (kind === 'called') setTrigger({ kind: 'called' });
+            else setTrigger({ kind: 'changed', property: watchable.find((property) => property.type === 'select')?.id ?? watchable[0]?.id ?? '' });
+          }}
         >
           <option value="created">A {object.singular.toLowerCase()} is created</option>
           <option value="changed">A field on a {object.singular.toLowerCase()} changes</option>
+          {import.meta.env.VITE_API_URL ? (
+            <>
+              <option value="schedule">On a schedule</option>
+              <option value="called">Another system calls it</option>
+            </>
+          ) : null}
         </select>
       </div>
+      {trigger.kind === 'schedule' ? (
+        <>
+          <div className="m-field">
+            <label className="m-field-label" htmlFor="workflow-every">
+              How often
+            </label>
+            <select className="m-select" id="workflow-every" value={trigger.every === 'week' ? String(trigger.weekday ?? 1) : 'day'} onChange={(event) => setTrigger(event.target.value === 'day' ? { kind: 'schedule', every: 'day', hour: trigger.hour } : { kind: 'schedule', every: 'week', weekday: Number(event.target.value), hour: trigger.hour })}>
+              <option value="day">Every day</option>
+              {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day, index) => (
+                <option key={day} value={index + 1}>
+                  Every {day}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="m-field">
+            <label className="m-field-label" htmlFor="workflow-hour">
+              At
+            </label>
+            <select className="m-select" id="workflow-hour" value={trigger.hour} onChange={(event) => setTrigger({ ...trigger, hour: Number(event.target.value) })}>
+              {Array.from({ length: 24 }, (_, hour) => (
+                <option key={hour} value={hour}>
+                  {String(hour).padStart(2, '0')}:00 UTC
+                </option>
+              ))}
+            </select>
+            <p className="m-field-hint">It then goes through every {object.singular.toLowerCase()} that passes the conditions at that moment, up to 500. Use the conditions to say which ones.</p>
+          </div>
+        </>
+      ) : null}
+      {trigger.kind === 'called' ? (
+        <div className="m-field">
+          <span className="m-field-label">Its address</span>
+          {hookUrl ? (
+            <>
+              <code style={{ wordBreak: 'break-all' }}>{hookUrl}</code>
+              <p className="m-field-hint">
+                Have the other system send a POST to this address with a JSON body naming the record: <code>{'{"recordId": "…"}'}</code>
+                {object.properties.some((property) => property.id === 'email') ? (
+                  <>
+                    {' '}
+                    or <code>{'{"email": "…"}'}</code>
+                  </>
+                ) : null}
+                . Anyone who has the address can set this workflow off, so share it only with that system.
+              </p>
+            </>
+          ) : (
+            <p className="m-field-hint">Save the workflow to get the address the other system should call.</p>
+          )}
+        </div>
+      ) : null}
       {trigger.kind === 'changed' ? (
         <>
           <div className="m-field">
@@ -461,7 +525,7 @@ export function WorkflowBuilder() {
             {selected === 'trigger' ? (
               <>
                 <h2 style={cardTitle}>When</h2>
-                <TriggerEditor settings={settings} object={object} objects={importable} onChange={set} />
+                <TriggerEditor settings={settings} object={object} objects={importable} hookUrl={saved?.hookUrl} onChange={set} />
               </>
             ) : selected === 'conditions' ? (
               <>

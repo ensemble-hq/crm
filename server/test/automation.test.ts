@@ -4,6 +4,7 @@ import type { CrmRecord, RecordDetail, RelatedGroup } from '../../src/contracts/
 import type { EnrollResult, Sequence, SequenceDetail } from '../../src/contracts/sequences';
 import type { Workflow, WorkflowDetail } from '../../src/contracts/workflows';
 import { afterWorkingDays } from '../src/services/sequences/sequences.service';
+import { latestSlot } from '../src/services/workflows/timing';
 import { type Crm, JONAS, MAYA, PRIYA, refusal, startCrm } from './harness';
 
 let crm: Crm;
@@ -151,5 +152,56 @@ describe('workflows', () => {
     const [run] = await crm.rows<{ status: string; steps: string[] }>(sql`select status, steps from workflow_runs where event_id = 'evt-7'`);
     expect(run?.status).toBe('failed');
     expect(run?.steps[1]).toBe('Stopped: There is no contact to email on this record.');
+  });
+
+  it('runs on a schedule for each record that passes then, once per time it is due', async () => {
+    const stale = await crm.seed('deals', { name: 'Gone quiet', stage: 'proposal', priority: 'low', owner: PRIYA });
+    const other = await crm.seed('deals', { name: 'Not this one', stage: 'proposal', priority: 'medium', owner: PRIYA });
+    const hour = new Date().getUTCHours();
+    const nudge = await crm.call<Workflow>(MAYA, 'workflows.save', { name: 'Nudge', on: true, objectId: 'deals', trigger: { kind: 'schedule', every: 'day', hour }, conditions: [{ property: 'priority', operator: 'in', value: ['low'] }, { property: 'name', operator: 'contains', value: 'quiet' }], actions: [{ id: 'a1', kind: 'create-task', title: 'Chase this deal', dueInDays: 2 }] });
+    expect(await refusal(crm.call(MAYA, 'workflows.save', { name: 'Weekly', on: true, objectId: 'deals', trigger: { kind: 'schedule', every: 'week', hour }, conditions: [], actions: nudge.actions }))).toMatch(/day of the week/);
+    const runner = crm.services.runner;
+    // Saving it never sets it off for a time already past.
+    expect(await runner.scheduled(crm.system())).toBe(0);
+    const tomorrow = new Date(Date.now() + 86_400_000);
+    expect(await runner.scheduled(crm.system(), tomorrow)).toBe(1);
+    expect(await runner.scheduled(crm.system(), tomorrow)).toBe(0);
+    expect(await tasksAbout(stale)).toHaveLength(1);
+    expect(await tasksAbout(other)).toHaveLength(0);
+    // Missed for days, it runs once when the worker is back, not once per day missed.
+    expect(await runner.scheduled(crm.system(), new Date(Date.now() + 5 * 86_400_000))).toBe(1);
+    expect(await tasksAbout(stale)).toHaveLength(2);
+  });
+
+  it('works out when a schedule was last due', () => {
+    // 14 November 2026 is a Saturday.
+    const now = new Date('2026-11-14T08:30:00Z');
+    expect(latestSlot({ kind: 'schedule', every: 'day', hour: 9 }, now)).toBe('2026-11-13T09:00:00.000Z');
+    expect(latestSlot({ kind: 'schedule', every: 'day', hour: 8 }, now)).toBe('2026-11-14T08:00:00.000Z');
+    expect(latestSlot({ kind: 'schedule', every: 'week', hour: 9, weekday: 1 }, now)).toBe('2026-11-09T09:00:00.000Z');
+    expect(latestSlot({ kind: 'schedule', every: 'week', hour: 9, weekday: 6 }, now)).toBe('2026-11-07T09:00:00.000Z');
+    expect(latestSlot({ kind: 'schedule', every: 'week', hour: 8, weekday: 6 }, now)).toBe('2026-11-14T08:00:00.000Z');
+  });
+
+  it('runs when another system calls its address, and only for an address made here', async () => {
+    const contact = await crm.seed('contacts', { name: 'Signed Up', email: 'signed@up.example', owner: JONAS });
+    const hooked = await crm.call<Workflow>(MAYA, 'workflows.save', { name: 'Signed up elsewhere', on: true, objectId: 'contacts', trigger: { kind: 'called' }, conditions: [], actions: [{ id: 'a1', kind: 'notify', message: 'Your contact signed up.' }] });
+    const token = hooked.hookUrl?.split('/api/hooks/')[1] ?? '';
+    expect(token).toContain(hooked.id);
+    // Someone who cannot change workflows is not shown the address.
+    expect((await crm.call<Workflow[]>(JONAS, 'workflows.list')).find((item) => item.id === hooked.id)?.hookUrl).toBeUndefined();
+    const call = (given: string, body: Record<string, string>) => crm.services.runner.called(crm.system(), given, body);
+    await expect(call(`${hooked.id}.not-the-signature`, { recordId: contact })).rejects.toThrow();
+    await expect(call('nonsense', { recordId: contact })).rejects.toThrow();
+    expect(await call(token, {})).toMatchObject({ ran: false });
+    expect(await call(token, { email: 'nobody@up.example' })).toMatchObject({ ran: false });
+    expect(await call(token, { email: 'Signed@Up.example', id: 'their-1' })).toEqual({ ran: true });
+    expect(await call(token, { email: 'signed@up.example', id: 'their-1' })).toMatchObject({ ran: false, reason: 'This call was already dealt with.' });
+    expect(await call(token, { recordId: contact })).toEqual({ ran: true });
+    const notifications = await crm.call<{ notifications: Array<{ message: string }> }>(JONAS, 'notifications.list');
+    expect(notifications.notifications.filter((item) => item.message === 'Your contact signed up.')).toHaveLength(2);
+    // The address of one workflow does not set off another, and a record of another object is not found.
+    const deal = await crm.seed('deals', { name: 'Wrong kind', stage: 'proposal' });
+    expect(await call(token, { recordId: deal })).toMatchObject({ ran: false });
   });
 });

@@ -8,6 +8,8 @@ export const workflowsTable = defineTable('workflows', {
   settings: column.json().$type<WorkflowSettings>().notNull(),
   /** Whose turn is next when the workflow shares records out between people. */
   turn: column.integer().notNull().default(0),
+  /** For a workflow on a schedule: the last moment it was due that has been dealt with, so each one is gone through once. */
+  lastSlot: column.text(),
   createdAt: column.timestamp().notNull().defaultNow(),
   updatedAt: column.timestamp().notNull().defaultNow(),
 });

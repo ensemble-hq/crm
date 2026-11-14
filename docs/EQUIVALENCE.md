@@ -203,7 +203,7 @@ HubSpot spreads this across Data Hub (formerly Operations Hub; Professional $800
 | Job | In HubSpot (lowest tier) | Here | Status | Migrates |
 | --- | --- | --- | --- | --- |
 | Automate "when this happens, do that" | Workflows (Starter: limited; Professional: 300 to 400; Enterprise: about 1,000) | Workflows on any object, unlimited. You describe the automation; the assistant builds it and shows it as a diagram you can edit. | First release | Partly: each workflow is translated and listed as translated, needs review, or not possible. Records mid-workflow are listed. |
-| Run automation on a schedule or from another system | Scheduled and webhook triggers (Professional: 10 webhook triggers) | Schedule and webhook triggers, unlimited | First release | Partly |
+| Run automation on a schedule or from another system | Scheduled and webhook triggers (Professional: 10 webhook triggers) | Schedule and webhook triggers, unlimited | First release | Yes |
 | Call another system from an automation | Webhook actions (Professional) | Webhook action | First release | Yes |
 | Do something the builder cannot | Custom code actions (Professional) | Because the customer owns the code, "something the builder cannot do" is a change Ensemble makes in a preview; small custom steps run as code in the instance | By design | Partly: code actions are ported by an agent and flagged for review |
 | Use AI inside an automation | AI workflow actions (10 credits each) | AI steps: decide, extract, write | Later | Partly |

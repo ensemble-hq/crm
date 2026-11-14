@@ -7,6 +7,7 @@ import { actorOf, assertAllowed } from '../people/access';
 import type { RecordsRepository } from '../records/records.repository';
 import type { RecordsService } from '../records/records.service';
 import type { WorkspaceService } from '../workspace/workspace.service';
+import { hookToken, latestSlot } from './timing';
 import type { WorkflowRunsRepository, WorkflowsRepository } from './workflows.repository';
 
 /** Setting workflows up and reading their history. Running them is the worker's job (`workflow.runner.ts`). */
@@ -17,15 +18,19 @@ export class WorkflowsService {
     private readonly records: RecordsService,
     private readonly recordRows: RecordsRepository,
     private readonly workspace: WorkspaceService,
+    private readonly secret: string,
+    private readonly appOrigin: string,
   ) {}
 
-  private summarize(row: WorkflowRow, totals: Map<string, { runs: number; lastRunAt: string | null }>): Workflow {
-    return { id: row.id, ...row.settings, runs: totals.get(row.id)?.runs ?? 0, lastRunAt: totals.get(row.id)?.lastRunAt ?? null };
+  private summarize(ctx: Context, row: WorkflowRow, totals: Map<string, { runs: number; lastRunAt: string | null }>): Workflow {
+    // The address sets the workflow off for anyone who has it, so only people who could change the workflow are shown it.
+    const hookUrl = row.settings.trigger.kind === 'called' && actorOf(ctx).role.manageSettings ? `${this.appOrigin}/api/hooks/${hookToken(this.secret, row.id)}` : undefined;
+    return { id: row.id, ...row.settings, runs: totals.get(row.id)?.runs ?? 0, lastRunAt: totals.get(row.id)?.lastRunAt ?? null, ...(hookUrl ? { hookUrl } : {}) };
   }
 
   async list(ctx: Context): Promise<Workflow[]> {
     const [rows, totals] = await Promise.all([this.workflows.findMany(ctx, {}, { sort: { field: 'createdAt', direction: 'asc' }, limit: 500 }), this.runs.totals(ctx)]);
-    return rows.map((row) => this.summarize(row, totals));
+    return rows.map((row) => this.summarize(ctx, row, totals));
   }
 
   async get(ctx: Context, id: string): Promise<WorkflowDetail> {
@@ -43,7 +48,7 @@ export class WorkflowsService {
       references[record.id] = { objectId: record.objectId, label: typeof label === 'string' ? label : record.id };
     }
     return {
-      workflow: this.summarize(row, totals),
+      workflow: this.summarize(ctx, row, totals),
       runs: recent.map((run) => ({ id: run.id, workflowId: run.workflowId, recordId: run.recordId, status: run.status as 'done' | 'failed', startedAt: run.startedAt.toISOString(), steps: run.steps })),
       references,
     };
@@ -56,6 +61,9 @@ export class WorkflowsService {
     const object = await this.workspace.definition(ctx, settings.objectId);
     const has = (propertyId: string) => object.properties.some((property) => property.id === propertyId);
     if (settings.trigger.kind === 'changed' && !has(settings.trigger.property)) throw new ValidationError('Choose which property the workflow watches.');
+    if (settings.trigger.kind === 'schedule' && settings.trigger.every === 'week' && settings.trigger.weekday === undefined) throw new ValidationError('Choose which day of the week the workflow runs on.');
+    // A schedule starts from the next time it is due: saving it never sets it off for a moment already past.
+    const lastSlot = settings.trigger.kind === 'schedule' ? latestSlot(settings.trigger, new Date()) : null;
     for (const condition of settings.conditions) if (!has(condition.property)) throw new ValidationError(`${object.plural} have no property "${condition.property}".`);
     for (const action of settings.actions) {
       if (action.kind === 'create-task' && action.title.trim() === '') throw new ValidationError('Say what the task is.');
@@ -65,9 +73,9 @@ export class WorkflowsService {
     }
     if (id) {
       if (!(await this.workflows.findById(ctx, id))) throw new NotFoundError('workflow', id);
-      return this.summarize(await this.workflows.update(ctx, id, { settings }), await this.runs.totals(ctx));
+      return this.summarize(ctx, await this.workflows.update(ctx, id, { settings, lastSlot }), await this.runs.totals(ctx));
     }
-    return this.summarize(await this.workflows.create(ctx, { id: `wf_${randomUUID().replace(/-/g, '').slice(0, 12)}`, settings, turn: 0 }), new Map());
+    return this.summarize(ctx, await this.workflows.create(ctx, { id: `wf_${randomUUID().replace(/-/g, '').slice(0, 12)}`, settings, turn: 0, lastSlot }), new Map());
   }
 
   async remove(ctx: Context, id: string): Promise<void> {

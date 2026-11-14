@@ -1,6 +1,6 @@
 import { BaseController } from '@mariachi/api-facade';
 import { z } from 'zod';
-import { RECEIVE_EMAIL } from '../../services/index';
+import { CALL_WORKFLOW, RECEIVE_EMAIL, callWorkflowInput } from '../../services/index';
 
 /**
  * Where an email provider delivers mail: `POST /api/inbound/email`, signed with the shared secret.
@@ -19,6 +19,22 @@ const delivery = z.object({
   references: z.array(z.string()).optional(),
   receivedAt: z.string().optional(),
 });
+
+/**
+ * Where another system sets a workflow off: `POST /api/hooks/<the workflow's address>` with a JSON
+ * body naming the record. The address is the credential. The answer says whether the workflow ran
+ * and, if not, why.
+ */
+export class HooksController extends BaseController {
+  readonly prefix = 'hooks';
+  readonly tags = ['hooks'];
+
+  init(): void {
+    this.post('/:token', { auth: false, schema: { params: z.object({ token: z.string() }), body: callWorkflowInput.shape.body, response: z.object({ ran: z.boolean(), reason: z.string().optional() }) }, summary: 'Set a workflow off from another system' }, (ctx, body, params) =>
+      this.call(ctx, CALL_WORKFLOW, { token: (params as { token: string }).token, body }),
+    );
+  }
+}
 
 export class InboundController extends BaseController {
   readonly prefix = 'inbound';

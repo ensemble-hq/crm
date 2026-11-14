@@ -419,6 +419,7 @@ CREATE TABLE "workflows" (
 	"tenant_id" text NOT NULL,
 	"settings" jsonb NOT NULL,
 	"turn" integer DEFAULT 0 NOT NULL,
+	"last_slot" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );

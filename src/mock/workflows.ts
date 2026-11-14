@@ -184,6 +184,8 @@ function perform(workflow: Stored, action: Action, record: CrmRecord, deps: Work
 
 function triggered(workflow: Stored, event: RecordEvent): boolean {
   if (workflow.trigger.kind === 'created') return event.kind === 'created';
+  // Schedules and incoming calls are the server's; the demo only reacts to records changing.
+  if (workflow.trigger.kind !== 'changed') return false;
   if (event.kind !== 'changed' || !(workflow.trigger.property in event.changed)) return false;
   return workflow.trigger.to === undefined || event.record.properties[workflow.trigger.property] === workflow.trigger.to;
 }

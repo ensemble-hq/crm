@@ -21,6 +21,11 @@ export const ACTION_LABELS: Record<ActionKind, string> = {
 export function triggerText(trigger: Trigger, object: ObjectDefinition | undefined): string {
   const one = `a ${object?.singular.toLowerCase() ?? 'record'}`;
   if (trigger.kind === 'created') return `${one} is created`;
+  if (trigger.kind === 'called') return `another system calls it about ${one}`;
+  if (trigger.kind === 'schedule') {
+    const day = trigger.every === 'week' ? ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][(trigger.weekday ?? 1) - 1] : 'day';
+    return `every ${day} at ${String(trigger.hour).padStart(2, '0')}:00 UTC`;
+  }
   const property = object?.properties.find((item) => item.id === trigger.property);
   const to = trigger.to === undefined ? '' : ` to ${property?.options?.find((option) => option.id === trigger.to)?.label ?? trigger.to}`;
   return `${one}'s ${property?.label.toLowerCase() ?? 'field'} changes${to}`;
@@ -60,6 +65,11 @@ export function workflowSentence(settings: WorkflowSettings, names: WorkflowName
   const conditions = conditionsText(settings, names);
   const actions = settings.actions.map((action) => actionText(action, names));
   const then = actions.length === 0 ? 'do nothing yet' : actions.length === 1 ? actions[0] : `${actions.slice(0, -1).join('; ')}; then ${actions[actions.length - 1]}`;
+  // A schedule is not something that happens to a record, so it reads as a time and the records it then goes through.
+  if (settings.trigger.kind === 'schedule') {
+    const each = `each ${names.object?.singular.toLowerCase() ?? 'record'}`;
+    return `${triggerText(settings.trigger, names.object).replace(/^./, (first) => first.toUpperCase())}, for ${each}${conditions ? ` where ${conditions}` : ''}: ${then}.`;
+  }
   return `When ${triggerText(settings.trigger, names.object)}${conditions ? `, and ${conditions}` : ''}: ${then}.`;
 }
 

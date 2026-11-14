@@ -284,7 +284,7 @@ export const operations: Operation[] = [
     method: 'saveWorkflow',
     title: 'Create or change a workflow',
     description:
-      'Creates a workflow, or replaces one when `id` is given. A workflow runs when a record of its object is created, or when one property changes (optionally to one value), and the record passes the conditions. Its actions run in order: set a property, create a task for the owner, notify the owner, give the record to the next person in turn, or post it to a webhook. Create it with `on: false` and check it with workflows.countMatches before switching it on.',
+      'Creates a workflow, or replaces one when `id` is given. A workflow runs when a record of its object is created, when one property changes (optionally to one value), on a schedule (every day or one day a week at an hour in UTC, for each record that passes the conditions then, up to 500), or when another system calls its address (returned as `hookUrl` once saved; the caller POSTs JSON with `recordId` or the `email` of a contact). In each case the record must pass the conditions. Its actions run in order: set a property, create a task for the owner, notify the owner, give the record to the next person in turn, or post it to a webhook. Create it with `on: false` and check it with workflows.countMatches before switching it on.',
     input: workflowSettingsSchema.extend({ id: z.string().optional() }),
     output: workflowSchema,
     effect: 'write',

@@ -76,7 +76,7 @@ export function createServices(deps: ServiceDeps) {
   const notifications = new NotificationsService(new NotificationsRepository(deps.db), recordsRepository, workspace);
   const workflowsRepository = new WorkflowsRepository(deps.db);
   const runsRepository = new WorkflowRunsRepository(deps.db);
-  const workflows = new WorkflowsService(workflowsRepository, runsRepository, records, recordsRepository, workspace);
+  const workflows = new WorkflowsService(workflowsRepository, runsRepository, records, recordsRepository, workspace, deps.secretsKey, deps.appOrigin);
   const conversations = new ConversationsRepository(deps.db);
   const messages = new MessagesRepository(deps.db);
   const inbound = new InboundEmailsRepository(deps.db);
@@ -89,7 +89,7 @@ export function createServices(deps: ServiceDeps) {
   mail.onReply = (ctx, contactId) => sequences.contactReplied(ctx, contactId);
   inbox.changed = async (ctx, conversationId) => void (await outbox.add(ctx, conversationChanged, { conversationId }));
   inbox.templateUsedBy = (ctx, templateId) => sequences.usingTemplate(ctx, templateId);
-  const runner = new WorkflowRunner(workflowsRepository, runsRepository, recordsRepository, events, workspace, people, notifications, templates, mail, sequences);
+  const runner = new WorkflowRunner(workflowsRepository, runsRepository, recordsRepository, events, workspace, people, notifications, templates, mail, sequences, deps.secretsKey);
   const reports = new ReportsService(new ReportsRepository(deps.db), new DashboardsRepository(deps.db), new GoalsRepository(deps.db), records, recordsRepository, people, workspace);
   const sales = new SalesService(new LineItemsRepository(deps.db), records, recordsRepository, events, activityRepository, workspace);
   const capture = new CaptureService(new FormsRepository(deps.db), new SubmissionsRepository(deps.db), new BookingPagesRepository(deps.db), new MeetingsRepository(deps.db), recordsRepository, events, activityRepository, people, workspace, rules);
@@ -108,7 +108,7 @@ type Handler = (ctx: Context, input: any) => Promise<unknown>;
  * is left out of what the server offers.
  */
 export function registerServices(communication: CommunicationLayer, deps: ServiceDeps): Operation[] {
-  const { people, workspace, records, activity, brief, notifications, workflows, importer, inbox, mail, reports, sequences, settings, sales, capture, agents, audit, rules } = createServices(deps);
+  const { people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences, settings, sales, capture, agents, audit, rules } = createServices(deps);
 
   // The assistant reaches the CRM the way everything else does: through the operations, as the person asking.
   const assistant = new AssistantService(new AssistantSettingsRepository(deps.db), createEncryption({ adapter: 'local', keys: { primary: deps.secretsKey } }), operations, (ctx, operation, input) => communication.call(ctx, operation, input), new AssistantTurnsRepository(deps.db), deps.push);
@@ -254,10 +254,22 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     schema: { input: receiveEmailInput, output: z.object({ status: z.enum(['stored', 'duplicate']) }) },
     handler: async (ctx, input) => ({ status: await mail.receive(ctx, input.provider, input.providerMessageId, input.payload) }),
   });
+  // Likewise for another system setting a workflow off: only the hooks route calls this, and the
+  // address it was called at is what proves the caller may.
+  communication.register(CALL_WORKFLOW, {
+    schema: { input: callWorkflowInput, output: z.object({ ran: z.boolean(), reason: z.string().optional() }) },
+    handler: (ctx, input) => runner.called({ ...ctx, tenantId: TENANT_ID, userId: null }, input.token, input.body),
+  });
   return served;
 }
 
 export const RECEIVE_EMAIL = 'mail.receive';
+export const CALL_WORKFLOW = 'workflows.called';
+
+export const callWorkflowInput = z.object({
+  token: z.string(),
+  body: z.object({ recordId: z.string().optional(), email: z.string().optional(), id: z.string().max(200).optional() }),
+});
 
 export const receiveEmailInput = z.object({
   provider: z.string(),

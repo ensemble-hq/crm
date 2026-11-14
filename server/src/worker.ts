@@ -91,8 +91,14 @@ async function main(): Promise<void> {
       const done = await mail.sweep(ctx);
       if (done.filed + done.sent + done.released + done.found > 0) logger.info(done, 'Email sweep picked up work the first path missed');
       if (steps + done.filed + done.sent + done.found > 0) await inboxChanged(ctx);
+      // Workflows on a schedule that have come due. What they change is announced by its own events.
+      const scheduled = await runner.scheduled(ctx);
+      if (scheduled > 0) {
+        logger.info({ scheduled }, 'Scheduled workflows ran');
+        await announce(live, ctx, { topic: 'notifications' });
+      }
     } catch (error) {
-      logger.error({ error }, 'The email sweep failed; it will run again');
+      logger.error({ error }, 'The sweep failed; it will run again');
     } finally {
       sweeping = false;
     }

@@ -13,6 +13,11 @@ export class WorkflowsRepository extends DrizzleRepository<WorkflowRow> {
     const rows = (await this.db.execute(sql`update workflows set turn = turn + 1 where ${and(this.buildWhere(ctx), sql`workflows.id = ${id}`)} returning turn`)) as unknown as Array<{ turn: number }>;
     return (rows[0]?.turn ?? 1) - 1;
   }
+
+  /** Records that a scheduled workflow has dealt with one of the moments it was due. */
+  async reached(ctx: Context, id: string, slot: string): Promise<void> {
+    await this.db.execute(sql`update workflows set last_slot = ${slot} where ${and(this.buildWhere(ctx), sql`workflows.id = ${id}`)}`);
+  }
 }
 
 export class WorkflowRunsRepository extends DrizzleRepository<WorkflowRunRow> {
