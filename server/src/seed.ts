@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 import type { WorkflowSettings } from '../../src/contracts/workflows';
 import { objects, users } from '../../src/mock/definitions';
 import { dataset, mulberry32 } from '../../src/mock/generate';
+import { emailTemplates, inbox } from '../../src/mock/inbox';
 import { PLACEMENT, roles, teams } from '../../src/mock/team';
 import { TENANT_ID } from './config';
 
@@ -75,7 +76,7 @@ async function main(): Promise<void> {
   const db = database.db;
   try {
     await runMigrations(database.adapter, { migrationsFolder: 'drizzle' });
-    if (process.argv.includes('--reset')) await db.execute(sql`truncate activities, records, objects, people, teams, roles, workflows, workflow_runs, notifications, mariachi_event_outbox`);
+    if (process.argv.includes('--reset')) await db.execute(sql`truncate activities, records, objects, people, teams, roles, workflows, workflow_runs, notifications, mariachi_event_outbox, conversations, messages, inbound_emails, email_templates, mail_cursors, dev_mail`);
     const [existing] = (await db.execute(sql`select count(*)::int as total from objects`)) as unknown as Array<{ total: number }>;
     if ((existing?.total ?? 0) > 0) {
       console.log('The database already has data. Run with --reset to replace it.');
@@ -129,6 +130,22 @@ async function main(): Promise<void> {
         select row.id, ${TENANT_ID}, row.record_id, row.kind, row.title, row.body, row.actor_id, row.occurred_at
         from jsonb_to_recordset(${JSON.stringify(activities.slice(start, start + BATCH * 2))}::jsonb) as row(id text, record_id text, kind text, title text, body text, actor_id text, occurred_at timestamptz)`);
     }
+    // The demo inbox: threads that already happened, so every message is either received or sent.
+    for (const [index, template] of emailTemplates.entries()) {
+      await db.execute(sql`insert into email_templates (id, tenant_id, name, subject, body, created_at) values (${template.id}, ${TENANT_ID}, ${template.name}, ${template.subject}, ${template.body}, now() - make_interval(mins => ${emailTemplates.length - index}))`);
+    }
+    const { conversations, messages } = inbox();
+    await db.execute(sql`
+      insert into conversations (id, tenant_id, subject, status, assignee_id, contact_id, company_id, deal_id, unread, last_message_at, preview, message_count)
+      select row.id, ${TENANT_ID}, row.subject, row.status, row."assigneeId", row."contactId", row."companyId", row."dealId", row.unread, row."lastMessageAt", row.preview, row."messageCount"
+      from jsonb_to_recordset(${JSON.stringify(conversations)}::jsonb) as row(id text, subject text, status text, "assigneeId" text, "contactId" text, "companyId" text, "dealId" text, unread boolean, "lastMessageAt" timestamptz, preview text, "messageCount" int)`);
+    const subjects = new Map(conversations.map((conversation) => [conversation.id, conversation.subject]));
+    const allMessages = [...messages.values()].flat().map((message) => ({ ...message, subject: subjects.get(message.conversationId) ?? '', status: message.direction === 'in' ? 'received' : 'sent', header: `<${message.id}@seed>` }));
+    await db.execute(sql`
+      insert into messages (id, tenant_id, conversation_id, direction, from_name, from_email, subject, body, status, message_id_header, sent_at)
+      select row.id, ${TENANT_ID}, row."conversationId", row.direction, row."fromName", row."fromEmail", row.subject, row.body, row.status, row.header, row."sentAt"
+      from jsonb_to_recordset(${JSON.stringify(allMessages)}::jsonb) as row(id text, "conversationId" text, direction text, "fromName" text, "fromEmail" text, subject text, body text, status text, header text, "sentAt" timestamptz)`);
+
     console.log(`Seeded ${objects.length} objects, ${users.length} people, ${records.length} records and ${activities.length} activities.`);
   } finally {
     await database.disconnect();

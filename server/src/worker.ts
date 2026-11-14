@@ -3,8 +3,10 @@ import { createPostgresDatabase } from '@mariachi/database-postgres';
 import { DefaultEvents, createEventBus } from '@mariachi/events';
 import { OutboxRelay } from '@mariachi/events/outbox';
 import { bootstrap } from '@mariachi/lifecycle';
-import './config';
-import { recordChanged, recordCreated } from './events';
+import { useConfigSection } from '@mariachi/config';
+import { CRM_CONFIG, type CrmSettings, TENANT_ID } from './config';
+import { createEmailProvider } from './email';
+import { emailQueued, emailReceived, recordChanged, recordCreated } from './events';
 import { createServices } from './services/index';
 
 /**
@@ -22,7 +24,8 @@ async function main(): Promise<void> {
   await database.connect();
 
   const events = lifecycle.manage('events', new DefaultEvents({ bus: createEventBus({ adapter: 'redis-streams', url: config.redis.url, prefix: config.serviceName }), source: config.serviceName }, { logger, tracer, metrics }), { priority: 20 });
-  const { runner } = createServices({ db: database.db, transaction: database.transaction, source: config.serviceName });
+  const settings = useConfigSection<CrmSettings>(CRM_CONFIG);
+  const { runner, mail } = createServices({ db: database.db, transaction: database.transaction, source: config.serviceName, email: createEmailProvider(settings, database.db) });
 
   // Changes a workflow made are announced too, for whoever else listens, but never set off workflows.
   events.subscribe(
@@ -41,6 +44,28 @@ async function main(): Promise<void> {
   );
 
   // Moves committed events from the database to the bus. Started after the subscriptions exist.
+  // Email: file what arrived, send what was queued. Both are safe to repeat.
+  events.subscribe(emailReceived, (ctx, payload) => mail.file(ctx, payload.inboundId), { group: 'email', name: 'email.file' });
+  events.subscribe(emailQueued, (ctx, payload) => mail.deliver(ctx, payload.messageId), { group: 'email', name: 'email.deliver' });
+
+  // The sweep: on a timer, finish anything the events above did not, and ask the email service what it has that we were never told about.
+  let sweeping = false;
+  const sweep = async () => {
+    if (sweeping) return;
+    sweeping = true;
+    try {
+      const done = await mail.sweep({ traceId: `sweep-${Date.now()}`, userId: null, tenantId: TENANT_ID, scopes: [], identityType: 'service', logger });
+      if (done.filed + done.sent + done.released + done.found > 0) logger.info(done, 'Email sweep picked up work the first path missed');
+    } catch (error) {
+      logger.error({ error }, 'The email sweep failed; it will run again');
+    } finally {
+      sweeping = false;
+    }
+  };
+  let timer: NodeJS.Timeout | undefined;
+  lifecycle.startup.register({ name: 'email-sweep', priority: 95, fn: async () => void (timer = setInterval(() => void sweep(), settings.sweepSeconds * 1000)) });
+  lifecycle.shutdown.register({ name: 'email-sweep', priority: 95, fn: async () => clearInterval(timer) });
+
   lifecycle.manage('outbox-relay', new OutboxRelay({ db: database.db, target: events, logger }), { priority: 30 });
 
   await lifecycle.start();

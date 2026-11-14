@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { briefSchema } from './brief';
+import { conversationDetailSchema, conversationListSchema, conversationQuerySchema, conversationSchema, emailHealthSchema, emailTemplateSchema, inboxCountsSchema, messageSchema, updateConversationSchema } from './inbox';
 import { filterSchema, objectDefinitionSchema, userSchema } from './metadata';
 import { activitySchema, createActivitySchema, importRequestSchema, importResultSchema, notificationSchema, referenceSchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi } from './records';
 import { workflowDetailSchema, workflowSchema, workflowSettingsSchema } from './workflows';
@@ -307,5 +308,86 @@ export const operations: Operation[] = [
     input: z.string().optional().describe('A notification id, or leave out for all.'),
     output: z.void(),
     effect: 'write',
+  },
+  {
+    name: 'inbox.list',
+    method: 'listConversations',
+    title: 'List email conversations',
+    description: 'Lists email threads with contacts, newest first, from one folder: `mine` (open and assigned to you), `unassigned` (open, nobody has taken it), `open` or `closed`. Search covers the subject, the latest message and the contact\'s name.',
+    input: conversationQuerySchema,
+    output: conversationListSchema,
+    effect: 'read',
+  },
+  {
+    name: 'inbox.get',
+    method: 'getConversation',
+    title: 'Read a conversation',
+    description: 'Returns one email thread with every message in order. Outgoing messages say whether they are queued, sent or failed, and why if they failed.',
+    input: z.string().describe('The conversation\'s id.'),
+    output: conversationDetailSchema,
+    effect: 'read',
+  },
+  {
+    name: 'inbox.update',
+    method: 'updateConversation',
+    title: 'Assign, close or mark a conversation',
+    description: 'Assigns a conversation to a person (or to nobody with null), closes or reopens it, or marks it read or unread.',
+    input: updateConversationSchema,
+    output: conversationSchema,
+    effect: 'write',
+  },
+  {
+    name: 'inbox.reply',
+    method: 'sendReply',
+    title: 'Send a reply by email',
+    description: 'Sends an email to the conversation\'s contact, from you, on the same thread. This really sends: ask the person before calling it, and show them the text. The message is queued and sent within seconds; inbox.get shows whether it went.',
+    input: z.object({ conversationId: z.string(), body: z.string() }),
+    output: messageSchema,
+    effect: 'send',
+  },
+  {
+    name: 'inbox.counts',
+    method: 'inboxCounts',
+    title: 'Count conversations by folder',
+    description: 'Returns how many open conversations are yours, how many of those are unread, how many are unassigned, and how many are open in total.',
+    input: none,
+    output: inboxCountsSchema,
+    effect: 'read',
+  },
+  {
+    name: 'inbox.health',
+    method: 'getEmailHealth',
+    title: 'Check that email is flowing',
+    description: 'Returns how many outgoing messages are waiting or failed, how many incoming messages are waiting to be filed or failed, and when the server last checked the email service for anything missed. All of these should be zero or small.',
+    input: none,
+    output: emailHealthSchema,
+    effect: 'read',
+  },
+  {
+    name: 'templates.list',
+    method: 'listEmailTemplates',
+    title: 'List saved emails',
+    description: 'Returns the team\'s saved email templates. A body may contain {{firstName}} and {{myName}}, filled in when the template is used.',
+    input: none,
+    output: z.array(emailTemplateSchema),
+    effect: 'read',
+  },
+  {
+    name: 'templates.save',
+    method: 'saveEmailTemplate',
+    title: 'Create or change a saved email',
+    description: 'Creates an email template, or replaces one when `id` is given.',
+    input: z.object({ id: z.string().optional(), name: z.string(), subject: z.string(), body: z.string() }),
+    output: emailTemplateSchema,
+    effect: 'write',
+  },
+  {
+    name: 'templates.delete',
+    method: 'deleteEmailTemplate',
+    title: 'Delete a saved email',
+    description: 'Deletes an email template. Workflows and sequences that use it will stop at that step.',
+    input: z.string().describe('The template\'s id.'),
+    output: z.void(),
+    effect: 'destructive',
   },
 ];

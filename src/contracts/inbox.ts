@@ -34,6 +34,10 @@ export const messageSchema = z.object({
   fromEmail: z.string(),
   body: z.string(),
   sentAt: z.string(),
+  /** Where an outgoing message has got to. Absent on incoming ones. `queued` is waiting to go or being retried. */
+  status: z.enum(['queued', 'sent', 'failed']).optional(),
+  /** Why it failed, in words, when it did. */
+  problem: z.string().optional(),
 });
 export type Message = z.infer<typeof messageSchema>;
 
@@ -83,6 +87,22 @@ export type EmailTemplate = z.infer<typeof emailTemplateSchema>;
 export const inboxCountsSchema = z.object({ mineUnread: z.number().int(), mine: z.number().int(), unassigned: z.number().int(), open: z.number().int() });
 export type InboxCounts = z.infer<typeof inboxCountsSchema>;
 
+/** Whether email is flowing. Each number is a gap that should be zero or small; an admin can watch them. */
+export const emailHealthSchema = z.object({
+  /** Outgoing messages waiting to be sent, and how long the oldest has waited. */
+  queued: z.number().int(),
+  oldestQueuedSeconds: z.number().int().nullable(),
+  /** Outgoing messages that could not be sent. They are kept, marked failed, and their senders were told. */
+  failedOutgoing: z.number().int(),
+  /** Incoming messages stored but not yet filed into a conversation. */
+  waitingIncoming: z.number().int(),
+  /** Incoming messages that could not be filed after several tries. They are kept. */
+  failedIncoming: z.number().int(),
+  /** When the sweep last checked the email service for anything missed. Null if it never has. */
+  lastSweepAt: z.string().nullable(),
+});
+export type EmailHealth = z.infer<typeof emailHealthSchema>;
+
 export interface InboxApi {
   listConversations(query: ConversationQuery): Promise<ConversationList>;
   getConversation(id: string): Promise<ConversationDetail>;
@@ -91,4 +111,5 @@ export interface InboxApi {
   sendReply(input: { conversationId: string; body: string }): Promise<Message>;
   listEmailTemplates(): Promise<EmailTemplate[]>;
   inboxCounts(): Promise<InboxCounts>;
+  getEmailHealth(): Promise<EmailHealth>;
 }

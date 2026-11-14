@@ -2,10 +2,15 @@ import type { CommunicationLayer } from '@mariachi/communication';
 import type { Context } from '@mariachi/core';
 import type { DrizzleDb } from '@mariachi/database-postgres';
 import { Outbox } from '@mariachi/events/outbox';
+import { z } from 'zod';
 import { type Operation, operations } from '../../../src/contracts/operations';
 import { ActivityRepository } from './activity/activity.repository';
 import { ActivityService } from './activity/activity.service';
 import { BriefService } from './brief/brief.service';
+import type { EmailProvider } from '../email';
+import { ConversationsRepository, EmailTemplatesRepository, InboundEmailsRepository, MailCursorsRepository, MessagesRepository } from './inbox/inbox.repository';
+import { InboxService } from './inbox/inbox.service';
+import { MailService } from './inbox/mail.service';
 import { ImportService } from './import/import.service';
 import { NotificationsRepository } from './notifications/notifications.repository';
 import { NotificationsService } from './notifications/notifications.service';
@@ -27,24 +32,34 @@ export interface ServiceDeps {
   transaction: <T>(ctx: Context, fn: () => Promise<T>) => Promise<T>;
   /** The service's name, stamped on the events it records. */
   source: string;
+  email: EmailProvider;
 }
 
 /** Every service, built once. The API registers them as operations; the worker uses the runner. */
 export function createServices(deps: ServiceDeps) {
   const recordsRepository = new RecordsRepository(deps.db);
-  const events = new RecordEvents(new Outbox(deps.db, { source: deps.source }), deps.transaction);
+  const outbox = new Outbox(deps.db, { source: deps.source });
+  const events = new RecordEvents(outbox, deps.transaction);
   const people = new PeopleService(new PeopleRepository(deps.db), new TeamsRepository(deps.db), new RolesRepository(deps.db), (ctx, fromId, toId) => recordsRepository.reassign(ctx, fromId, toId));
   const workspace = new WorkspaceService(new ObjectsRepository(deps.db), people);
   const records = new RecordsService(recordsRepository, workspace, events);
-  const activity = new ActivityService(new ActivityRepository(deps.db), records);
+  const activityRepository = new ActivityRepository(deps.db);
+  const activity = new ActivityService(activityRepository, records);
   const brief = new BriefService(records, activity, workspace);
   const notifications = new NotificationsService(new NotificationsRepository(deps.db), recordsRepository, workspace);
   const workflowsRepository = new WorkflowsRepository(deps.db);
   const runsRepository = new WorkflowRunsRepository(deps.db);
   const workflows = new WorkflowsService(workflowsRepository, runsRepository, records, recordsRepository, workspace);
-  const runner = new WorkflowRunner(workflowsRepository, runsRepository, recordsRepository, events, workspace, people, notifications);
+  const conversations = new ConversationsRepository(deps.db);
+  const messages = new MessagesRepository(deps.db);
+  const inbound = new InboundEmailsRepository(deps.db);
+  const cursors = new MailCursorsRepository(deps.db);
+  const templates = new EmailTemplatesRepository(deps.db);
+  const mail = new MailService(deps.email, inbound, conversations, messages, cursors, recordsRepository, activityRepository, notifications, outbox, events, deps.transaction);
+  const inbox = new InboxService(conversations, messages, templates, inbound, cursors, mail, recordsRepository, activityRepository, people, workspace, deps.transaction);
+  const runner = new WorkflowRunner(workflowsRepository, runsRepository, recordsRepository, events, workspace, people, notifications, templates, mail);
   const importer = new ImportService(recordsRepository, events, workspace, people);
-  return { people, workspace, records, activity, brief, notifications, workflows, runner, importer };
+  return { people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail };
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: each handler's input is checked against its operation's schema before it runs
@@ -55,7 +70,7 @@ type Handler = (ctx: Context, input: any) => Promise<unknown>;
  * is left out of what the server offers.
  */
 export function registerServices(communication: CommunicationLayer, deps: ServiceDeps): Operation[] {
-  const { people, workspace, records, activity, brief, notifications, workflows, importer } = createServices(deps);
+  const { people, workspace, records, activity, brief, notifications, workflows, importer, inbox, mail } = createServices(deps);
 
   const handlers: Record<string, Handler> = {
     'workspace.get': (ctx) => workspace.get(ctx),
@@ -87,6 +102,15 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     'workflows.countMatches': (ctx, input) => workflows.countMatches(ctx, input),
     'notifications.list': (ctx) => notifications.list(ctx),
     'notifications.markRead': (ctx, input) => notifications.markRead(ctx, input),
+    'inbox.list': (ctx, input) => inbox.list(ctx, input),
+    'inbox.get': (ctx, input) => inbox.get(ctx, input),
+    'inbox.update': (ctx, input) => inbox.update(ctx, input),
+    'inbox.reply': (ctx, input) => inbox.reply(ctx, input),
+    'inbox.counts': (ctx) => inbox.counts(ctx),
+    'inbox.health': (ctx) => inbox.health(ctx),
+    'templates.list': (ctx) => inbox.listTemplates(ctx),
+    'templates.save': (ctx, input) => inbox.saveTemplate(ctx, input),
+    'templates.delete': (ctx, input) => inbox.deleteTemplate(ctx, input),
   };
 
   // The list in the contract covers the whole CRM; the server serves the ones it has built so far.
@@ -99,5 +123,31 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
       handler: async (ctx, input) => handler(actingContext(ctx, await people.actor(ctx)), input),
     });
   }
+
+  // Not an operation a person or an agent runs: this is how an email provider hands over mail. It
+  // has no signed-in person, so it is registered apart from the operations and only the inbound
+  // route, which checks the provider's signature, calls it.
+  communication.register(RECEIVE_EMAIL, {
+    schema: { input: receiveEmailInput, output: z.object({ status: z.enum(['stored', 'duplicate']) }) },
+    handler: async (ctx, input) => ({ status: await mail.receive(ctx, input.provider, input.providerMessageId, input.payload) }),
+  });
   return served;
 }
+
+export const RECEIVE_EMAIL = 'mail.receive';
+
+export const receiveEmailInput = z.object({
+  provider: z.string(),
+  providerMessageId: z.string().min(1),
+  payload: z.object({
+    fromEmail: z.string().email(),
+    fromName: z.string().optional(),
+    toEmail: z.string().optional(),
+    subject: z.string(),
+    text: z.string(),
+    messageId: z.string().optional(),
+    inReplyTo: z.string().optional(),
+    references: z.array(z.string()).optional(),
+    receivedAt: z.string().optional(),
+  }),
+});

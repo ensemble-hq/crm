@@ -82,6 +82,13 @@ function MessageBubble({ message }: { message: Message }) {
       >
         {message.body}
       </div>
+      {/* An outgoing message that has not gone yet says so; one that could not go says why. */}
+      {message.status === 'queued' ? <span style={small}>{message.problem ? `Not sent yet, trying again: ${message.problem}` : 'Sending…'}</span> : null}
+      {message.status === 'failed' ? (
+        <span className="m-field-error" role="alert">
+          Not sent{message.problem ? `: ${message.problem}` : '.'}
+        </span>
+      ) : null}
     </article>
   );
 }
@@ -279,7 +286,8 @@ function Thread({ conversationId, onChanged }: { conversationId: string; onChang
             </select>
           </div>
           <div className="m-cluster" data-gap="2">
-            <span style={small}>Mock: nothing leaves this browser.</span>
+            {/* Only true on mock data; against the server, Send really sends. */}
+            {import.meta.env.VITE_API_URL ? null : <span style={small}>Mock: nothing leaves this browser.</span>}
             <button type="submit" className="m-button" data-variant="primary" data-size="sm" disabled={sending || reply.trim() === ''}>
               <Send size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> {sending ? 'Sending…' : 'Send'}
             </button>

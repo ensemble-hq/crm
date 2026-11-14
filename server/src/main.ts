@@ -1,4 +1,4 @@
-import { createApiServer } from '@mariachi/api-facade';
+import { createApiServer, hmacSignatureStrategy } from '@mariachi/api-facade';
 import { createCommunication } from '@mariachi/communication';
 import { useConfigSection } from '@mariachi/config';
 import { ConfigError, KEYS } from '@mariachi/core';
@@ -6,7 +6,8 @@ import { createPostgresDatabase, runMigrations } from '@mariachi/database-postgr
 import { bootstrap } from '@mariachi/lifecycle';
 import { createControllers } from './api/controllers/index';
 import { createAuthStrategy } from './auth';
-import { CRM_CONFIG, type CrmSettings } from './config';
+import { CRM_CONFIG, type CrmSettings, TENANT_ID } from './config';
+import { createEmailProvider } from './email';
 import { registerServices } from './services/index';
 
 async function main(): Promise<void> {
@@ -23,7 +24,8 @@ async function main(): Promise<void> {
   // One communication layer per process: operations register on it; HTTP and MCP call through it.
   const communication = createCommunication({}, { logger, tracer, metrics });
   container.register(KEYS.Communication, communication);
-  const operations = registerServices(communication, { db: database.db, transaction: database.transaction, source: config.serviceName });
+  const email = createEmailProvider(settings, database.db);
+  const operations = registerServices(communication, { db: database.db, transaction: database.transaction, source: config.serviceName, email });
 
   const api = createApiServer({
     name: 'api',
@@ -35,10 +37,12 @@ async function main(): Promise<void> {
     cors: config.server.corsOrigins.length > 0 ? { origins: config.server.corsOrigins } : false,
   })
     .withAuthStrategy('session', createAuthStrategy(settings, { production: config.env === 'production', jwtSecret: config.auth?.jwtSecret, jwtIssuer: config.auth?.jwtIssuer, jwtAudience: config.auth?.jwtAudience }))
+    // Email providers sign what they deliver; that signature is their sign-in.
+    .withAuthStrategy('inbound', hmacSignatureStrategy({ secret: settings.inboundSecret, header: 'x-signature', provider: 'email', tenantId: TENANT_ID }))
     .withAuth('session')
     .withHealth(lifecycle.health)
     .withOpenApi({ info: { title: 'CRM', version: '0.1.0' } });
-  for (const controller of createControllers(communication, operations, { name: config.serviceName, version: '0.1.0' })) api.registerController(controller);
+  for (const controller of createControllers(communication, operations, { name: config.serviceName, version: '0.1.0' }, email.name)) api.registerController(controller);
 
   lifecycle.startup.register({
     name: 'api',

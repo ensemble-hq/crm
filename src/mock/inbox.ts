@@ -116,7 +116,7 @@ function build(): Store {
   return { conversations, messages };
 }
 
-function inbox(): Store {
+export function inbox(): Store {
   if (!store) store = build();
   return store;
 }
@@ -232,6 +232,9 @@ export function createInboxApi(respond: <T>(compute: () => T) => Promise<T>, log
       }),
 
     listEmailTemplates: () => respond(() => emailTemplates),
+
+    // The mock sends nothing, so nothing is ever waiting or failed.
+    getEmailHealth: () => respond(() => ({ queued: 0, oldestQueuedSeconds: null, failedOutgoing: 0, waitingIncoming: 0, failedIncoming: 0, lastSweepAt: null })),
 
     inboxCounts: () =>
       respond(() => {

@@ -26,3 +26,9 @@ export const recordChanged = defineEvent('record.changed', {
 export const recordDeleted = defineEvent('record.deleted', { schema: z.object({ recordId: z.string(), objectId: z.string(), origin }) });
 
 export type Origin = z.infer<typeof origin>;
+
+/** An email arrived and is stored; it still has to be filed into a conversation. */
+export const emailReceived = defineEvent('email.received', { schema: z.object({ inboundId: z.string() }) });
+
+/** Someone sent an email; it is stored as queued and still has to go out. */
+export const emailQueued = defineEvent('email.queued', { schema: z.object({ messageId: z.string() }) });

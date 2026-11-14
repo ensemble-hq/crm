@@ -69,6 +69,12 @@ export class RecordsRepository extends DrizzleRepository<RecordRow> {
     return this.one(ctx, id);
   }
 
+  /** The record of an object whose property is this text, ignoring case: a contact by email. */
+  async byText(ctx: Context, objectId: string, propertyId: string, value: string): Promise<CrmRecord | undefined> {
+    const rows = await this.rows<Raw>(sql`select ${COLUMNS} from records where ${this.scope(ctx, sql`records.object_id = ${objectId}`, sql`lower(records.properties->>${propertyId}::text) = ${value.toLowerCase()}`)} order by records.created_at limit 1`);
+    return rows[0] ? toRecord(rows[0]) : undefined;
+  }
+
   /** Every record of an object by one property's text, lower-cased: for matching a file's rows to what is already here. */
   async index(ctx: Context, objectId: string, propertyId: string): Promise<Map<string, string>> {
     const rows = await this.rows<{ key: string; id: string }>(

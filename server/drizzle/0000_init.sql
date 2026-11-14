@@ -24,6 +24,95 @@ CREATE TABLE "activities" (
 );
 
 --> statement-breakpoint
+CREATE TABLE "conversations" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"subject" text NOT NULL,
+	"status" text DEFAULT 'open' NOT NULL,
+	"assignee_id" text,
+	"contact_id" text NOT NULL,
+	"company_id" text,
+	"deal_id" text,
+	"unread" boolean DEFAULT false NOT NULL,
+	"last_message_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"preview" text DEFAULT '' NOT NULL,
+	"message_count" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
+CREATE TABLE "dev_mail" (
+	"id" text PRIMARY KEY NOT NULL,
+	"direction" text NOT NULL,
+	"payload" jsonb NOT NULL,
+	"sequence" bigint NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
+CREATE TABLE "email_templates" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"name" text NOT NULL,
+	"subject" text DEFAULT '' NOT NULL,
+	"body" text DEFAULT '' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
+CREATE TABLE "inbound_emails" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"provider" text NOT NULL,
+	"provider_message_id" text NOT NULL,
+	"payload" jsonb NOT NULL,
+	"status" text DEFAULT 'received' NOT NULL,
+	"attempts" integer DEFAULT 0 NOT NULL,
+	"last_error" text,
+	"conversation_id" text,
+	"received_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"processed_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
+CREATE TABLE "mail_cursors" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"position" text,
+	"swept_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
+CREATE TABLE "messages" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"conversation_id" text NOT NULL,
+	"direction" text NOT NULL,
+	"from_name" text NOT NULL,
+	"from_email" text NOT NULL,
+	"to_email" text DEFAULT '' NOT NULL,
+	"subject" text DEFAULT '' NOT NULL,
+	"body" text NOT NULL,
+	"status" text NOT NULL,
+	"message_id_header" text,
+	"provider_id" text,
+	"sender_id" text,
+	"attempts" integer DEFAULT 0 NOT NULL,
+	"last_error" text,
+	"next_attempt_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"sent_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
 CREATE TABLE "notifications" (
 	"id" text PRIMARY KEY NOT NULL,
 	"tenant_id" text NOT NULL,
@@ -120,6 +209,24 @@ CREATE INDEX "mariachi_event_outbox_pending_idx" ON "mariachi_event_outbox" USIN
 CREATE INDEX "mariachi_event_outbox_published_idx" ON "mariachi_event_outbox" USING btree ("published_at") WHERE published_at IS NOT NULL;
 --> statement-breakpoint
 CREATE INDEX "activities_record_idx" ON "activities" USING btree ("tenant_id","record_id","occurred_at");
+--> statement-breakpoint
+CREATE INDEX "conversations_folder_idx" ON "conversations" USING btree ("tenant_id","status","last_message_at");
+--> statement-breakpoint
+CREATE INDEX "conversations_contact_idx" ON "conversations" USING btree ("tenant_id","contact_id");
+--> statement-breakpoint
+CREATE INDEX "email_templates_tenant_id_idx" ON "email_templates" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE UNIQUE INDEX "inbound_emails_provider_idx" ON "inbound_emails" USING btree ("tenant_id","provider","provider_message_id");
+--> statement-breakpoint
+CREATE INDEX "inbound_emails_status_idx" ON "inbound_emails" USING btree ("tenant_id","status","received_at");
+--> statement-breakpoint
+CREATE INDEX "mail_cursors_tenant_id_idx" ON "mail_cursors" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX "messages_conversation_idx" ON "messages" USING btree ("tenant_id","conversation_id","sent_at");
+--> statement-breakpoint
+CREATE INDEX "messages_header_idx" ON "messages" USING btree ("tenant_id","message_id_header");
+--> statement-breakpoint
+CREATE INDEX "messages_outgoing_idx" ON "messages" USING btree ("tenant_id","status","next_attempt_at");
 --> statement-breakpoint
 CREATE INDEX "notifications_user_idx" ON "notifications" USING btree ("tenant_id","user_id","created_at");
 --> statement-breakpoint

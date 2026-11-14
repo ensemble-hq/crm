@@ -5,6 +5,8 @@ import type { ObjectDefinition, PropertyValue } from '../../../../src/contracts/
 import type { CrmRecord } from '../../../../src/contracts/records';
 import type { Action, WorkflowSettings } from '../../../../src/contracts/workflows';
 import type { WorkflowRow } from '../../schema';
+import type { EmailTemplatesRepository } from '../inbox/inbox.repository';
+import type { MailService } from '../inbox/mail.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { PeopleService } from '../people/people.service';
 import type { RecordEvents } from '../records/records.events';
@@ -40,6 +42,8 @@ export class WorkflowRunner {
     private readonly workspace: WorkspaceService,
     private readonly people: PeopleService,
     private readonly notifications: NotificationsService,
+    private readonly templates: EmailTemplatesRepository,
+    private readonly mail: MailService,
   ) {}
 
   /** Runs every workflow that is on and fits what happened. Returns how many ran. Safe to call twice for the same event. */
@@ -154,8 +158,18 @@ export class WorkflowRunner {
         if (!response.ok) throw new ActionFailed(`${action.url} answered ${response.status}.`);
         return `Posted to ${action.url}`;
       }
-      case 'send-email':
-        throw new ActionFailed('Sending email from a workflow is not available on the server yet.');
+      case 'send-email': {
+        const template = await this.templates.findById(ctx, action.templateId);
+        if (!template) throw new ActionFailed('The email template no longer exists.');
+        const contactId = record.objectId === 'contacts' ? record.id : typeof record.properties.contact === 'string' ? record.properties.contact : null;
+        const contact = contactId ? await this.records.one(ctx, contactId) : undefined;
+        if (!contact) throw new ActionFailed('There is no contact to email on this record.');
+        const sender = users.find((user) => user.id === owner);
+        if (!sender) throw new ActionFailed('The record has no owner to send the email from.');
+        const fill = (text: string) => text.replace(/\{\{firstName\}\}/g, String(contact.properties.name ?? '').split(' ')[0] ?? '').replace(/\{\{myName\}\}/g, sender.name.split(' ')[0] ?? sender.name);
+        await this.mail.compose(ctx, { contact, sender, subject: fill(template.subject || template.name), body: fill(template.body), dealId: record.objectId === 'deals' ? record.id : null });
+        return `Sent "${template.name}" to ${String(contact.properties.name ?? 'the contact')}`;
+      }
       case 'enroll':
         throw new ActionFailed('Sequences are not available on the server yet.');
     }
