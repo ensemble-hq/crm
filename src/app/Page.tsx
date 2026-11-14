@@ -59,7 +59,8 @@ export function Page({
         className="m-container"
         style={
           {
-            paddingBlock: 'var(--m-space-4) var(--m-space-12)',
+            // Room at the bottom so the last rows scroll clear of the assistant bar.
+            paddingBlock: 'var(--m-space-4) calc(var(--m-space-12) + 56px)',
             ...(wide ? { maxInlineSize: 'none', inlineSize: '100%' } : {}),
           } as CSSProperties
         }

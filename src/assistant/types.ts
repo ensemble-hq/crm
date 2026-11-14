@@ -40,6 +40,10 @@ export type CanvasItem =
   | { kind: 'table'; id: string; title: string; subtitle?: string; objectId: string; columns: string[]; records: CrmRecord[]; references: Record<string, Reference>; total: number }
   | { kind: 'mapping'; id: string; title: string; subtitle?: string; rows: Array<{ column: string; property: string | null; sample: string }> }
   | { kind: 'plan'; id: string; title: string; summary: string; steps: PlanStep[]; state: 'proposed' | 'running' | 'done' | 'failed'; doneLink?: { to: string; label: string } }
-  | { kind: 'handoff'; id: string; title: string; request: string; steps: string[] };
+  | { kind: 'handoff'; id: string; title: string; request: string; steps: string[] }
+  | { kind: 'draft'; id: string; title: string; to: string; toName: string; subject: string; body: string };
 
 export type CanvasItemInput = CanvasItem extends infer Item ? (Item extends { id: string } ? Omit<Item, 'id'> : never) : never;
+
+/** Where the user is when they ask, so "this" and "these" mean something. */
+export type PageContext = { path: string; objectId?: string; recordId?: string };

@@ -1,5 +1,5 @@
-import { ArrowRight, Check, CircleDashed, ExternalLink, ListChecks, Play, TriangleAlert } from 'lucide-react';
-import type { CSSProperties } from 'react';
+import { ArrowRight, Check, CircleDashed, Copy, ExternalLink, ListChecks, Mail, Play, TriangleAlert } from 'lucide-react';
+import { type CSSProperties, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useWorkspace } from '../app/workspace';
 import type { PropertyDefinition } from '../contracts/metadata';
@@ -212,6 +212,47 @@ function HandoffCard({ item }: { item: Item<'handoff'> }) {
   );
 }
 
+function DraftCard({ item }: { item: Item<'draft'> }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(`${item.subject}\n\n${item.body}`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div className="m-card-body m-stack" data-gap="3">
+      <Header title={item.title} subtitle="A draft. Nothing has been sent." />
+      <dl className="m-stack" data-gap="1" style={{ margin: 0 }}>
+        <div className="m-cluster" data-gap="2">
+          <dt style={small}>To</dt>
+          <dd style={{ margin: 0 }}>
+            {item.toName} &lt;{item.to}&gt;
+          </dd>
+        </div>
+        <div className="m-cluster" data-gap="2">
+          <dt style={small}>Subject</dt>
+          <dd style={{ margin: 0, ...medium }}>{item.subject}</dd>
+        </div>
+      </dl>
+      <div style={{ whiteSpace: 'pre-wrap', padding: 'var(--m-space-3)', borderRadius: 'var(--m-radius-md)', background: 'var(--m-color-bg-sunken)' }}>{item.body}</div>
+      <div className="m-cluster" data-gap="2">
+        <a className="m-button" data-variant="primary" data-size="sm" href={`mailto:${item.to}?subject=${encodeURIComponent(item.subject)}&body=${encodeURIComponent(item.body)}`}>
+          <Mail size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Open in your email
+        </a>
+        <button type="button" className="m-button" data-size="sm" onClick={() => void copy()}>
+          <Copy size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** The assistant's work, beside the conversation: charts, tables, column matches, plans. Newest first. */
 export function Canvas({ items, working, onRunPlan }: { items: CanvasItem[]; working: boolean; onRunPlan: (planId: string) => void }) {
   return (
@@ -223,6 +264,7 @@ export function Canvas({ items, working, onRunPlan }: { items: CanvasItem[]; wor
           {item.kind === 'mapping' ? <MappingCard item={item} /> : null}
           {item.kind === 'plan' ? <PlanCard item={item} disabled={working} onRun={() => onRunPlan(item.id)} /> : null}
           {item.kind === 'handoff' ? <HandoffCard item={item} /> : null}
+          {item.kind === 'draft' ? <DraftCard item={item} /> : null}
         </section>
       ))}
     </div>

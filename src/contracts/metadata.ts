@@ -52,6 +52,10 @@ export const propertyDefinitionSchema = z.object({
   onCreate: z.boolean().optional(),
   /** Added in this workspace, not part of the template. Only custom properties can be deleted. */
   custom: z.boolean().optional(),
+  /** A record cannot be saved with this empty. */
+  required: z.boolean().optional(),
+  /** No two records may hold the same value. */
+  unique: z.boolean().optional(),
 });
 export type PropertyDefinition = z.infer<typeof propertyDefinitionSchema>;
 
@@ -126,6 +130,8 @@ export const createPropertySchema = z.object({
   options: z.array(optionSchema).optional(),
   referenceObjectId: z.string().optional(),
   onCreate: z.boolean().optional(),
+  required: z.boolean().optional(),
+  unique: z.boolean().optional(),
   /** Also show it as a column in every saved view of the object. */
   addToViews: z.boolean().optional(),
 });
@@ -139,6 +145,8 @@ export const updatePropertySchema = z.object({
   group: z.string().min(1).optional(),
   options: z.array(optionSchema).optional(),
   onCreate: z.boolean().optional(),
+  required: z.boolean().optional(),
+  unique: z.boolean().optional(),
 });
 export type UpdateProperty = z.infer<typeof updatePropertySchema>;
 
@@ -148,3 +156,15 @@ export const createObjectSchema = z.object({
   icon: z.string(),
 });
 export type CreateObject = z.infer<typeof createObjectSchema>;
+
+/** A new saved view, or the new state of an existing one. */
+export const saveViewSchema = z.object({
+  objectId: z.string(),
+  /** Absent to create a view; present to replace that view's settings. */
+  viewId: z.string().optional(),
+  name: z.string().min(1),
+  columns: z.array(z.string()).min(1),
+  filters: z.array(filterSchema),
+  sort: sortSchema.optional(),
+});
+export type SaveView = z.infer<typeof saveViewSchema>;

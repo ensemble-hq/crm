@@ -129,7 +129,7 @@ function OptionsEditor({ options, onChange }: { options: Option[]; onChange: (op
   );
 }
 
-type PropertyDraft = { label: string; type: PropertyType; group: string; options: Option[]; referenceObjectId: string; onCreate: boolean; addToViews: boolean };
+type PropertyDraft = { label: string; type: PropertyType; group: string; options: Option[]; referenceObjectId: string; onCreate: boolean; required: boolean; unique: boolean; addToViews: boolean };
 
 /** Create a property, or edit one. A property's type is fixed once it exists, because data already uses it. */
 function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectDefinition; editing: PropertyDefinition | 'new'; onClose: () => void; onSaved: () => void }) {
@@ -143,6 +143,8 @@ function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectD
     options: existing?.options ?? [],
     referenceObjectId: existing?.referenceObjectId ?? objects.find((item) => item.id !== object.id)?.id ?? '',
     onCreate: existing?.onCreate ?? false,
+    required: existing?.required ?? false,
+    unique: existing?.unique ?? false,
     addToViews: false,
   });
   const [busy, setBusy] = useState(false);
@@ -158,7 +160,7 @@ function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectD
     setError(undefined);
     try {
       if (existing) {
-        await api.updateProperty({ objectId: object.id, propertyId: existing.id, label: draft.label, group: draft.group, onCreate: draft.onCreate, options: hasOptions(existing.type) ? draft.options : undefined });
+        await api.updateProperty({ objectId: object.id, propertyId: existing.id, label: draft.label, group: draft.group, onCreate: draft.onCreate, required: draft.required, unique: draft.unique, options: hasOptions(existing.type) ? draft.options : undefined });
       } else {
         await api.createProperty({
           objectId: object.id,
@@ -168,6 +170,8 @@ function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectD
           options: hasOptions(draft.type) ? draft.options : undefined,
           referenceObjectId: draft.type === 'reference' ? draft.referenceObjectId : undefined,
           onCreate: draft.onCreate,
+          required: draft.required,
+          unique: draft.unique,
           addToViews: draft.addToViews,
         });
       }
@@ -237,6 +241,14 @@ function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectD
       <label className="m-field" data-layout="inline">
         <input className="m-checkbox" type="checkbox" checked={draft.onCreate} onChange={(event) => set({ onCreate: event.target.checked })} /> Ask for it when a {object.singular.toLowerCase()} is created
       </label>
+      <label className="m-field" data-layout="inline">
+        <input className="m-checkbox" type="checkbox" checked={draft.required} onChange={(event) => set({ required: event.target.checked })} /> Required: a {object.singular.toLowerCase()} can't be saved without it
+      </label>
+      {draft.type === 'text' || draft.type === 'email' || draft.type === 'phone' || draft.type === 'url' || draft.type === 'number' ? (
+        <label className="m-field" data-layout="inline">
+          <input className="m-checkbox" type="checkbox" checked={draft.unique} onChange={(event) => set({ unique: event.target.checked })} /> Unique: no two {object.plural.toLowerCase()} can share a value
+        </label>
+      ) : null}
       {existing ? null : (
         <label className="m-field" data-layout="inline">
           <input className="m-checkbox" type="checkbox" checked={draft.addToViews} onChange={(event) => set({ addToViews: event.target.checked })} /> Show it as a column in every {object.singular.toLowerCase()} view
@@ -312,6 +324,8 @@ export function ObjectSettings() {
                         <span style={medium}>{property.label}</span>
                         {property.custom ? <span className="m-badge" data-tone="info">Custom</span> : null}
                         {property.id === object.primaryProperty ? <span className="m-badge">Name of the record</span> : null}
+                        {property.required ? <span className="m-badge">Required</span> : null}
+                        {property.unique ? <span className="m-badge">Unique</span> : null}
                       </span>
                     </td>
                     <td>{property.type === 'reference' ? `Link to ${workspace.object(property.referenceObjectId)?.plural.toLowerCase() ?? 'a record'}` : TYPE_LABELS[property.type]}</td>

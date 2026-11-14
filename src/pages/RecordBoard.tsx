@@ -1,7 +1,8 @@
 import { type CSSProperties, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, useQuery } from '../api';
-import type { ObjectDefinition, Option, ViewDefinition } from '../contracts/metadata';
+import { useWorkspace } from '../app/workspace';
+import type { Filter, ObjectDefinition, Option } from '../contracts/metadata';
 import type { CrmRecord, Reference } from '../contracts/records';
 import { UserChip, formatDate } from '../ui/PropertyValue';
 import { compactCurrency, currency, small } from '../ui/styles';
@@ -15,23 +16,25 @@ type Column = { option: Option; count: number; sum: number; records: CrmRecord[]
  * A board for any object that moves through stages. Each column is one option of the object's
  * `board.groupBy` property; dragging a card to another column changes that property.
  */
-export function RecordBoard({ object, view, search }: { object: ObjectDefinition; view: ViewDefinition; search: string }) {
+export function RecordBoard({ object, filters, search }: { object: ObjectDefinition; filters: Filter[]; search: string }) {
+  const { revision, touch } = useWorkspace();
+  const filterKey = JSON.stringify(filters);
   const board = object.board;
   const groupBy = object.properties.find((property) => property.id === board?.groupBy);
   const [over, setOver] = useState<string>();
 
   const { data, loading, error, reload } = useQuery(async () => {
     if (!board || !groupBy) return { columns: [] as Column[], references: {} as Record<string, Reference> };
-    const scope = { objectId: object.id, viewId: view.id, search };
-    const summary = await api.summarize({ ...scope, groupBy: board.groupBy, sumProperty: board.sumProperty });
+    const scope = { objectId: object.id, search };
+    const summary = await api.summarize({ ...scope, filters, groupBy: board.groupBy, sumProperty: board.sumProperty });
     // When the view already narrows the stages, only show the stages it lets through.
-    const narrowed = view.filters.some((filter) => filter.property === board.groupBy);
+    const narrowed = filters.some((filter) => filter.property === board.groupBy);
     const options = (groupBy.options ?? []).filter((option) => !narrowed || summary.some((row) => row.value === option.id));
     const lists = await Promise.all(
       options.map((option) =>
         api.listRecords({
           ...scope,
-          filters: [{ property: board.groupBy, operator: 'eq', value: option.id }],
+          filters: [...filters, { property: board.groupBy, operator: 'eq', value: option.id }],
           sort: board.dateProperty ? { property: board.dateProperty, direction: 'asc' } : undefined,
           page: 1,
           pageSize: COLUMN_LIMIT,
@@ -45,13 +48,14 @@ export function RecordBoard({ object, view, search }: { object: ObjectDefinition
       return { option, count: row?.count ?? 0, sum: row?.sum ?? 0, records: lists[index]?.records ?? [] };
     });
     return { columns, references };
-  }, [object.id, view.id, search]);
+  }, [object.id, filterKey, search, revision]);
 
   if (!board || !groupBy) return null;
 
   async function move(recordId: string, optionId: string) {
     await api.updateRecord({ id: recordId, properties: { [groupBy?.id ?? '']: optionId } });
     reload();
+    touch();
   }
 
   if (error) {

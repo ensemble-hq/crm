@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { type CreateObject, type CreateProperty, type ObjectDefinition, type UpdateProperty, type User, filterSchema, propertyValueSchema, sortSchema } from './metadata';
+import { type CreateObject, type CreateProperty, type ObjectDefinition, type SaveView, type UpdateProperty, type User, type ViewDefinition, filterSchema, propertyValueSchema, sortSchema } from './metadata';
 
 /**
  * Record contracts and the API the app talks to. The mock in `src/mock/api.ts` implements `CrmApi`
@@ -23,6 +23,7 @@ export const listQuerySchema = z.object({
   objectId: z.string(),
   /** Applies the view's filters, and its sort when `sort` is absent. */
   viewId: z.string().optional(),
+  /** Added to the view's filters; with no `viewId`, these are the only filters. */
   filters: z.array(filterSchema).optional(),
   search: z.string().optional(),
   sort: sortSchema.optional(),
@@ -110,10 +111,14 @@ export interface CrmApi {
   listActivity(recordId: string): Promise<Activity[]>;
   createRecord(input: CreateRecord): Promise<CrmRecord>;
   updateRecord(input: UpdateRecord): Promise<CrmRecord>;
+  deleteRecords(ids: string[]): Promise<{ deleted: number }>;
   createActivity(input: CreateActivity): Promise<Activity>;
   /** Metadata changes. Each returns the object as it now stands. */
   createObject(input: CreateObject): Promise<ObjectDefinition>;
   createProperty(input: CreateProperty): Promise<ObjectDefinition>;
   updateProperty(input: UpdateProperty): Promise<ObjectDefinition>;
   deleteProperty(input: { objectId: string; propertyId: string }): Promise<ObjectDefinition>;
+  /** Creates a saved view, or replaces one's columns, filters and sort. */
+  saveView(input: SaveView): Promise<ViewDefinition>;
+  deleteView(input: { objectId: string; viewId: string }): Promise<ObjectDefinition>;
 }

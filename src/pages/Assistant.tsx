@@ -4,7 +4,7 @@ import { useWorkspace } from '../app/workspace';
 import { Canvas } from '../assistant/Canvas';
 import { Composer, Thread } from '../assistant/Thread';
 import { VoiceMode } from '../assistant/VoiceMode';
-import { useAssistant } from '../assistant/useAssistant';
+import { useSharedAssistant } from '../assistant/context';
 import { ICON, small } from '../ui/styles';
 
 const SUGGESTIONS = ['How is the pipeline looking?', 'Which big deals have gone quiet?', 'Who has closed the most this year?', 'Import a spreadsheet of leads', 'Add a renewal date to deals', 'Build a customer portal'];
@@ -16,7 +16,7 @@ const SUGGESTIONS = ['How is the pipeline looking?', 'Which big deals have gone 
  */
 export function AssistantPage() {
   const { currentUser } = useWorkspace();
-  const assistant = useAssistant();
+  const assistant = useSharedAssistant();
   const [voice, setVoice] = useState(false);
   const empty = assistant.messages.length === 0;
   const hasCanvas = assistant.canvas.length > 0;

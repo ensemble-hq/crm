@@ -2,7 +2,15 @@
 
 **A complete CRM that anyone can take on Ensemble, run as their own hosted instance, and change by asking. It covers what teams use HubSpot for, it is built so AI does most of the data entry, and it is the first of several templates on one shared contract.**
 
-Status: frontend mock in progress (2026-11-14). On screen so far: overview, contacts, companies, deals (list, board, record), the assistant with voice mode, and settings for objects and properties. Nothing here is a commitment on dates.
+Status: frontend mock in progress (2026-11-14). Nothing here is a commitment on dates.
+
+On screen so far, all on mock data:
+
+- Overview dashboard
+- Contacts, companies and deals: lists with saved views, a filter builder, column choice, search, sorting, bulk edit and delete; a stage board; record pages with fields edited in place
+- Field rules: required and unique, checked on every save
+- Settings: custom objects and properties
+- The assistant: its own page, a bar on every page that knows what you are looking at, and voice mode
 
 ## What we are building
 
@@ -154,19 +162,27 @@ The importer reports on what migrators most often lose: unsubscribe and consent 
 - Cookie banner, choice of data region, scheduled report delivery
 - View tracking on shared pages; tracked documents **(L)**; playbooks **(L)**; deal splits **(L)**; approvals as a workflow step **(L)**
 
-### Later modules
-None of these block the first release. Each is an optional module.
+### Core and plugins
 
-| Module | What holds it back |
+**Decided 2026-11-14.** There are two kinds of functionality:
+
+- **Core:** everything that works without an account at another company. It is always included in the open-source template. That covers records, views, pipelines, email and calendar sync, sequences, forms, workflows, reporting, the assistant, marketing email, the service module (tickets, shared inbox, knowledge base, surveys) and landing pages. Some of it ships after the first release, but none of it is held back.
+- **Plugins:** anything that depends on a third-party service the customer signs up for. A plugin is installed per instance and uses the same extension points as a customer's own changes. Plugins are open source too and live in this repo, under `plugins/`.
+
+| Plugin | Service it depends on |
 | --- | --- |
-| Marketing email (campaigns, editor, A/B tests, bounce handling) | Deliverability work |
-| Service (tickets, knowledge base, satisfaction surveys) | Scope |
-| Landing pages | A public website product; a full CMS is its own template |
-| Ads | Approved API access from Google, Meta and LinkedIn |
-| Social publishing | Gated or paid APIs |
+| Billing: invoices, payment links, subscriptions | Stripe |
+| Calling, call recording, SMS, WhatsApp | Twilio |
+| E-signature on quotes | A signature provider |
+| Accounting sync | QuickBooks, Xero |
+| Ads: audiences and conversion events | Google, Meta, LinkedIn |
+| Enrichment and visitor identification | A data provider |
+| Social publishing | The social networks' APIs |
 | SEO tools | Purchased keyword and crawl data |
-| Calling and conversation intelligence | Twilio, with per-country number rules |
-| Billing through Stripe (invoices, payment links, subscriptions) | Free in HubSpot and widely used by small teams, so migrators expect it. We mirror Stripe; we do not process payments. |
+| Meeting links | Zoom, Google Meet, Microsoft Teams |
+| Chat and notifications | Slack, Microsoft Teams |
+
+Gmail, Outlook and the two calendars are core even though they are third-party, because the CRM is not usable without them; Ensemble holds the verified Google and Microsoft apps.
 
 ## AI
 
@@ -237,7 +253,6 @@ The assistant (page, bar and voice), record summaries, email drafting, AI fields
 - **How strong the update promise is** for instances whose core code has been changed.
 - **Publishing `@mariachi/design`.** The repo links it from a local checkout today, so nobody else can install it.
 - **Licence and README** for the public repo.
-- **Billing through Stripe:** confirm it moves from out of scope to a later module (the audit recommends it).
 - **The importer's promise:** agree the list of things that do not migrate cleanly (see EQUIVALENCE.md) and how the pre-migration report presents them.
 
 ## Other templates on the same contract

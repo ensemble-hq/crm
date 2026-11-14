@@ -4,9 +4,10 @@ import { Link, Navigate, useParams } from 'react-router-dom';
 import { api, useQuery } from '../api';
 import { Page } from '../app/Page';
 import { useWorkspace } from '../app/workspace';
-import type { ObjectDefinition, PropertyDefinition } from '../contracts/metadata';
+import type { ObjectDefinition } from '../contracts/metadata';
 import type { Activity, ActivityKind, CrmRecord, Reference, RelatedGroup } from '../contracts/records';
 import { PropertyValue, formatDateTime } from '../ui/PropertyValue';
+import { RecordProperties } from './RecordProperties';
 import { objectIcon } from '../ui/icons';
 import { ICON, cardTitle, link, medium, plainList, rowDivider, small, toolbarButton } from '../ui/styles';
 
@@ -27,17 +28,6 @@ const activityFilters: Array<{ id: ActivityKind | 'all'; label: string }> = [
   { id: 'meeting', label: 'Meetings' },
   { id: 'task', label: 'Tasks' },
 ];
-
-function groupProperties(object: ObjectDefinition): Array<{ group: string; properties: PropertyDefinition[] }> {
-  const groups: Array<{ group: string; properties: PropertyDefinition[] }> = [];
-  for (const property of object.properties) {
-    if (property.id === object.primaryProperty) continue;
-    const existing = groups.find((item) => item.group === property.group);
-    if (existing) existing.properties.push(property);
-    else groups.push({ group: property.group, properties: [property] });
-  }
-  return groups;
-}
 
 /** The stages of a record that moves through a pipeline, as a path. Clicking a stage moves the record. */
 function StagePath({ object, record, onChange }: { object: ObjectDefinition; record: CrmRecord; onChange: (optionId: string) => void }) {
@@ -65,28 +55,6 @@ function StagePath({ object, record, onChange }: { object: ObjectDefinition; rec
         );
       })}
     </div>
-  );
-}
-
-function Properties({ object, record, references }: { object: ObjectDefinition; record: CrmRecord; references: Record<string, Reference> }) {
-  return (
-    <>
-      {groupProperties(object).map((section, index) => (
-        <section key={section.group} className="m-stack" data-gap="2" style={index === 0 ? undefined : { ...rowDivider, paddingBlockStart: 'var(--m-space-3)' }}>
-          <h3 style={small}>{section.group}</h3>
-          <dl className="m-stack" data-gap="2" style={{ margin: 0 }}>
-            {section.properties.map((property) => (
-              <div key={property.id} className="m-cluster" data-justify="between" data-align="start" style={{ flexWrap: 'nowrap', gap: 'var(--m-space-3)' }}>
-                <dt style={{ color: 'var(--m-color-fg-muted)', flexShrink: 0 }}>{property.label}</dt>
-                <dd style={{ margin: 0, textAlign: 'end', minInlineSize: 0, overflowWrap: 'anywhere' }}>
-                  <PropertyValue property={property} value={record.properties[property.id]} references={references} />
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-      ))}
-    </>
   );
 }
 
@@ -138,11 +106,11 @@ function Related({ groups }: { groups: RelatedGroup[] }) {
 }
 
 function Timeline({ recordId }: { recordId: string }) {
-  const { user } = useWorkspace();
+  const { user, revision } = useWorkspace();
   const [filter, setFilter] = useState<ActivityKind | 'all'>('all');
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
-  const { data, error, reload } = useQuery(() => api.listActivity(recordId), [recordId]);
+  const { data, error, reload } = useQuery(() => api.listActivity(recordId), [recordId, revision]);
 
   async function addNote(event: FormEvent) {
     event.preventDefault();
@@ -253,10 +221,10 @@ function Timeline({ recordId }: { recordId: string }) {
 /** The record page for any object: its properties by group, what it's related to, and its activity. */
 export function RecordDetail() {
   const { objectId, recordId = '' } = useParams();
-  const { object: findObject } = useWorkspace();
+  const { object: findObject, revision, touch } = useWorkspace();
   const object = findObject(objectId);
-  const detail = useQuery(() => api.getRecord(recordId), [recordId]);
-  const related = useQuery(() => api.listRelated(recordId), [recordId]);
+  const detail = useQuery(() => api.getRecord(recordId), [recordId, revision]);
+  const related = useQuery(() => api.listRelated(recordId), [recordId, revision]);
 
   if (!object) return <Navigate to="/" replace />;
 
@@ -328,7 +296,15 @@ export function RecordDetail() {
             <aside className="m-card" aria-label={`About this ${object.singular.toLowerCase()}`}>
               <div className="m-card-body m-stack" data-gap="3">
                 <h2 style={cardTitle}>About this {object.singular.toLowerCase()}</h2>
-                <Properties object={object} record={record} references={references} />
+                <RecordProperties
+                  object={object}
+                  record={record}
+                  references={references}
+                  onSaved={() => {
+                    detail.reload();
+                    touch();
+                  }}
+                />
                 <Related groups={related.data ?? []} />
               </div>
             </aside>

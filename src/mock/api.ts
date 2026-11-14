@@ -1,4 +1,4 @@
-import type { Filter, ObjectDefinition, PropertyDefinition, PropertyValue, Sort } from '../contracts/metadata';
+import type { Filter, ObjectDefinition, PropertyDefinition, PropertyValue, Sort, ViewDefinition } from '../contracts/metadata';
 import type {
   Activity,
   ActivityKind,
@@ -242,6 +242,26 @@ function activityFor(recordId: string): Activity[] {
   return [...(createdActivity.get(recordId) ?? []), ...generated].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
 }
 
+/** Checks new values against the object's rules: required, unique, and the shape of emails. */
+function validate(object: ObjectDefinition, values: Record<string, PropertyValue>, recordId: string | undefined, creating: boolean): void {
+  for (const definitionOf of object.properties) {
+    if (definitionOf.system) continue;
+    const touched = definitionOf.id in values;
+    if (!touched && !creating) continue;
+    const value = values[definitionOf.id] ?? null;
+    const mustHave = definitionOf.required || definitionOf.id === object.primaryProperty;
+    if (isEmpty(value)) {
+      if (mustHave) throw new Error(`${definitionOf.label} is required.`);
+      continue;
+    }
+    if (definitionOf.type === 'email' && typeof value === 'string' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) throw new Error(`"${value}" is not an email address.`);
+    if (definitionOf.unique) {
+      const clash = (dataset().byObject.get(object.id) ?? []).find((item) => item.id !== recordId && item.properties[definitionOf.id] === value);
+      if (clash) throw new Error(`Another ${object.singular.toLowerCase()} already has ${definitionOf.label.toLowerCase()} "${String(value)}".`);
+    }
+  }
+}
+
 let sequence = 0;
 
 /** URL segments the app uses itself, so no object may take them. */
@@ -295,6 +315,7 @@ export const mockApi: CrmApi = {
   createRecord: (input) =>
     respond(() => {
       const data = dataset();
+      validate(definition(input.objectId), input.properties, undefined, true);
       const now = new Date().toISOString();
       sequence += 1;
       const item: CrmRecord = {
@@ -313,6 +334,7 @@ export const mockApi: CrmApi = {
   updateRecord: (input) =>
     respond(() => {
       const item = get(input.id);
+      validate(definition(item.objectId), input.properties, item.id, false);
       Object.assign(item.properties, input.properties);
       item.updatedAt = new Date().toISOString();
       return item;
@@ -359,6 +381,8 @@ export const mockApi: CrmApi = {
         options: choice ? (input.options ?? []) : undefined,
         referenceObjectId: input.type === 'reference' ? input.referenceObjectId : undefined,
         onCreate: input.onCreate,
+        required: input.required,
+        unique: input.unique,
         custom: true,
       });
       if (input.addToViews) for (const view of object.views) view.columns.push(id);
@@ -374,6 +398,8 @@ export const mockApi: CrmApi = {
       if (input.group !== undefined) found.group = input.group.trim();
       if (input.options !== undefined) found.options = input.options;
       if (input.onCreate !== undefined) found.onCreate = input.onCreate;
+      if (input.required !== undefined) found.required = input.required;
+      if (input.unique !== undefined) found.unique = input.unique;
       return object;
     }),
 
@@ -390,6 +416,49 @@ export const mockApi: CrmApi = {
         if (view.sort?.property === input.propertyId) view.sort = undefined;
       }
       for (const item of dataset().byObject.get(object.id) ?? []) delete item.properties[input.propertyId];
+      return object;
+    }),
+
+  deleteRecords: (ids) =>
+    respond(() => {
+      const data = dataset();
+      const doomed = new Set(ids);
+      let deleted = 0;
+      for (const id of ids) {
+        const item = data.byId.get(id);
+        if (!item) continue;
+        data.byId.delete(id);
+        deleted += 1;
+        const list = data.byObject.get(item.objectId);
+        if (list) data.byObject.set(item.objectId, list.filter((candidate) => !doomed.has(candidate.id)));
+      }
+      return { deleted };
+    }),
+
+  saveView: (input) =>
+    respond(() => {
+      const object = definition(input.objectId);
+      const settings = { name: input.name.trim(), columns: input.columns, filters: input.filters, sort: input.sort };
+      if (input.viewId) {
+        const existing = object.views.find((view) => view.id === input.viewId);
+        if (!existing) throw new Error('That view no longer exists.');
+        Object.assign(existing, settings);
+        return existing;
+      }
+      if (object.views.some((view) => view.name.toLowerCase() === settings.name.toLowerCase())) throw new Error(`There is already a view called "${settings.name}".`);
+      const base = slug(settings.name, '-') || 'view';
+      let id = base;
+      for (let suffix = 2; object.views.some((view) => view.id === id); suffix += 1) id = `${base}-${suffix}`;
+      const created: ViewDefinition = { id, ...settings };
+      object.views.push(created);
+      return created;
+    }),
+
+  deleteView: (input) =>
+    respond(() => {
+      const object = definition(input.objectId);
+      if (object.views.length <= 1) throw new Error('An object needs at least one view.');
+      object.views = object.views.filter((view) => view.id !== input.viewId);
       return object;
     }),
 

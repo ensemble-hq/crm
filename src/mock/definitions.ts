@@ -117,7 +117,7 @@ const contacts: ObjectDefinition = {
   secondaryProperty: 'email',
   properties: [
     { id: 'name', label: 'Name', type: 'text', group: 'About', onCreate: true },
-    { id: 'email', label: 'Email', type: 'email', group: 'About', onCreate: true },
+    { id: 'email', label: 'Email', type: 'email', group: 'About', onCreate: true, unique: true },
     { id: 'phone', label: 'Phone', type: 'phone', group: 'About', onCreate: true },
     { id: 'jobTitle', label: 'Job title', type: 'text', group: 'About', onCreate: true },
     { id: 'company', label: 'Company', type: 'reference', referenceObjectId: 'companies', group: 'About' },
@@ -236,7 +236,7 @@ const deals: ObjectDefinition = {
   properties: [
     { id: 'name', label: 'Deal name', type: 'text', group: 'About', onCreate: true },
     { id: 'amount', label: 'Amount', type: 'currency', group: 'About', onCreate: true },
-    { id: 'stage', label: 'Stage', type: 'select', options: dealStages, group: 'About', onCreate: true },
+    { id: 'stage', label: 'Stage', type: 'select', options: dealStages, group: 'About', onCreate: true, required: true },
     { id: 'closeDate', label: 'Close date', type: 'date', group: 'About', onCreate: true },
     { id: 'probability', label: 'Probability (%)', type: 'number', group: 'About' },
     { id: 'owner', label: 'Owner', type: 'user', group: 'About', onCreate: true },

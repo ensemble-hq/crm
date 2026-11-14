@@ -1,14 +1,18 @@
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Columns3, Download, List, Plus, Search, Trash2, Upload, UserPlus } from 'lucide-react';
-import { type CSSProperties, useEffect, useState } from 'react';
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Columns3, Download, Filter as FilterIcon, LayoutList, List, Pencil, Plus, Search, SlidersHorizontal, Trash2, Upload, UserPlus, X } from 'lucide-react';
+import { type CSSProperties, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, useQuery } from '../api';
 import { Page } from '../app/Page';
 import { useWorkspace } from '../app/workspace';
-import type { ObjectDefinition, PropertyDefinition, Sort, ViewDefinition } from '../contracts/metadata';
+import type { Filter, ObjectDefinition, PropertyDefinition, Sort, PropertyValue as Value, ViewDefinition } from '../contracts/metadata';
+import { Modal } from '../ui/Modal';
+import { PropertyInput } from '../ui/PropertyInput';
 import { PropertyValue } from '../ui/PropertyValue';
+import { describeFilter } from '../ui/filters';
 import { objectIcon } from '../ui/icons';
 import { ICON, figure, small, toolbarButton } from '../ui/styles';
 import { CreateRecordDialog } from './CreateRecordDialog';
+import { FilterDialog } from './FilterDialog';
 import { RecordBoard } from './RecordBoard';
 
 const PAGE_SIZE = 50;
@@ -19,6 +23,16 @@ function parseSort(text: string | null): Sort | undefined {
   const [property, direction] = text.split(':');
   if (!property || (direction !== 'asc' && direction !== 'desc')) return undefined;
   return { property, direction };
+}
+
+function parseFilters(text: string | null): Filter[] | undefined {
+  if (!text) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return Array.isArray(parsed) ? (parsed as Filter[]) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function ViewTabs({ object, view, onSelect }: { object: ObjectDefinition; view: ViewDefinition; onSelect: (viewId: string) => void }) {
@@ -41,9 +55,6 @@ function ViewTabs({ object, view, onSelect }: { object: ObjectDefinition; view: 
           </button>
         );
       })}
-      <button type="button" className="m-button" data-variant="ghost" data-size="sm" data-icon-only aria-label="Add a view">
-        <Plus size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />
-      </button>
     </div>
   );
 }
@@ -79,9 +90,88 @@ function SearchBox({ value, onChange, label }: { value: string; onChange: (value
   );
 }
 
+/** Choose which properties are columns. Order follows the object's own property order. */
+function ColumnsDialog({ object, columns, onClose, onSave }: { object: ObjectDefinition; columns: string[]; onClose: () => void; onSave: (columns: string[]) => void }) {
+  const [chosen, setChosen] = useState<string[]>(columns);
+  const toggle = (id: string, on: boolean) => setChosen((previous) => (on ? [...previous, id] : previous.filter((item) => item !== id)));
+  return (
+    <Modal open size="sm" title="Columns" description={`What to show for each ${object.singular.toLowerCase()} in this view.`} submitLabel="Apply" onClose={onClose} onSubmit={() => onSave(chosen.length > 0 ? chosen : [object.primaryProperty])}>
+      <fieldset className="m-stack" data-gap="1" style={{ border: 0, padding: 0, margin: 0 }}>
+        <legend className="m-sr-only">Columns</legend>
+        {object.properties.map((property) => (
+          <label key={property.id} className="m-field" data-layout="inline">
+            <input className="m-checkbox" type="checkbox" checked={chosen.includes(property.id)} disabled={property.id === object.primaryProperty} onChange={(event) => toggle(property.id, event.target.checked)} />
+            {property.label}
+          </label>
+        ))}
+      </fieldset>
+    </Modal>
+  );
+}
+
+/** Change one field on every selected record. "Assign owner" is this with the owner field chosen. */
+function BulkEditDialog({ object, ids, initialProperty, onClose, onDone }: { object: ObjectDefinition; ids: string[]; initialProperty?: string; onClose: () => void; onDone: () => void }) {
+  const editable = object.properties.filter((property) => !property.system && property.type !== 'reference' && property.type !== 'multiselect' && property.id !== object.primaryProperty && !property.unique);
+  const [propertyId, setPropertyId] = useState(initialProperty && editable.some((item) => item.id === initialProperty) ? initialProperty : (editable[0]?.id ?? ''));
+  const [value, setValue] = useState<Value>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const property = editable.find((item) => item.id === propertyId);
+  const noun = ids.length === 1 ? object.singular.toLowerCase() : object.plural.toLowerCase();
+
+  async function apply() {
+    if (!property) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      await Promise.all(ids.map((id) => api.updateRecord({ id, properties: { [property.id]: value } })));
+      onDone();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The change could not be saved.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open size="sm" title={`Edit ${ids.length.toLocaleString('en-US')} ${noun}`} submitLabel={`Update ${ids.length.toLocaleString('en-US')} ${noun}`} busy={busy} error={error} onClose={onClose} onSubmit={apply}>
+      <div className="m-field">
+        <label className="m-field-label" htmlFor="bulk-property">
+          Field to change
+        </label>
+        <select
+          className="m-select"
+          id="bulk-property"
+          value={propertyId}
+          onChange={(event) => {
+            setPropertyId(event.target.value);
+            setValue(null);
+          }}
+        >
+          {editable.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {property ? (
+        <div className="m-field" data-layout={property.type === 'boolean' ? 'inline' : undefined}>
+          <label className="m-field-label" htmlFor="bulk-value">
+            New value
+          </label>
+          <PropertyInput id="bulk-value" property={property} value={value} onChange={setValue} />
+        </div>
+      ) : null}
+    </Modal>
+  );
+}
+
 function RecordTable({
   object,
-  view,
+  columnIds,
+  filters,
+  viewName,
   search,
   sort,
   page,
@@ -90,7 +180,9 @@ function RecordTable({
   onTotal,
 }: {
   object: ObjectDefinition;
-  view: ViewDefinition;
+  columnIds: string[];
+  filters: Filter[];
+  viewName: string;
   search: string;
   sort: Sort | undefined;
   page: number;
@@ -98,31 +190,33 @@ function RecordTable({
   onPage: (page: number) => void;
   onTotal: (total: number) => void;
 }) {
+  const { revision, touch } = useWorkspace();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulk, setBulk] = useState<{ kind: 'edit'; property?: string } | { kind: 'delete' }>();
+  const [busy, setBusy] = useState(false);
+  const [bulkError, setBulkError] = useState<string>();
   const sortKey = sort ? `${sort.property}:${sort.direction}` : '';
-  const { data, loading, error } = useQuery(
-    () => api.listRecords({ objectId: object.id, viewId: view.id, search, sort, page, pageSize: PAGE_SIZE }),
-    [object.id, view.id, search, sortKey, page],
-  );
+  const filterKey = JSON.stringify(filters);
+  const { data, loading, error } = useQuery(() => api.listRecords({ objectId: object.id, filters, search, sort, page, pageSize: PAGE_SIZE }), [object.id, filterKey, search, sortKey, page, revision]);
 
   // A new query shows different rows, so the old selection no longer means anything.
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset on query change only
-  useEffect(() => setSelected(new Set()), [object.id, view.id, search, sortKey, page]);
+  useEffect(() => setSelected(new Set()), [object.id, filterKey, search, sortKey, page]);
 
   const total = data?.total;
   useEffect(() => {
     if (total !== undefined) onTotal(total);
   }, [total, onTotal]);
 
-  const columns = view.columns
-    .map((id) => object.properties.find((property) => property.id === id))
-    .filter((property): property is PropertyDefinition => property !== undefined);
-  const activeSort = sort ?? view.sort;
+  const columns = columnIds.map((id) => object.properties.find((property) => property.id === id)).filter((property): property is PropertyDefinition => property !== undefined);
   const records = data?.records ?? [];
   const allSelected = records.length > 0 && records.every((record) => selected.has(record.id));
   const pages = Math.max(1, Math.ceil((total ?? 0) / PAGE_SIZE));
   const first = (page - 1) * PAGE_SIZE + 1;
   const last = Math.min(page * PAGE_SIZE, total ?? 0);
+  const ids = [...selected];
+  const noun = ids.length === 1 ? object.singular.toLowerCase() : object.plural.toLowerCase();
+  const hasOwner = object.properties.some((property) => property.id === 'owner');
 
   function toggle(id: string) {
     setSelected((previous) => {
@@ -131,6 +225,25 @@ function RecordTable({
       else next.add(id);
       return next;
     });
+  }
+
+  function finishBulk() {
+    setBulk(undefined);
+    setSelected(new Set());
+    touch();
+  }
+
+  async function removeSelected() {
+    setBusy(true);
+    setBulkError(undefined);
+    try {
+      await api.deleteRecords(ids);
+      finishBulk();
+    } catch (cause) {
+      setBulkError(cause instanceof Error ? cause.message : 'The records could not be deleted.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (error) {
@@ -157,13 +270,15 @@ function RecordTable({
                 <th colSpan={columns.length}>
                   <div className="m-cluster" data-gap="2">
                     <span style={{ color: 'var(--m-color-fg-default)' }}>{selected.size} selected</span>
-                    <button type="button" className="m-button" data-size="sm" style={toolbarButton}>
-                      <UserPlus size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Assign owner
+                    {hasOwner ? (
+                      <button type="button" className="m-button" data-size="sm" style={toolbarButton} onClick={() => setBulk({ kind: 'edit', property: 'owner' })}>
+                        <UserPlus size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Assign owner
+                      </button>
+                    ) : null}
+                    <button type="button" className="m-button" data-size="sm" style={toolbarButton} onClick={() => setBulk({ kind: 'edit' })}>
+                      <Pencil size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Edit a field
                     </button>
-                    <button type="button" className="m-button" data-size="sm" style={toolbarButton}>
-                      <List size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Add to list
-                    </button>
-                    <button type="button" className="m-button" data-size="sm" style={toolbarButton}>
+                    <button type="button" className="m-button" data-size="sm" style={toolbarButton} onClick={() => setBulk({ kind: 'delete' })}>
                       <Trash2 size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Delete
                     </button>
                   </div>
@@ -181,15 +296,9 @@ function RecordTable({
                   />
                 </th>
                 {columns.map((column) => {
-                  const direction = activeSort?.property === column.id ? activeSort.direction : undefined;
-                  const numeric = NUMERIC.has(column.type);
+                  const direction = sort?.property === column.id ? sort.direction : undefined;
                   return (
-                    <th
-                      key={column.id}
-                      scope="col"
-                      data-numeric={numeric ? '' : undefined}
-                      aria-sort={direction ? (direction === 'asc' ? 'ascending' : 'descending') : undefined}
-                    >
+                    <th key={column.id} scope="col" data-numeric={NUMERIC.has(column.type) ? '' : undefined} aria-sort={direction ? (direction === 'asc' ? 'ascending' : 'descending') : undefined}>
                       <button
                         type="button"
                         onClick={() => onSort({ property: column.id, direction: direction === 'asc' ? 'desc' : 'asc' })}
@@ -246,7 +355,7 @@ function RecordTable({
       {data && records.length === 0 ? (
         <div className="m-stack" data-gap="1" style={{ padding: 'var(--m-space-10) var(--m-space-4)', textAlign: 'center', alignItems: 'center' }}>
           <span style={{ fontWeight: 'var(--m-font-weight-medium)' }}>No {object.plural.toLowerCase()} match</span>
-          <span style={small}>{search ? `Nothing in "${view.name}" matches "${search}".` : `"${view.name}" is empty right now.`}</span>
+          <span style={small}>{search ? `Nothing in "${viewName}" matches "${search}".` : `"${viewName}" is empty right now.`}</span>
         </div>
       ) : null}
       <div className="m-cluster" data-justify="center" style={{ padding: 'var(--m-space-2)', borderBlockStart: 'var(--m-border-width-thin) solid var(--m-color-border-muted)' }}>
@@ -262,30 +371,84 @@ function RecordTable({
           {total === undefined ? 'Loading…' : total === 0 ? '0 results' : `${first.toLocaleString('en-US')}–${last.toLocaleString('en-US')} of ${total.toLocaleString('en-US')}`}
         </span>
       </div>
+      {bulk?.kind === 'edit' ? <BulkEditDialog object={object} ids={ids} initialProperty={bulk.property} onClose={() => setBulk(undefined)} onDone={finishBulk} /> : null}
+      <Modal
+        open={bulk?.kind === 'delete'}
+        size="sm"
+        tone="danger"
+        title={`Delete ${ids.length.toLocaleString('en-US')} ${noun}?`}
+        description="They are removed along with their notes and activity. In the finished product they go to a recycle bin for 90 days; in this mock they are gone until the page reloads."
+        submitLabel={`Delete ${ids.length.toLocaleString('en-US')} ${noun}`}
+        busy={busy}
+        error={bulkError}
+        onClose={() => setBulk(undefined)}
+        onSubmit={removeSelected}
+      />
     </>
   );
 }
 
-/** The index page for any object: saved views, search, sorting, selection and paging, all from its definition. */
+/** Save the current filters, columns and sort as a new view. */
+function SaveViewDialog({ object, view, settings, onClose, onSaved }: { object: ObjectDefinition; view: ViewDefinition; settings: { columns: string[]; filters: Filter[]; sort?: Sort }; onClose: () => void; onSaved: (viewId: string) => void }) {
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function save() {
+    setBusy(true);
+    setError(undefined);
+    try {
+      const saved = await api.saveView({ objectId: object.id, name, ...settings });
+      onSaved(saved.id);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The view could not be saved.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open size="sm" title="Save as a new view" description={`A copy of "${view.name}" with your changes. It appears as a tab for everyone.`} submitLabel="Save view" busy={busy} error={error} onClose={onClose} onSubmit={save}>
+      <div className="m-field">
+        <label className="m-field-label" htmlFor="view-name">
+          Name
+        </label>
+        <input className="m-input" id="view-name" value={name} onChange={(event) => setName(event.target.value)} required />
+      </div>
+    </Modal>
+  );
+}
+
+/** The index page for any object: saved views, filters, columns, search, sorting, selection, bulk actions and paging, all from its definition. */
 export function RecordList() {
   const { objectId } = useParams();
-  const { object: findObject } = useWorkspace();
-  const object = findObject(objectId);
+  const workspace = useWorkspace();
+  const object = workspace.object(objectId);
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
   const [total, setTotal] = useState<number>();
+  const [dialog, setDialog] = useState<{ kind: 'filter'; index?: number } | { kind: 'columns' } | { kind: 'save' }>();
+  const [savingView, setSavingView] = useState(false);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: the count belongs to one object
   useEffect(() => setTotal(undefined), [objectId]);
 
-  if (!object) return <Navigate to="/" replace />;
+  const view = object?.views.find((item) => item.id === params.get('view')) ?? object?.views[0];
+  const filterParam = params.get('f');
+  const columnParam = params.get('cols');
+  const sortParam = params.get('sort');
+  // What is on screen: the saved view, with any changes made since.
+  const filters = useMemo(() => parseFilters(filterParam) ?? view?.filters ?? [], [filterParam, view]);
+  const columns = useMemo(() => (columnParam ? columnParam.split(',') : (view?.columns ?? [])), [columnParam, view]);
+  const sort = useMemo(() => parseSort(sortParam) ?? view?.sort, [sortParam, view]);
 
-  const view = object.views.find((item) => item.id === params.get('view')) ?? (object.views[0] as ViewDefinition);
+  if (!object || !view) return <Navigate to="/" replace />;
+
   const search = params.get('q') ?? '';
-  const sort = parseSort(params.get('sort'));
   const page = Math.max(1, Number(params.get('page')) || 1);
   const layout = object.board && params.get('layout') === 'board' ? 'board' : 'table';
+  const changed = filterParam !== null || columnParam !== null || sortParam !== null;
 
   function update(changes: Record<string, string | undefined>) {
     const next = new URLSearchParams(params);
@@ -294,6 +457,21 @@ export function RecordList() {
       else next.set(key, value);
     }
     setParams(next, { replace: true });
+  }
+
+  const setFilters = (next: Filter[]) => update({ f: JSON.stringify(next), page: undefined });
+  const reset = () => update({ f: undefined, cols: undefined, sort: undefined, page: undefined });
+
+  async function saveOver() {
+    if (!object || !view) return;
+    setSavingView(true);
+    try {
+      await api.saveView({ objectId: object.id, viewId: view.id, name: view.name, columns, filters, sort });
+      await workspace.reload();
+      reset();
+    } finally {
+      setSavingView(false);
+    }
   }
 
   return (
@@ -322,7 +500,7 @@ export function RecordList() {
         </div>
         <section className="m-card" aria-label={object.plural} style={{ padding: 0, overflow: 'hidden' }}>
           <div className="m-cluster" data-justify="between" style={{ padding: 'var(--m-space-2)' }}>
-            <ViewTabs object={object} view={view} onSelect={(viewId) => update({ view: viewId, page: undefined, sort: undefined })} />
+            <ViewTabs object={object} view={view} onSelect={(viewId) => update({ view: viewId, page: undefined, sort: undefined, f: undefined, cols: undefined })} />
             <div className="m-cluster" data-gap="2">
               <SearchBox value={search} label={`Search ${object.plural.toLowerCase()}`} onChange={(value) => update({ q: value, page: undefined })} />
               {object.board ? (
@@ -337,12 +515,60 @@ export function RecordList() {
               ) : null}
             </div>
           </div>
+          <div className="m-cluster" data-justify="between" data-gap="2" style={{ padding: '0 var(--m-space-2) var(--m-space-2)' }}>
+            <div className="m-cluster" data-gap="1" role="group" aria-label="Filters">
+              <span style={{ display: 'inline-flex', color: 'var(--m-color-fg-subtle)', paddingInline: 'var(--m-space-1)' }}>
+                <FilterIcon size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />
+              </span>
+              {filters.map((filter, index) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: filters have no identity beyond their position
+                <span key={index} className="m-badge" style={{ gap: 'var(--m-space-1)' }}>
+                  <button type="button" onClick={() => setDialog({ kind: 'filter', index })} style={{ all: 'unset', cursor: 'pointer' }}>
+                    {describeFilter(filter, object, workspace.users)}
+                  </button>
+                  <button type="button" aria-label={`Remove filter: ${describeFilter(filter, object, workspace.users)}`} onClick={() => setFilters(filters.filter((_, position) => position !== index))} style={{ all: 'unset', cursor: 'pointer', display: 'inline-flex' }}>
+                    <X size={ICON.inline} strokeWidth={ICON.strokeWidth} aria-hidden />
+                  </button>
+                </span>
+              ))}
+              {filters.length === 0 ? <span style={small}>No filters</span> : null}
+              <button type="button" className="m-button" data-variant="ghost" data-size="sm" onClick={() => setDialog({ kind: 'filter' })}>
+                <Plus size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Filter
+              </button>
+            </div>
+            <div className="m-cluster" data-gap="1">
+              {changed ? (
+                <>
+                  <button type="button" className="m-button" data-variant="ghost" data-size="sm" onClick={reset}>
+                    Reset
+                  </button>
+                  <button type="button" className="m-button" data-size="sm" disabled={savingView} onClick={() => void saveOver()}>
+                    {savingView ? 'Saving…' : `Save to "${view.name}"`}
+                  </button>
+                  <button type="button" className="m-button" data-size="sm" onClick={() => setDialog({ kind: 'save' })}>
+                    Save as new view
+                  </button>
+                </>
+              ) : null}
+              {layout === 'table' ? (
+                <button type="button" className="m-button" data-variant="ghost" data-size="sm" onClick={() => setDialog({ kind: 'columns' })}>
+                  <SlidersHorizontal size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Columns
+                </button>
+              ) : (
+                <span style={{ ...small, display: 'inline-flex', alignItems: 'center', gap: 'var(--m-space-1)' }}>
+                  <LayoutList size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Drag a card to change its stage
+                </span>
+              )}
+            </div>
+          </div>
           {layout === 'board' ? (
-            <RecordBoard object={object} view={view} search={search} />
+            <RecordBoard object={object} filters={filters} search={search} />
           ) : (
             <RecordTable
               object={object}
-              view={view}
+              columnIds={columns}
+              filters={filters}
+              viewName={view.name}
               search={search}
               sort={sort}
               page={page}
@@ -360,6 +586,47 @@ export function RecordList() {
           onCreated={(record) => {
             setCreating(false);
             navigate(`/${object.id}/${record.id}`);
+          }}
+        />
+      ) : null}
+      {dialog?.kind === 'filter' ? (
+        <FilterDialog
+          object={object}
+          initial={dialog.index === undefined ? undefined : filters[dialog.index]}
+          onClose={() => setDialog(undefined)}
+          onSave={(filter) => {
+            setFilters(dialog.index === undefined ? [...filters, filter] : filters.map((item, position) => (position === dialog.index ? filter : item)));
+            setDialog(undefined);
+          }}
+        />
+      ) : null}
+      {dialog?.kind === 'columns' ? (
+        <ColumnsDialog
+          object={object}
+          columns={columns}
+          onClose={() => setDialog(undefined)}
+          onSave={(next) => {
+            // Keep the object's own order, so columns don't jump around as they are ticked.
+            update({
+              cols: object.properties
+                .filter((property) => next.includes(property.id))
+                .map((property) => property.id)
+                .join(','),
+            });
+            setDialog(undefined);
+          }}
+        />
+      ) : null}
+      {dialog?.kind === 'save' ? (
+        <SaveViewDialog
+          object={object}
+          view={view}
+          settings={{ columns, filters, sort }}
+          onClose={() => setDialog(undefined)}
+          onSaved={async (viewId) => {
+            await workspace.reload();
+            setDialog(undefined);
+            update({ view: viewId, f: undefined, cols: undefined, sort: undefined, page: undefined });
           }}
         />
       ) : null}

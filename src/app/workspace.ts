@@ -8,6 +8,10 @@ export type WorkspaceValue = Workspace & {
   user(id: string | null | undefined): User | undefined;
   /** Fetches the definitions again, after an object or property changed. Resolves once they are in. */
   reload(): Promise<void>;
+  /** Goes up whenever records changed somewhere else on the page (the assistant, a bulk action). Queries re-run on it. */
+  revision: number;
+  /** Says that records changed, so every open list and record page re-reads. */
+  touch(): void;
 };
 
 /**

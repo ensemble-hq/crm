@@ -7,6 +7,8 @@ import { WorkspaceContext, type WorkspaceValue } from './workspace';
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<Workspace>();
   const [error, setError] = useState<Error>();
+  const [revision, setRevision] = useState(0);
+  const touch = useCallback(() => setRevision((value) => value + 1), []);
 
   const reload = useCallback(
     () =>
@@ -34,8 +36,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       object: (id) => data.objects.find((object) => object.id === id),
       user: (id) => (id ? data.users.find((user) => user.id === id) : undefined),
       reload,
+      revision,
+      touch,
     };
-  }, [data, reload]);
+  }, [data, reload, revision, touch]);
 
   if (error && !value) {
     return (

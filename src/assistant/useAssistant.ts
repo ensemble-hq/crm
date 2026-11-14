@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useWorkspace } from '../app/workspace';
 import { type EngineContext, respond } from './mock-engine';
-import type { Attachment, CanvasItem, CanvasItemInput, ChatMessage, PlanStep } from './types';
+import type { Attachment, CanvasItem, CanvasItemInput, ChatMessage, PageContext, PlanStep } from './types';
 
 type PlanRun = { steps: Array<() => Promise<void>>; doneText: string };
 
@@ -22,8 +22,10 @@ const TICK_MS = 28;
 const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /** One conversation with the assistant: its messages, its canvas, and the plans waiting for approval. */
-export function useAssistant(): Assistant {
+export function useAssistant(environment: { page: () => PageContext; navigate: (to: string) => void }): Assistant {
   const workspace = useWorkspace();
+  const surroundings = useRef(environment);
+  surroundings.current = environment;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [canvas, setCanvas] = useState<CanvasItem[]>([]);
   const [working, setWorking] = useState(false);
@@ -32,6 +34,9 @@ export function useAssistant(): Assistant {
   const sequence = useRef(0);
   const plans = useRef(new Map<string, PlanRun>());
   const pendingPlan = useRef<string>();
+  /** Tells open pages that records changed. Held in a ref so plan runs always call the current one. */
+  const touched = useRef(workspace.touch);
+  touched.current = workspace.touch;
   /** What has been written into each assistant message so far, so a second paragraph appends. */
   const written = useRef(new Map<string, string>());
 
@@ -81,6 +86,7 @@ export function useAssistant(): Assistant {
           setStep(index, 'done');
         }
         patchPlan(planId, (plan) => ({ ...plan, state: 'done' }));
+        touched.current();
         setActivity('');
         await write(messageId, run.doneText);
       } catch (error) {
@@ -165,6 +171,9 @@ export function useAssistant(): Assistant {
             return id;
           },
           refreshWorkspace: () => workspace.reload(),
+          page: surroundings.current.page(),
+          navigate: (to) => surroundings.current.navigate(to),
+          touch: () => workspace.touch(),
           runPendingPlan: async () => {
             const planId = pendingPlan.current;
             if (!planId) return false;

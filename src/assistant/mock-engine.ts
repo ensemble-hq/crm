@@ -1,10 +1,11 @@
 import { api } from '../api';
-import type { ObjectDefinition, PropertyType, PropertyValue, User } from '../contracts/metadata';
+import type { Filter, ObjectDefinition, PropertyType, PropertyValue, User } from '../contracts/metadata';
 import type { CrmRecord } from '../contracts/records';
-import { MOCK_TODAY, OPEN_STAGES } from '../mock/definitions';
+import { MOCK_NOW, MOCK_TODAY, OPEN_STAGES } from '../mock/definitions';
 import { formatDate } from '../ui/PropertyValue';
-import { compactCurrency } from '../ui/styles';
-import type { Attachment, CanvasItemInput } from './types';
+import { describeFilter } from '../ui/filters';
+import { compactCurrency, currency } from '../ui/styles';
+import type { Attachment, CanvasItemInput, PageContext } from './types';
 
 /**
  * A scripted stand-in for the assistant's model. It recognises a handful of requests by keyword,
@@ -29,6 +30,12 @@ export type EngineContext = {
   propose(plan: { title: string; summary: string; steps: Array<{ label: string; detail?: string; run: () => Promise<void> }>; doneText: string; doneLink?: { to: string; label: string } }): string;
   /** Fetches the object definitions again, after the assistant changed one. */
   refreshWorkspace(): Promise<void>;
+  /** The page the user is on. */
+  page: PageContext;
+  /** Takes the user to another page. */
+  navigate(to: string): void;
+  /** Says that records changed, so open pages re-read. */
+  touch(): void;
   /** Runs the plan the user was last shown. False when there is none waiting. */
   runPendingPlan(): Promise<boolean>;
 };
@@ -329,6 +336,135 @@ async function customization(ctx: EngineContext, request: string): Promise<void>
   await ctx.say('That is a change to how the CRM works, not to the data in it, so I would hand it to Ensemble. It builds the change in a preview you can try before anything goes live. The hand-off is on the right.');
 }
 
+function optionLabel(object: ObjectDefinition, propertyId: string, value: PropertyValue | undefined): string | undefined {
+  const option = object.properties.find((property) => property.id === propertyId)?.options?.find((item) => item.id === value);
+  return option?.label;
+}
+
+/** "Summarize this": reads the record on screen, its activity and what it is linked to. */
+async function summarizeRecord(ctx: EngineContext, recordId: string): Promise<void> {
+  const [detail, activity, related] = await ctx.tool(
+    'get_record',
+    'Reading this record, its activity and what it is linked to',
+    () => Promise.all([api.getRecord(recordId), api.listActivity(recordId), api.listRelated(recordId)]),
+    ([, items]) => plural(items.length, 'activity').replace('activitys', 'activities'),
+  );
+  const record = detail.record;
+  const object = ctx.objects.find((item) => item.id === record.objectId);
+  if (!object) return;
+  const value = (id: string) => record.properties[id];
+  const name = String(value(object.primaryProperty) ?? 'This record');
+  const refLabel = (id: string) => (typeof value(id) === 'string' ? detail.references[value(id) as string]?.label : undefined);
+  const owner = ctx.users.find((user) => user.id === value('owner'))?.name;
+
+  let opening: string;
+  if (object.id === 'deals') {
+    const amount = typeof value('amount') === 'number' ? currency(value('amount') as number) : 'an unpriced';
+    opening = `${name} is a ${amount} deal${refLabel('company') ? ` with ${refLabel('company')}` : ''}, in ${optionLabel(object, 'stage', value('stage')) ?? 'no stage'}${typeof value('closeDate') === 'string' ? `, due to close ${formatDate(value('closeDate') as string)}` : ''}.`;
+  } else if (object.id === 'contacts') {
+    opening = `${name} is ${value('jobTitle') ? `${String(value('jobTitle'))}` : 'a contact'}${refLabel('company') ? ` at ${refLabel('company')}` : ''}, currently ${(optionLabel(object, 'lifecycleStage', value('lifecycleStage')) ?? 'unclassified').toLowerCase()}.`;
+  } else if (object.id === 'companies') {
+    opening = `${name} is a ${(optionLabel(object, 'industry', value('industry')) ?? '').toLowerCase()} company with ${optionLabel(object, 'size', value('size')) ?? 'an unknown number of'} employees, marked as ${(optionLabel(object, 'type', value('type')) ?? 'unclassified').toLowerCase()}.`;
+  } else {
+    opening = `${name} is a ${object.singular.toLowerCase()}.`;
+  }
+  await ctx.say(`${opening} ${owner ? `${owner} owns it.` : 'Nobody owns it yet.'}`);
+
+  const real = activity.filter((item) => item.kind !== 'change');
+  const counts = (['email', 'call', 'meeting', 'note', 'task'] as const).map((kind) => ({ kind, count: real.filter((item) => item.kind === kind).length })).filter((entry) => entry.count > 0);
+  const latest = real[0];
+  if (latest) {
+    const days = Math.max(0, Math.round((Date.parse(MOCK_NOW) - Date.parse(latest.occurredAt)) / 86_400_000));
+    const breakdown = counts.map((entry) => plural(entry.count, entry.kind)).join(', ');
+    const quiet = object.id === 'deals' && OPEN_STAGES.includes(String(value('stage'))) && days > 14;
+    await ctx.say(
+      `There is ${breakdown} on record. The most recent was "${latest.title}" ${days === 0 ? 'today' : `${plural(days, 'day')} ago`}${latest.body ? `: ${latest.body}` : '.'}${quiet ? ' Nothing has happened since, so this one needs a nudge.' : ''}`,
+    );
+  } else {
+    await ctx.say('Nothing has been logged on it yet.');
+  }
+  const links = related.filter((group) => group.total > 0).map((group) => plural(group.total, (ctx.objects.find((item) => item.id === group.objectId)?.singular ?? 'record').toLowerCase()));
+  if (links.length > 0) await ctx.say(`It is linked to ${links.join(' and ')}.`);
+  ctx.suggest(['Draft a follow-up email', 'Add a note: left a voicemail']);
+}
+
+/** "Draft an email": finds who to write to from the record on screen and writes a first version. */
+async function draftEmail(ctx: EngineContext, recordId: string): Promise<void> {
+  const found = await ctx.tool(
+    'get_record',
+    'Finding who to write to and what was last said',
+    async () => {
+      const detail = await api.getRecord(recordId);
+      const record = detail.record;
+      const contactId = record.objectId === 'contacts' ? record.id : typeof record.properties.contact === 'string' ? record.properties.contact : undefined;
+      const contact = !contactId ? undefined : contactId === record.id ? record : (await api.getRecord(contactId)).record;
+      const activity = await api.listActivity(recordId);
+      return { record, contact, last: activity.find((item) => item.kind !== 'change') };
+    },
+    (result) => (result.contact ? String(result.contact.properties.name) : 'no contact found'),
+  );
+  const email = found.contact?.properties.email;
+  if (!found.contact || typeof email !== 'string') {
+    await ctx.say('I could not find a contact with an email address on this record. Open a contact, or a deal with a primary contact, and ask again.');
+    return;
+  }
+  const toName = String(found.contact.properties.name ?? '');
+  const first = toName.split(' ')[0] ?? toName;
+  const me = ctx.currentUser.name.split(' ')[0] ?? ctx.currentUser.name;
+  const about = found.record.objectId === 'deals' ? String(found.record.properties.name ?? 'our proposal').toLowerCase() : 'our last conversation';
+  const body = [
+    `Hi ${first},`,
+    `I wanted to follow up on ${about}.${found.last?.body ? ` When we last spoke: ${found.last.body.charAt(0).toLowerCase()}${found.last.body.slice(1)}` : ''}`,
+    'Is there anything you need from me to move this forward? I can also set up a short call this week if that is easier.',
+    `Best,\n${me}`,
+  ].join('\n\n');
+  ctx.show({ kind: 'draft', title: `Email to ${toName}`, to: email, toName, subject: `Following up on ${about}`, body });
+  await ctx.say(`I have drafted a follow-up to ${toName}, using the last thing logged on this record. Edit it before you send; nothing has been sent.`);
+}
+
+/** Turns phrases like "mine", "closing this month" or "over $50k" into filters for an object. */
+function filtersFrom(text: string, object: ObjectDefinition): Filter[] {
+  const has = (id: string) => object.properties.some((property) => property.id === id);
+  const filters: Filter[] = [];
+  if (/\b(mine|my|i own)\b/.test(text) && has('owner')) filters.push({ property: 'owner', operator: 'in', value: ['$me'] });
+  if (/unassigned|no owner|without an owner/.test(text) && has('owner')) filters.push({ property: 'owner', operator: 'empty' });
+  if (has('stage')) {
+    if (/\bwon\b/.test(text)) filters.push({ property: 'stage', operator: 'in', value: ['won'] });
+    else if (/\blost\b/.test(text)) filters.push({ property: 'stage', operator: 'in', value: ['lost'] });
+    else if (/\bopen\b|closing|pipeline/.test(text)) filters.push({ property: 'stage', operator: 'in', value: OPEN_STAGES });
+  }
+  if (/this month/.test(text) && has('closeDate')) filters.push({ property: 'closeDate', operator: 'between', value: ['$monthStart', '$monthEnd'] });
+  const amount = /(?:over|above|more than|bigger than|at least)\s*\$?\s*([\d,.]+)\s*(k|m)?/.exec(text);
+  if (amount?.[1] && has('amount')) {
+    const scale = amount[2] === 'm' ? 1_000_000 : amount[2] === 'k' ? 1_000 : 1;
+    filters.push({ property: 'amount', operator: 'gt', value: Number(amount[1].replace(/,/g, '')) * scale });
+  }
+  if (/high priority|urgent/.test(text) && has('priority')) filters.push({ property: 'priority', operator: 'in', value: ['high'] });
+  if (has('lifecycleStage')) {
+    if (/\bcustomers?\b/.test(text)) filters.push({ property: 'lifecycleStage', operator: 'in', value: ['customer'] });
+    else if (/\bleads?\b/.test(text)) filters.push({ property: 'lifecycleStage', operator: 'in', value: ['lead', 'mql'] });
+  }
+  if (has('type') && object.id === 'companies') {
+    if (/\bcustomers?\b/.test(text)) filters.push({ property: 'type', operator: 'in', value: ['customer'] });
+    else if (/\bprospects?\b/.test(text)) filters.push({ property: 'type', operator: 'in', value: ['prospect'] });
+  }
+  return filters;
+}
+
+/** "Show only mine closing this month": sets the list's filters for the user. */
+async function showFiltered(ctx: EngineContext, object: ObjectDefinition, filters: Filter[]): Promise<void> {
+  const found = await ctx.tool(
+    'search_records',
+    `Filtering ${object.plural.toLowerCase()}`,
+    () => api.listRecords({ objectId: object.id, filters, page: 1, pageSize: 1 }),
+    (result) => plural(result.total, object.singular.toLowerCase()),
+  );
+  ctx.navigate(`/${object.id}?f=${encodeURIComponent(JSON.stringify(filters))}`);
+  await ctx.say(
+    `Showing ${plural(found.total, object.singular.toLowerCase())}: ${filters.map((filter) => describeFilter(filter, object, ctx.users)).join('; ')}. The list behind this is filtered now; use "Save as new view" there to keep it.`,
+  );
+}
+
 async function help(ctx: EngineContext): Promise<void> {
   await pause(300);
   await ctx.say('This is a scripted preview of the assistant, so it understands a few requests. Try one of these. The answers use the real data in this workspace.');
@@ -343,6 +479,27 @@ export async function respond(input: { text: string; attachments: Attachment[] }
 
   if (file) return importFile(ctx, file);
   if (/sample file/.test(text)) return importFile(ctx, SAMPLE_FILE);
+  const recordId = ctx.page.recordId;
+  if (recordId) {
+    const note = /^(?:add |log |leave )?(?:a )?note(?: that|:)?\s+(.{3,})$/i.exec(input.text.trim());
+    if (note?.[1]) {
+      const body = note[1];
+      await ctx.tool('add_activity', 'Adding the note to this record', () => api.createActivity({ recordId, kind: 'note', title: 'Note', body }), () => 'saved');
+      ctx.touch();
+      await ctx.say('Added. It is at the top of the timeline.');
+      return;
+    }
+    if (/summar|where does (this|it) stand|catch me up|brief me|what.s happening|tell me about this/.test(text)) return summarizeRecord(ctx, recordId);
+    if (/e-?mail|draft|write to|follow.?up|reach out/.test(text)) return draftEmail(ctx, recordId);
+  }
+  if (/\b(show|filter|only|list|find)\b/.test(text)) {
+    const target =
+      ctx.objects.find((object) => text.includes(object.plural.toLowerCase()) || new RegExp(`\\b${object.singular.toLowerCase()}\\b`).test(text)) ??
+      ctx.objects.find((object) => object.id === ctx.page.objectId) ??
+      (/clos|won|lost|pipeline|priority|\$/.test(text) ? ctx.objects.find((object) => object.id === 'deals') : undefined);
+    const filters = target ? filtersFrom(text, target) : [];
+    if (target && filters.length > 0) return showFiltered(ctx, target, filters);
+  }
   if (/\b(run|do it|go ahead|yes|approve)\b/.test(text)) {
     if (await ctx.runPendingPlan()) return;
     await ctx.say('There is no plan waiting to run. Ask me for something first, and I will propose one.');
