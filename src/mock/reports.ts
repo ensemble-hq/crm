@@ -8,7 +8,7 @@ import { OPEN_STAGES, users } from './definitions';
 const MAX_GROUPS = 12;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const reports: ReportDefinition[] = [
+export const reports: ReportDefinition[] = [
   { id: 'rep_pipeline', name: 'Open pipeline by stage', objectId: 'deals', measure: { kind: 'sum', property: 'amount' }, groupBy: 'stage', filters: [{ property: 'stage', operator: 'in', value: OPEN_STAGES }], chart: 'bars' },
   {
     id: 'rep_won_month',
@@ -51,7 +51,7 @@ const reports: ReportDefinition[] = [
   { id: 'rep_tasks', name: 'Open tasks by person', objectId: 'tasks', measure: { kind: 'count' }, groupBy: 'owner', filters: [{ property: 'status', operator: 'in', value: ['open'] }], chart: 'bars' },
 ];
 
-const dashboards: Dashboard[] = [{ id: 'dash_sales', name: 'Sales overview', reportIds: ['rep_deal_size', 'rep_pipeline', 'rep_won_month', 'rep_won_owner', 'rep_new_contacts', 'rep_lifecycle'] }];
+export const dashboards: Dashboard[] = [{ id: 'dash_sales', name: 'Sales overview', reportIds: ['rep_deal_size', 'rep_pipeline', 'rep_won_month', 'rep_won_owner', 'rep_new_contacts', 'rep_lifecycle'] }];
 
 function bucketKey(value: string, bucket: 'month' | 'quarter'): string {
   const month = Number(value.slice(5, 7));

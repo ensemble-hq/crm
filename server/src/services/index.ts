@@ -20,6 +20,8 @@ import { PeopleService } from './people/people.service';
 import { RecordEvents } from './records/records.events';
 import { RecordsRepository } from './records/records.repository';
 import { RecordsService } from './records/records.service';
+import { DashboardsRepository, GoalsRepository, ReportsRepository } from './reports/reports.repository';
+import { ReportsService } from './reports/reports.service';
 import { WorkflowRunner } from './workflows/workflow.runner';
 import { WorkflowRunsRepository, WorkflowsRepository } from './workflows/workflows.repository';
 import { WorkflowsService } from './workflows/workflows.service';
@@ -58,8 +60,9 @@ export function createServices(deps: ServiceDeps) {
   const mail = new MailService(deps.email, inbound, conversations, messages, cursors, recordsRepository, activityRepository, notifications, outbox, events, deps.transaction);
   const inbox = new InboxService(conversations, messages, templates, inbound, cursors, mail, recordsRepository, activityRepository, people, workspace, deps.transaction);
   const runner = new WorkflowRunner(workflowsRepository, runsRepository, recordsRepository, events, workspace, people, notifications, templates, mail);
+  const reports = new ReportsService(new ReportsRepository(deps.db), new DashboardsRepository(deps.db), new GoalsRepository(deps.db), records, recordsRepository, people, workspace);
   const importer = new ImportService(recordsRepository, events, workspace, people);
-  return { people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail };
+  return { people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports };
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: each handler's input is checked against its operation's schema before it runs
@@ -70,7 +73,7 @@ type Handler = (ctx: Context, input: any) => Promise<unknown>;
  * is left out of what the server offers.
  */
 export function registerServices(communication: CommunicationLayer, deps: ServiceDeps): Operation[] {
-  const { people, workspace, records, activity, brief, notifications, workflows, importer, inbox, mail } = createServices(deps);
+  const { people, workspace, records, activity, brief, notifications, workflows, importer, inbox, mail, reports } = createServices(deps);
 
   const handlers: Record<string, Handler> = {
     'workspace.get': (ctx) => workspace.get(ctx),
@@ -111,6 +114,14 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     'templates.list': (ctx) => inbox.listTemplates(ctx),
     'templates.save': (ctx, input) => inbox.saveTemplate(ctx, input),
     'templates.delete': (ctx, input) => inbox.deleteTemplate(ctx, input),
+    'reports.list': (ctx) => reports.list(ctx),
+    'reports.run': (ctx, input) => reports.run(ctx, input),
+    'reports.save': (ctx, input) => reports.save(ctx, input),
+    'reports.delete': (ctx, input) => reports.remove(ctx, input),
+    'dashboards.list': (ctx) => reports.listDashboards(ctx),
+    'dashboards.save': (ctx, input) => reports.saveDashboard(ctx, input),
+    'forecast.get': (ctx) => reports.forecast(ctx),
+    'forecast.setGoal': (ctx, input) => reports.setGoal(ctx, input),
   };
 
   // The list in the contract covers the whole CRM; the server serves the ones it has built so far.

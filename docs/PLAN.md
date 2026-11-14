@@ -283,11 +283,12 @@ Decided:
 Built so far (in `server/`):
 
 - Tables for objects, people, teams, roles, records, activity, workflows and their runs, notifications, and the event outbox. Filters, search and sorting run over JSONB.
-- 38 operations (workspace, records, import, activity, the record brief, people, teams, roles, "view as", workflows, notifications, the inbox and email templates), served over HTTP at `/api/ops/<name>` and as MCP tools at `/api/mcp`, both generated from `src/contracts/operations.ts`.
+- 46 operations (workspace, records, import, activity, the record brief, people, teams, roles, "view as", workflows, notifications, the inbox, email templates, reports, dashboards and the forecast), served over HTTP at `/api/ops/<name>` and as MCP tools at `/api/mcp`, both generated from `src/contracts/operations.ts`.
 - Every operation first works out who it runs as, and the records service turns that person's role into SQL, so the app, the API and an agent over MCP all get exactly what the person may see and change.
 - Every record write records an event in the same transaction. The worker (`server/src/worker.ts`) relays events through Redis and runs workflows from them; an event delivered twice runs a workflow once, and what a workflow changes never sets off another workflow.
 - Import reads everything a file needs in a few queries, writes in bulk and announces each record, so 5,000 rows take about two seconds and workflows run for imported records. A dry run writes nothing and says what would happen.
 - Email that is not lost. An arriving message is stored before the provider is told it was received, then filed into a conversation from the stored copy; one delivered twice is stored once. A sent message is stored as queued in the same transaction as the action, and the worker sends it with its id as the idempotency key, retrying with a growing wait. A sweep on a timer finishes anything left over and asks the provider what arrived without the CRM being told. Every outgoing message ends as sent or failed, a failure tells its sender, and `inbox.health` gives the numbers to watch. The email service sits behind `server/src/email/provider.ts`; `dev` keeps mail in the database and misbehaves on purpose for two test domains.
+- Reports and the forecast are grouping and adding up done by the database, over the records the acting person may see. Every seeded report and the forecast give the same numbers on the server as on the mock.
 - Sign-in behind an interface with `dev` and `jwt` providers, and a seed of the demo company.
 - The web app's live mode sends those operations to the server and everything else to the mock.
 

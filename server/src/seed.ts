@@ -5,6 +5,7 @@ import type { WorkflowSettings } from '../../src/contracts/workflows';
 import { objects, users } from '../../src/mock/definitions';
 import { dataset, mulberry32 } from '../../src/mock/generate';
 import { emailTemplates, inbox } from '../../src/mock/inbox';
+import { dashboards, reports } from '../../src/mock/reports';
 import { PLACEMENT, roles, teams } from '../../src/mock/team';
 import { TENANT_ID } from './config';
 
@@ -27,6 +28,9 @@ const HAPPENINGS: Array<{ kind: string; title: string; body?: string }> = [
   { kind: 'meeting', title: 'Meeting: Quarterly review', body: 'Usage is up across both teams. They asked about adding seats in the new year.' },
   { kind: 'note', title: 'Note', body: 'Prefers email to calls. Best reached before 10am their time.' },
 ];
+
+/** What each person is expected to close this quarter. */
+const GOALS: Record<string, number> = { usr_maya: 2_200_000, usr_priya: 2_000_000, usr_jonas: 1_500_000, usr_dario: 4_000_000, usr_aiko: 1_200_000, usr_femi: 950_000 };
 
 /** The workflows the demo company starts with. */
 const WORKFLOWS: Array<WorkflowSettings & { id: string }> = [
@@ -76,7 +80,7 @@ async function main(): Promise<void> {
   const db = database.db;
   try {
     await runMigrations(database.adapter, { migrationsFolder: 'drizzle' });
-    if (process.argv.includes('--reset')) await db.execute(sql`truncate activities, records, objects, people, teams, roles, workflows, workflow_runs, notifications, mariachi_event_outbox, conversations, messages, inbound_emails, email_templates, mail_cursors, dev_mail`);
+    if (process.argv.includes('--reset')) await db.execute(sql`truncate activities, records, objects, people, teams, roles, workflows, workflow_runs, notifications, mariachi_event_outbox, conversations, messages, inbound_emails, email_templates, mail_cursors, dev_mail, reports, dashboards, goals`);
     const [existing] = (await db.execute(sql`select count(*)::int as total from objects`)) as unknown as Array<{ total: number }>;
     if ((existing?.total ?? 0) > 0) {
       console.log('The database already has data. Run with --reset to replace it.');
@@ -130,6 +134,12 @@ async function main(): Promise<void> {
         select row.id, ${TENANT_ID}, row.record_id, row.kind, row.title, row.body, row.actor_id, row.occurred_at
         from jsonb_to_recordset(${JSON.stringify(activities.slice(start, start + BATCH * 2))}::jsonb) as row(id text, record_id text, kind text, title text, body text, actor_id text, occurred_at timestamptz)`);
     }
+    for (const [index, { id, ...settings }] of reports.entries()) {
+      await db.execute(sql`insert into reports (id, tenant_id, settings, created_at) values (${id}, ${TENANT_ID}, ${JSON.stringify(settings)}::jsonb, now() - make_interval(mins => ${reports.length - index}))`);
+    }
+    for (const dashboard of dashboards) await db.execute(sql`insert into dashboards (id, tenant_id, name, report_ids) values (${dashboard.id}, ${TENANT_ID}, ${dashboard.name}, ${JSON.stringify(dashboard.reportIds)}::jsonb)`);
+    for (const [userId, amount] of Object.entries(GOALS)) await db.execute(sql`insert into goals (id, tenant_id, amount) values (${userId}, ${TENANT_ID}, ${amount})`);
+
     // The demo inbox: threads that already happened, so every message is either received or sent.
     for (const [index, template] of emailTemplates.entries()) {
       await db.execute(sql`insert into email_templates (id, tenant_id, name, subject, body, created_at) values (${template.id}, ${TENANT_ID}, ${template.name}, ${template.subject}, ${template.body}, now() - make_interval(mins => ${emailTemplates.length - index}))`);

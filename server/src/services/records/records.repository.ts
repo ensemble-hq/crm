@@ -58,6 +58,18 @@ export class RecordsRepository extends DrizzleRepository<RecordRow> {
     return this.rows(sql`select ${group} as value, count(*)::int as count, ${amount} as sum from records where ${this.scope(ctx, ...where)} group by 1`);
   }
 
+  /**
+   * Count and sum for each combination of some keys, where each key is a SQL expression that yields
+   * text or null. Reports and the forecast are built on this.
+   */
+  async aggregate(ctx: Context, where: SQL[], keys: SQL[], sumProperty: string | undefined, from: SQL = sql`records`): Promise<Array<{ keys: Array<string | null>; count: number; sum: number }>> {
+    const amount = sumProperty ? sql`coalesce(sum(case when jsonb_typeof(records.properties->${sumProperty}::text) = 'number' then (records.properties->>${sumProperty}::text)::numeric else 0 end), 0)::float8` : sql`0::float8`;
+    const selected = keys.length > 0 ? sql`${sql.join(keys.map((key, index) => sql`${key} as ${sql.raw(`k${index}`)}`), sql`, `)}, ` : sql``;
+    const grouping = keys.length > 0 ? sql`group by ${sql.join(keys.map((_, index) => sql.raw(String(index + 1))), sql`, `)}` : sql``;
+    const rows = await this.rows<Record<string, string | number | null>>(sql`select ${selected}count(*)::int as count, ${amount} as sum from ${from} where ${this.scope(ctx, ...where)} ${grouping}`);
+    return rows.map((row) => ({ keys: keys.map((_, index) => (row[`k${index}`] as string | null) ?? null), count: Number(row.count), sum: Number(row.sum) }));
+  }
+
   async insert(ctx: Context, record: { id: string; objectId: string; properties: Record<string, PropertyValue> }): Promise<CrmRecord> {
     await this.create(ctx, record);
     return (await this.one(ctx, record.id)) as CrmRecord;

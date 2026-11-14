@@ -4,6 +4,8 @@ import { conversationDetailSchema, conversationListSchema, conversationQuerySche
 import { filterSchema, objectDefinitionSchema, userSchema } from './metadata';
 import { activitySchema, createActivitySchema, importRequestSchema, importResultSchema, notificationSchema, referenceSchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi } from './records';
 import { workflowDetailSchema, workflowSchema, workflowSettingsSchema } from './workflows';
+import { dashboardSchema, reportDefinitionSchema, reportResultSchema, reportSettingsSchema } from './reports';
+import { forecastSchema } from './sales';
 import { accessSchema, deactivateMemberSchema, directorySchema, inviteMemberSchema, memberSchema, roleSchema, saveRoleSchema, saveTeamSchema, teamSchema, updateMemberSchema } from './team';
 
 /**
@@ -389,5 +391,78 @@ export const operations: Operation[] = [
     input: z.string().describe('The template\'s id.'),
     output: z.void(),
     effect: 'destructive',
+  },
+  {
+    name: 'reports.list',
+    method: 'listReports',
+    title: 'List saved reports',
+    description: 'Returns every saved report: what it counts or adds up, what it splits by, and which records it covers.',
+    input: none,
+    output: z.array(reportDefinitionSchema),
+    effect: 'read',
+  },
+  {
+    name: 'reports.run',
+    method: 'runReport',
+    title: 'Run a report',
+    description:
+      'Answers a question about the records without saving anything: count the records of one object, or add up or average a number property, optionally split by one property (dates split by month or quarter) and narrowed by filters. Use it for questions like "won revenue by owner this year" or "new contacts per month". Returns the groups, the overall figure and how many records were covered.',
+    input: reportSettingsSchema,
+    output: reportResultSchema,
+    effect: 'read',
+  },
+  {
+    name: 'reports.save',
+    method: 'saveReport',
+    title: 'Save a report',
+    description: 'Saves a report so it stays up to date, or replaces one when `id` is given. Add its id to a dashboard with dashboards.save to show it there.',
+    input: reportSettingsSchema.extend({ id: z.string().optional() }),
+    output: reportDefinitionSchema,
+    effect: 'write',
+  },
+  {
+    name: 'reports.delete',
+    method: 'deleteReport',
+    title: 'Delete a report',
+    description: 'Deletes a saved report and takes it off any dashboard.',
+    input: z.string().describe('The report\'s id.'),
+    output: z.void(),
+    effect: 'destructive',
+  },
+  {
+    name: 'dashboards.list',
+    method: 'listDashboards',
+    title: 'List dashboards',
+    description: 'Returns the dashboards, each with the ids of its reports in order.',
+    input: none,
+    output: z.array(dashboardSchema),
+    effect: 'read',
+  },
+  {
+    name: 'dashboards.save',
+    method: 'saveDashboard',
+    title: 'Change a dashboard',
+    description: 'Renames a dashboard or replaces its reports and their order.',
+    input: dashboardSchema,
+    output: dashboardSchema,
+    effect: 'write',
+  },
+  {
+    name: 'forecast.get',
+    method: 'getForecast',
+    title: 'Get this quarter\'s forecast',
+    description: 'Returns this quarter, per person: their goal, what they have won, and their open deals closing this quarter by forecast category (commit, best case, pipeline). `elapsed` is how far through the quarter today is, from 0 to 1.',
+    input: none,
+    output: forecastSchema,
+    effect: 'read',
+  },
+  {
+    name: 'forecast.setGoal',
+    method: 'setGoal',
+    title: 'Set a person\'s quarterly goal',
+    description: 'Sets what a person is expected to close in a quarter. Needs permission to manage people.',
+    input: z.object({ userId: z.string(), amount: z.number() }),
+    output: z.void(),
+    effect: 'write',
   },
 ];

@@ -160,6 +160,34 @@ CREATE TABLE "records" (
 );
 
 --> statement-breakpoint
+CREATE TABLE "dashboards" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"name" text NOT NULL,
+	"report_ids" jsonb NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
+CREATE TABLE "goals" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"amount" double precision NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
+CREATE TABLE "reports" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"settings" jsonb NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
 CREATE TABLE "roles" (
 	"id" text PRIMARY KEY NOT NULL,
 	"tenant_id" text NOT NULL,
@@ -235,6 +263,12 @@ CREATE INDEX "objects_tenant_id_idx" ON "objects" USING btree ("tenant_id");
 CREATE INDEX "people_tenant_id_idx" ON "people" USING btree ("tenant_id");
 --> statement-breakpoint
 CREATE INDEX "records_object_idx" ON "records" USING btree ("tenant_id","object_id","created_at");
+--> statement-breakpoint
+CREATE INDEX "dashboards_tenant_id_idx" ON "dashboards" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX "goals_tenant_id_idx" ON "goals" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX "reports_tenant_id_idx" ON "reports" USING btree ("tenant_id");
 --> statement-breakpoint
 CREATE INDEX "roles_tenant_id_idx" ON "roles" USING btree ("tenant_id");
 --> statement-breakpoint

@@ -157,6 +157,12 @@ export class RecordsService {
     });
   }
 
+  /** The conditions for an object's records that pass some filters and that the acting person may see. For services that build their own queries on top. */
+  async conditions(ctx: Context, objectId: string, filters: NonNullable<ListQuery['filters']>): Promise<{ object: ObjectDefinition; where: SQL[] }> {
+    const object = await this.workspace.definition(ctx, objectId);
+    return { object, where: this.where(ctx, object, { filters }) };
+  }
+
   /** How many of an object's records pass some conditions, out of how many the person can see. */
   async count(ctx: Context, objectId: string, conditions: NonNullable<ListQuery['filters']>): Promise<{ matching: number; total: number }> {
     const object = await this.workspace.definition(ctx, objectId);
