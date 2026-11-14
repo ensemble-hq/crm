@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { InboxApi } from './inbox';
 import { type CreateObject, type CreateProperty, type ObjectDefinition, type SaveView, type UpdateProperty, type User, type ViewDefinition, filterSchema, propertyValueSchema, sortSchema } from './metadata';
 
 /**
@@ -101,7 +102,7 @@ export type CreateActivity = z.infer<typeof createActivitySchema>;
 
 export type Workspace = { name: string; objects: ObjectDefinition[]; users: User[]; currentUserId: string };
 
-export interface CrmApi {
+export interface CrmApi extends InboxApi {
   getWorkspace(): Promise<Workspace>;
   listRecords(query: ListQuery): Promise<ListResult>;
   summarize(query: SummaryQuery): Promise<SummaryRow[]>;

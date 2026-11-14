@@ -12,6 +12,7 @@ import type {
 } from '../contracts/records';
 import { CURRENT_USER_ID, MOCK_NOW, MOCK_TODAY, objects, users } from './definitions';
 import { dataset } from './generate';
+import { createInboxApi } from './inbox';
 
 /** In-memory implementation of `CrmApi`. Everything the pages know about data comes through here. */
 
@@ -296,7 +297,16 @@ function slug(text: string, joiner: '' | '-'): string {
   return words.map((word, index) => (index === 0 ? word : `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`)).join('');
 }
 
+/** Puts an email sent from the inbox on a record's timeline. */
+function logEmail(recordId: string, subject: string, body: string): void {
+  if (!dataset().byId.has(recordId)) return;
+  sequence += 1;
+  const logged: Activity = { id: `act_new_${sequence}`, recordId, kind: 'email', title: `Email sent: ${subject}`, body, actorId: CURRENT_USER_ID, occurredAt: new Date().toISOString() };
+  createdActivity.set(recordId, [logged, ...(createdActivity.get(recordId) ?? [])]);
+}
+
 export const mockApi: CrmApi = {
+  ...createInboxApi(respond, logEmail),
   getWorkspace: () => respond(() => ({ name: 'Northwind', objects, users, currentUserId: CURRENT_USER_ID })),
 
   listRecords: (query: ListQuery) =>

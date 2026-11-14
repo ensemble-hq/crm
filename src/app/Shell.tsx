@@ -66,10 +66,11 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
   // Tasks sit with the inbox, as the day's work, and show how many of yours are due.
   const taskObject = workspace.objects.find((object) => object.completion);
   const due = useQuery(() => (taskObject ? api.listRecords({ objectId: taskObject.id, viewId: taskObject.views[0]?.id, page: 1, pageSize: 1 }) : Promise.resolve(undefined)), [taskObject?.id, workspace.revision]);
+  const unread = useQuery(() => api.inboxCounts(), [workspace.revision]);
   const primary: NavItem[] = [
     { to: '/assistant', label: 'Assistant', icon: Sparkles },
     { to: '/', label: 'Today', icon: House },
-    { to: '/inbox', label: 'Inbox', icon: Inbox, count: 6 },
+    { to: '/inbox', label: 'Inbox', icon: Inbox, count: unread.data?.mineUnread },
     ...(taskObject ? [{ to: `/${taskObject.id}`, label: taskObject.plural, icon: objectIcon(taskObject.icon), count: due.data?.total }] : []),
     ...workspace.objects.filter((object) => object !== taskObject).map((object) => ({ to: `/${object.id}`, label: object.plural, icon: objectIcon(object.icon) })),
     { to: '/sequences', label: 'Sequences', icon: Send },

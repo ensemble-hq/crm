@@ -23,7 +23,8 @@ export const VOLUME = { companies: 6_000, contacts: 50_000, deals: 2_400, tasks:
 const DAY = 86_400_000;
 const NOW = Date.parse(MOCK_NOW);
 
-function mulberry32(seed: number): () => number {
+/** A small seeded random-number generator, so the mock is the same on every load. */
+export function mulberry32(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
     state = (state + 0x6d2b79f5) >>> 0;

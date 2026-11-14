@@ -9,6 +9,7 @@ import { WorkspaceProvider } from './app/WorkspaceProvider';
 import { AssistantPage } from './pages/Assistant';
 import { ComingSoon } from './pages/ComingSoon';
 import { Dashboard } from './pages/Dashboard';
+import { Inbox } from './pages/Inbox';
 import { RecordDetail } from './pages/RecordDetail';
 import { RecordList } from './pages/RecordList';
 import { ObjectSettings, Settings } from './pages/Settings';
@@ -17,7 +18,7 @@ const root = document.getElementById('root');
 if (!root) throw new Error('Missing #root element');
 
 /** Areas the navigation links to that have no screen yet. Listed so they don't match `/:objectId`. */
-const PLACEHOLDERS = ['inbox', 'sequences', 'workflows', 'reports'];
+const PLACEHOLDERS = ['sequences', 'workflows', 'reports'];
 
 createRoot(root).render(
   <StrictMode>
@@ -27,6 +28,8 @@ createRoot(root).render(
           <Route element={<Shell />}>
             <Route index element={<Dashboard />} />
             <Route path="assistant" element={<AssistantPage />} />
+            <Route path="inbox" element={<Inbox />} />
+            <Route path="inbox/:conversationId" element={<Inbox />} />
             <Route path="settings" element={<Settings />} />
             <Route path="settings/objects/:objectId" element={<ObjectSettings />} />
             {PLACEHOLDERS.map((path) => (

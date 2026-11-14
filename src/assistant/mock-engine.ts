@@ -636,3 +636,25 @@ export async function respond(input: { text: string; attachments: Attachment[] }
   if (/portal|redesign|build (a|an|me)|new page|integrat|customi[sz]e|change the (crm|layout|page)|i wish/.test(text)) return customization(ctx, input.text);
   return help(ctx);
 }
+
+/**
+ * A first draft of a reply to an email thread. Scripted: it picks an answer by the thread's topic.
+ * The real assistant writes from the whole thread, the record's history and the user's own voice.
+ */
+export function draftReply(input: { subject: string; lastInbound: string | undefined; contactName: string; myName: string; awaitingThem?: boolean }): string {
+  const first = input.contactName.split(' ')[0] ?? input.contactName;
+  const me = input.myName.split(' ')[0] ?? input.myName;
+  // The subject ends with the deal's name ("...: team plan, 30 seats"), which says nothing about the topic.
+  const topic = `${input.subject.split(':')[0] ?? ''} ${input.lastInbound ?? ''}`.toLowerCase();
+  let answer: string;
+  if (input.awaitingThem) answer = 'I wanted to check whether you had a chance to look at my last message. Happy to answer any questions, or to pick this up later if the timing is off.';
+  else if (/payment terms|two years|multi-year option if/.test(topic)) answer = 'On payment terms: yes, with a two-year commitment we can move to quarterly billing. I will send a revised order form reflecting that today.';
+  else if (/single sign-on|sso|it lead|someone technical|data residency/.test(topic)) answer = 'I will bring in our solutions engineer for the technical questions. Would Tuesday or Wednesday afternoon suit your IT lead for a 20-minute call?';
+  else if (/redline|liability|legal|contract|month end/.test(topic)) answer = 'Our legal team is reviewing the liability clause now. I expect to have their response to you by Wednesday, which keeps us on track to sign this month.';
+  else if (/security|questionnaire|audit/.test(topic)) answer = 'I will have the completed security questionnaire back to you by the end of next week, together with our latest audit report.';
+  else if (/renewal|extra seats|adding seats|planning meeting/.test(topic)) answer = 'I will send both versions of the renewal today: one at your current term with the extra seats, and one with the multi-year option.';
+  else if (/demo|walkthrough|invite|booked/.test(topic)) answer = 'That time works. I have sent the invite and included your colleague. I will share a short agenda the day before.';
+  else if (/pricing|quote|how long onboarding/.test(topic)) answer = 'I have attached the pricing and the onboarding plan. Onboarding takes two to three weeks for a team of your size, and there is no setup fee.';
+  else answer = 'Thanks for the update. I will take this forward and come back to you with next steps by the end of tomorrow.';
+  return `Hi ${first},\n\n${answer}\n\nBest,\n${me}`;
+}
