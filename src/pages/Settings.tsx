@@ -1,12 +1,14 @@
 import { ArrowDown, ArrowUp, ChevronRight, Pencil, Plus, ScrollText, Settings as SettingsIcon, Trash2, Users } from 'lucide-react';
 import { AssistantSettingsCard } from './AssistantSettings';
+import { ConditionPicker, StageRulesCard } from './DataRules';
+import { parseFormula } from '../lib/formula';
 import { EmailSettingsCard } from './EmailSettings';
 import { type CSSProperties, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { Page } from '../app/Page';
 import { useWorkspace } from '../app/workspace';
-import type { ObjectDefinition, Option, PropertyDefinition, PropertyType, Tone } from '../contracts/metadata';
+import type { Filter, ObjectDefinition, Option, PropertyDefinition, PropertyType, Tone } from '../contracts/metadata';
 import { Modal } from '../ui/Modal';
 import { OptionBadge } from '../ui/PropertyValue';
 import { objectIcon, objectIcons } from '../ui/icons';
@@ -131,7 +133,7 @@ function OptionsEditor({ options, onChange }: { options: Option[]; onChange: (op
   );
 }
 
-type PropertyDraft = { label: string; type: PropertyType; group: string; options: Option[]; referenceObjectId: string; onCreate: boolean; required: boolean; unique: boolean; addToViews: boolean };
+type PropertyDraft = { label: string; type: PropertyType; group: string; options: Option[]; referenceObjectId: string; onCreate: boolean; required: boolean; unique: boolean; addToViews: boolean; formula: string; showWhen?: Filter; requiredWhen?: Filter };
 
 /** Create a property, or edit one. A property's type is fixed once it exists, because data already uses it. */
 function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectDefinition; editing: PropertyDefinition | 'new'; onClose: () => void; onSaved: () => void }) {
@@ -148,10 +150,24 @@ function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectD
     required: existing?.required ?? false,
     unique: existing?.unique ?? false,
     addToViews: false,
+    formula: existing?.formula ?? '',
+    showWhen: existing?.showWhen,
+    requiredWhen: existing?.requiredWhen,
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const set = (changes: Partial<PropertyDraft>) => setDraft((previous) => ({ ...previous, ...changes }));
+  // Computed fields and conditions are worked out and enforced by the server.
+  const live = Boolean(import.meta.env.VITE_API_URL);
+  const computable = ['text', 'number', 'currency', 'date', 'boolean'].includes(draft.type);
+  let formulaProblem: string | undefined;
+  if (draft.formula.trim()) {
+    try {
+      parseFormula(draft.formula, object.properties.filter((property) => property.id !== existing?.id).map((property) => property.id));
+    } catch (cause) {
+      formulaProblem = cause instanceof Error ? cause.message : 'That formula could not be understood.';
+    }
+  }
 
   async function save() {
     if (hasOptions(draft.type) && draft.options.some((option) => option.label.trim() === '')) {
@@ -162,7 +178,7 @@ function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectD
     setError(undefined);
     try {
       if (existing) {
-        await api.updateProperty({ objectId: object.id, propertyId: existing.id, label: draft.label, group: draft.group, onCreate: draft.onCreate, required: draft.required, unique: draft.unique, options: hasOptions(existing.type) ? draft.options : undefined });
+        await api.updateProperty({ objectId: object.id, propertyId: existing.id, label: draft.label, group: draft.group, onCreate: draft.onCreate, required: draft.required, unique: draft.unique, ...(live ? { formula: draft.formula.trim() || null, showWhen: draft.showWhen ?? null, requiredWhen: draft.requiredWhen ?? null } : {}), options: hasOptions(existing.type) ? draft.options : undefined });
       } else {
         await api.createProperty({
           objectId: object.id,
@@ -175,6 +191,7 @@ function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectD
           required: draft.required,
           unique: draft.unique,
           addToViews: draft.addToViews,
+          ...(live ? { formula: draft.formula.trim() || undefined, showWhen: draft.showWhen, requiredWhen: draft.requiredWhen } : {}),
         });
       }
       onSaved();
@@ -250,6 +267,27 @@ function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectD
         <label className="m-field" data-layout="inline">
           <input className="m-checkbox" type="checkbox" checked={draft.unique} onChange={(event) => set({ unique: event.target.checked })} /> Unique: no two {object.plural.toLowerCase()} can share a value
         </label>
+      ) : null}
+      {live && computable ? (
+        <div className="m-field">
+          <label className="m-field-label" htmlFor="property-formula">
+            Work it out from other fields
+          </label>
+          <input className="m-input" id="property-formula" value={draft.formula} placeholder="amount * probability / 100" onChange={(event) => set({ formula: event.target.value })} style={{ fontFamily: 'var(--m-font-family-mono, monospace)' }} />
+          {formulaProblem ? (
+            <p className="m-field-error">{formulaProblem}</p>
+          ) : (
+            <p className="m-field-hint">
+              Leave empty for a field people type into. Use field ids ({object.properties.slice(0, 4).map((property) => property.id).join(', ')}…), + - * /, and if(), round(), days(from, to), today(), concat(), empty().
+            </p>
+          )}
+        </div>
+      ) : null}
+      {live ? (
+        <>
+          <ConditionPicker label="Show it" hint="Leave as Always, or show this field only for records that meet a condition." object={object} value={draft.showWhen} onChange={(showWhen) => set({ showWhen })} />
+          {draft.formula.trim() ? null : <ConditionPicker label="Require it" hint="On top of Required above: make it required only for records that meet a condition." object={object} value={draft.requiredWhen} onChange={(requiredWhen) => set({ requiredWhen })} />}
+        </>
       ) : null}
       {existing ? null : (
         <label className="m-field" data-layout="inline">
@@ -369,6 +407,7 @@ export function ObjectSettings() {
           </div>
         </section>
         <p style={{ ...small, margin: 0 }}>Properties that came with the CRM can be renamed and regrouped. Only properties you added can be deleted.</p>
+        {workspace.access.manageSettings ? <StageRulesCard key={JSON.stringify(object.board)} object={object} onSaved={() => workspace.reload()} /> : null}
       </div>
       {editing ? (
         <PropertyDialog

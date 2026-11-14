@@ -2,8 +2,9 @@ import { ConflictError, type Context, NotFoundError, ValidationError } from '@ma
 import { type SQL, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import type { ObjectDefinition, PropertyValue } from '../../../../src/contracts/metadata';
-import type { CreateRecord, CrmRecord, MergeRecords, ListQuery, ListResult, RecordDetail, Reference, RelatedGroup, SummaryQuery, SummaryRow, UpdateRecord } from '../../../../src/contracts/records';
+import type { CreateRecord, CrmRecord, Duplicates, MergeRecords, ListQuery, ListResult, RecordDetail, Reference, RelatedGroup, SummaryQuery, SummaryRow, UpdateRecord } from '../../../../src/contracts/records';
 import { actorOf, assertCan, visibility } from '../people/access';
+import { compute, isEditable, problemWith } from '../../../../src/lib/rules';
 import type { WorkspaceService } from '../workspace/workspace.service';
 import type { RecordEvents } from './records.events';
 import { condition, order, property, propertyText, search, tokens } from './records.query';
@@ -116,7 +117,8 @@ export class RecordsService {
   private async validate(ctx: Context, object: ObjectDefinition, values: Record<string, PropertyValue>, recordId: string | undefined): Promise<void> {
     for (const key of Object.keys(values)) property(object, key);
     for (const definition of object.properties) {
-      if (definition.system) continue;
+      // A computed field is never typed, so it is never checked as if it had been.
+      if (!isEditable(definition)) continue;
       if (!(definition.id in values) && recordId !== undefined) continue;
       const value = values[definition.id] ?? null;
       if (empty(value)) {
@@ -135,7 +137,11 @@ export class RecordsService {
   async create(ctx: Context, input: CreateRecord): Promise<CrmRecord> {
     const object = await this.workspace.definition(ctx, input.objectId);
     await this.validate(ctx, object, input.properties, undefined);
-    const properties = { ...input.properties, createdAt: new Date().toISOString().slice(0, 10) };
+    const typed = { ...input.properties, createdAt: new Date().toISOString().slice(0, 10) };
+    // Computed fields are worked out from what was typed, then the whole record is checked against the object's rules.
+    const properties = { ...typed, ...compute(object, typed) };
+    const problem = problemWith(object, undefined, properties);
+    if (problem) throw new ValidationError(problem);
     return this.events.transaction(ctx, async () => {
       const record = await this.records.insert(ctx, { id: `${object.id.slice(0, 3)}_${randomUUID().replace(/-/g, '').slice(0, 12)}`, objectId: object.id, properties });
       await this.events.created(ctx, record);
@@ -149,9 +155,13 @@ export class RecordsService {
     assertCan(actorOf(ctx), 'edit', record, object.singular.toLowerCase());
     await this.validate(ctx, object, input.properties, record.id);
     // Only what really changed is announced, so saving a form untouched sets nothing off.
-    const changed = Object.fromEntries(Object.entries(input.properties).filter(([key, value]) => JSON.stringify(record.properties[key] ?? null) !== JSON.stringify(value ?? null)));
+    const after = { ...record.properties, ...input.properties };
+    const patch = { ...input.properties, ...compute(object, after) };
+    const problem = problemWith(object, record.properties, { ...after, ...patch });
+    if (problem) throw new ValidationError(problem);
+    const changed = Object.fromEntries(Object.entries(patch).filter(([key, value]) => JSON.stringify(record.properties[key] ?? null) !== JSON.stringify(value ?? null)));
     return this.events.transaction(ctx, async () => {
-      const updated = (await this.records.patch(ctx, record.id, input.properties)) ?? record;
+      const updated = (await this.records.patch(ctx, record.id, patch)) ?? record;
       await this.events.changed(ctx, updated, changed);
       return updated;
     });
@@ -184,6 +194,18 @@ export class RecordsService {
       await this.events.deleted(ctx, merged);
       return updated;
     });
+  }
+
+  /** Sets of records that share a value which should be one of a kind. */
+  async duplicates(ctx: Context, input: { objectId: string; property?: string }): Promise<Duplicates> {
+    const object = await this.workspace.definition(ctx, input.objectId);
+    // The most telling field the object has: an email address, a website, or failing those the name.
+    const chosen = input.property ?? object.properties.find((item) => item.type === 'email')?.id ?? object.properties.find((item) => item.id === 'domain' || item.type === 'url')?.id ?? object.primaryProperty;
+    property(object, chosen);
+    const where = this.where(ctx, object, {});
+    const { groups, total } = await this.records.sharedValues(ctx, where, chosen, 50);
+    const records = await this.records.byIds(ctx, groups.flatMap((group) => group.ids.slice(0, 5)), ...this.visible(ctx));
+    return { property: chosen, total, groups: groups.map((group) => ({ value: group.value, count: group.count, records: group.ids.slice(0, 5).flatMap((id) => records.filter((record) => record.id === id)) })) };
   }
 
   /** The conditions for an object's records that pass some filters and that the acting person may see. For services that build their own queries on top. */

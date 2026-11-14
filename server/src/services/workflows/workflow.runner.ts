@@ -10,6 +10,7 @@ import type { MailService } from '../inbox/mail.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { PeopleService } from '../people/people.service';
 import type { RecordEvents } from '../records/records.events';
+import { compute } from '../../../../src/lib/rules';
 import { condition, tokens } from '../records/records.query';
 import type { RecordsRepository } from '../records/records.repository';
 import type { SequencesService } from '../sequences/sequences.service';
@@ -99,7 +100,9 @@ export class WorkflowRunner {
     await this.runs.create(ctx, { id: id('run'), workflowId: workflow.id, recordId, eventId, status, steps });
   }
 
-  private async change(ctx: Context, record: CrmRecord, changes: Record<string, PropertyValue>): Promise<void> {
+  private async change(ctx: Context, record: CrmRecord, typed: Record<string, PropertyValue>): Promise<void> {
+    const object = await this.workspace.definition(ctx, record.objectId);
+    const changes = { ...typed, ...compute(object, { ...record.properties, ...typed }) };
     await this.events.transaction(ctx, async () => {
       const updated = await this.records.patch(ctx, record.id, changes);
       if (updated) await this.events.changed(ctx, updated, changes, 'workflow');

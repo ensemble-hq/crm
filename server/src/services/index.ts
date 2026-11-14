@@ -172,6 +172,8 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     'properties.create': (ctx, input) => settings.createProperty(ctx, input),
     'properties.update': (ctx, input) => settings.updateProperty(ctx, input),
     'properties.delete': (ctx, input) => settings.deleteProperty(ctx, input),
+    'pipeline.saveRules': (ctx, input) => settings.saveStageRules(ctx, input),
+    'records.duplicates': (ctx, input) => records.duplicates(ctx, input),
     'views.save': (ctx, input) => settings.saveView(ctx, input),
     'views.delete': (ctx, input) => settings.deleteView(ctx, input),
     'audit.list': (ctx, input) => audit.list(ctx, input),

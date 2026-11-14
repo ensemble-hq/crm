@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { isEditable, isShown } from '../lib/rules';
 import { api } from '../api';
 import { useWorkspace } from '../app/workspace';
 import type { ObjectDefinition, PropertyValue } from '../contracts/metadata';
@@ -20,13 +21,15 @@ export function CreateRecordDialog({
   onCreated: (record: CrmRecord) => void;
 }) {
   const { currentUser } = useWorkspace();
-  const fields = object.properties.filter((property) => property.onCreate);
+  const asked = object.properties.filter((property) => property.onCreate && isEditable(property));
   // New records start with the person creating them as the owner.
   const [values, setValues] = useState<Record<string, PropertyValue>>(() => {
     const start: Record<string, PropertyValue> = {};
-    if (fields.some((field) => field.id === 'owner')) start.owner = currentUser.id;
+    if (asked.some((field) => field.id === 'owner')) start.owner = currentUser.id;
     return { ...start, ...initial };
   });
+  // Fields that depend on another appear as soon as that other field makes them apply.
+  const fields = asked.filter((property) => isShown(property, values));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
 

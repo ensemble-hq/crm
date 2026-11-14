@@ -113,6 +113,17 @@ export class RecordsRepository extends DrizzleRepository<RecordRow> {
       where ${this.scope(ctx, sql`records.id = item.id`)}`);
   }
 
+  /** Values of a property that more than one record has, ignoring case and spaces around, with the records that share each. */
+  async sharedValues(ctx: Context, where: SQL[], propertyId: string, limit: number): Promise<{ groups: Array<{ value: string; count: number; ids: string[] }>; total: number }> {
+    const value = sql`lower(btrim(records.properties->>${propertyId}::text))`;
+    const scope = this.scope(ctx, ...where, sql`jsonb_typeof(records.properties->${propertyId}::text) = 'string'`, sql`btrim(records.properties->>${propertyId}::text) <> ''`);
+    const rows = await this.rows<{ value: string; count: number; ids: string[]; total: number }>(sql`
+      select value, count, ids, count(*) over ()::int as total from (
+        select ${value} as value, count(*)::int as count, array_agg(records.id order by records.created_at) as ids from records where ${scope} group by 1 having count(*) > 1
+      ) shared order by count desc, value limit ${limit}`);
+    return { groups: rows.map((row) => ({ value: row.value, count: row.count, ids: row.ids })), total: rows[0]?.total ?? 0 };
+  }
+
   /** Takes a property off every record of an object, when the property itself is deleted. */
   async dropProperty(ctx: Context, objectId: string, propertyId: string): Promise<void> {
     await this.db.execute(sql`update records set properties = records.properties - ${propertyId}::text where ${this.scope(ctx, sql`records.object_id = ${objectId}`, sql`records.properties ? ${propertyId}`)}`);

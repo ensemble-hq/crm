@@ -54,6 +54,12 @@ export const propertyDefinitionSchema = z.object({
   custom: z.boolean().optional(),
   /** A record cannot be saved with this empty. */
   required: z.boolean().optional(),
+  /** Worked out from the record's other fields, not typed. See `lib/formula.ts` for what a formula may say. */
+  formula: z.string().optional(),
+  /** Only shown when the record meets this condition. */
+  showWhen: z.lazy(() => filterSchema).optional(),
+  /** Cannot be left empty when the record meets this condition. */
+  requiredWhen: z.lazy(() => filterSchema).optional(),
   /** No two records may hold the same value. */
   unique: z.boolean().optional(),
 });
@@ -107,6 +113,10 @@ export const objectDefinitionSchema = z.object({
       groupBy: z.string(),
       sumProperty: z.string().optional(),
       dateProperty: z.string().optional(),
+      /** For each stage, the fields that must be filled in for a record to be in it. */
+      required: z.record(z.array(z.string())).optional(),
+      /** A record moves forward one stage at a time. It can always go back, and can be won or lost from anywhere. */
+      noSkipping: z.boolean().optional(),
     })
     .optional(),
   /** Where the object is reached from. `search` keeps set-up lists (products) out of the sidebar; they are found by search. */
@@ -146,6 +156,9 @@ export const createPropertySchema = z.object({
   unique: z.boolean().optional(),
   /** Also show it as a column in every saved view of the object. */
   addToViews: z.boolean().optional(),
+  formula: z.string().optional(),
+  showWhen: z.lazy(() => filterSchema).optional(),
+  requiredWhen: z.lazy(() => filterSchema).optional(),
 });
 export type CreateProperty = z.infer<typeof createPropertySchema>;
 
@@ -159,6 +172,10 @@ export const updatePropertySchema = z.object({
   onCreate: z.boolean().optional(),
   required: z.boolean().optional(),
   unique: z.boolean().optional(),
+  /** Null removes it. */
+  formula: z.string().nullable().optional(),
+  showWhen: z.lazy(() => filterSchema).nullable().optional(),
+  requiredWhen: z.lazy(() => filterSchema).nullable().optional(),
 });
 export type UpdateProperty = z.infer<typeof updatePropertySchema>;
 
@@ -168,6 +185,10 @@ export const createObjectSchema = z.object({
   icon: z.string(),
 });
 export type CreateObject = z.infer<typeof createObjectSchema>;
+
+/** The rules for how records move through an object's stages. */
+export const stageRulesSchema = z.object({ objectId: z.string(), required: z.record(z.array(z.string())), noSkipping: z.boolean() });
+export type StageRules = z.infer<typeof stageRulesSchema>;
 
 /** A new saved view, or the new state of an existing one. */
 export const saveViewSchema = z.object({

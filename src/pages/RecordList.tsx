@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, CalendarDays, ChevronLeft, Combine, ChevronRight, Columns3, Download, Filter as FilterIcon, LayoutList, List, Pencil, Plus, Search, Send, SlidersHorizontal, Trash2, Upload, UserPlus, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, CalendarDays, ChevronLeft, Combine, Copy, ChevronRight, Columns3, Download, Filter as FilterIcon, LayoutList, List, Pencil, Plus, Search, Send, SlidersHorizontal, Trash2, Upload, UserPlus, X } from 'lucide-react';
 import { type CSSProperties, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, useQuery } from '../api';
@@ -15,6 +15,7 @@ import { objectIcon } from '../ui/icons';
 import { ICON, figure, small, toolbarButton } from '../ui/styles';
 import { CreateRecordDialog } from './CreateRecordDialog';
 import { FilterDialog } from './FilterDialog';
+import { DuplicatesDialog } from './DataRules';
 import { MergeDialog } from './MergeDialog';
 import { RecordBoard } from './RecordBoard';
 import { RecordCalendar } from './RecordCalendar';
@@ -522,6 +523,7 @@ export function RecordList() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
+  const [findingDuplicates, setFindingDuplicates] = useState(false);
   const [total, setTotal] = useState<number>();
   const [dialog, setDialog] = useState<{ kind: 'filter'; index?: number } | { kind: 'columns' } | { kind: 'save' }>();
   const [savingView, setSavingView] = useState(false);
@@ -597,6 +599,11 @@ export function RecordList() {
       wide
       actions={
         <>
+          {object.completion || !import.meta.env.VITE_API_URL ? null : (
+            <button type="button" className="m-button" data-size="sm" style={toolbarButton} onClick={() => setFindingDuplicates(true)}>
+              <Copy size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Duplicates
+            </button>
+          )}
           {object.completion ? null : (
             <Link to={`/import?object=${object.id}`} className="m-button" data-size="sm" style={toolbarButton}>
               <Upload size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Import
@@ -777,6 +784,7 @@ export function RecordList() {
           }}
         />
       ) : null}
+      {findingDuplicates && object ? <DuplicatesDialog object={object} onClose={() => setFindingDuplicates(false)} onMerged={() => workspace.touch()} /> : null}
     </Page>
   );
 }

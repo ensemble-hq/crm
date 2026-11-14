@@ -5,8 +5,9 @@ import { briefSchema } from './brief';
 import { bookingPageSchema, bookingPageSettingsSchema, daySlotsSchema, formDetailSchema, formSchema, formSettingsSchema, meetingSchema, publicFormSchema } from './capture';
 import { emailPreferenceSchema, emailSettingsSchema, setEmailPreferenceSchema, unsubscribePageSchema } from './inbox';
 import { conversationDetailSchema, conversationListSchema, conversationQuerySchema, conversationSchema, emailHealthSchema, emailTemplateSchema, inboxCountsSchema, messageSchema, updateConversationSchema } from './inbox';
+import { stageRulesSchema } from './metadata';
 import { createObjectSchema, createPropertySchema, filterSchema, objectDefinitionSchema, saveViewSchema, updatePropertySchema, userSchema, viewDefinitionSchema } from './metadata';
-import { activitySchema, createActivitySchema, mergeRecordsSchema, importRequestSchema, importResultSchema, notificationSchema, referenceSchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi } from './records';
+import { activitySchema, createActivitySchema, duplicatesQuerySchema, duplicatesSchema, mergeRecordsSchema, importRequestSchema, importResultSchema, notificationSchema, referenceSchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi } from './records';
 import { workflowDetailSchema, workflowSchema, workflowSettingsSchema } from './workflows';
 import { dashboardSchema, reportDefinitionSchema, reportResultSchema, reportSettingsSchema } from './reports';
 import { convertLeadSchema, forecastSchema, lineItemSchema } from './sales';
@@ -902,5 +903,23 @@ export const operations: Operation[] = [
     effect: 'write',
     public: true,
     internal: true,
+  },
+  {
+    name: 'pipeline.saveRules',
+    method: 'saveStageRules',
+    title: 'Set the rules for moving through stages',
+    description: 'For an object with stages (such as deals), sets which fields must be filled in for a record to be in each stage, and whether a record must move forward one stage at a time. `required` maps a stage\'s option id to property ids.',
+    input: stageRulesSchema,
+    output: objectDefinitionSchema,
+    effect: 'write',
+  },
+  {
+    name: 'records.duplicates',
+    method: 'findDuplicates',
+    title: 'Find duplicate records',
+    description: 'Finds records of one object that share a value that should be one of a kind: an email address for contacts, a website for companies, otherwise the name. Returns the sets, largest first. Merge a pair with records.merge once a person has agreed.',
+    input: duplicatesQuerySchema,
+    output: duplicatesSchema,
+    effect: 'read',
   },
 ];

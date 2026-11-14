@@ -1,5 +1,8 @@
+import { sql } from 'drizzle-orm';
 import { ConflictError, type Context, NotFoundError, ValidationError } from '@mariachi/core';
-import type { CreateObject, CreateProperty, ObjectDefinition, SaveView, UpdateProperty, ViewDefinition } from '../../../../src/contracts/metadata';
+import type { CreateObject, CreateProperty, Filter, ObjectDefinition, SaveView, StageRules, UpdateProperty, ViewDefinition } from '../../../../src/contracts/metadata';
+import { FormulaError, formulaFields, parseFormula } from '../../../../src/lib/formula';
+import { compute } from '../../../../src/lib/rules';
 import { actorOf, assertAllowed } from '../people/access';
 import type { RecordsRepository } from '../records/records.repository';
 import type { ObjectsRepository } from './workspace.repository';
@@ -17,6 +20,23 @@ function slug(text: string, joiner: '' | '-'): string {
   const words = text.trim().toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
   if (joiner === '-') return words.join('-');
   return words.map((word, index) => (index === 0 ? word : `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`)).join('');
+}
+
+/** Checks a formula against the object it is for. It may read ordinary fields and computed fields defined before it, never itself. */
+function checkFormula(object: ObjectDefinition, propertyId: string, formula: string): void {
+  const position = object.properties.findIndex((property) => property.id === propertyId);
+  const readable = object.properties.filter((property, index) => property.id !== propertyId && (!property.formula || (position >= 0 && index < position) || position < 0)).map((property) => property.id);
+  try {
+    formulaFields(parseFormula(formula, readable));
+  } catch (error) {
+    throw new ValidationError(error instanceof FormulaError ? error.message : 'That formula could not be understood.');
+  }
+}
+
+function checkCondition(object: ObjectDefinition, condition: Filter | null | undefined, propertyId: string): void {
+  if (!condition) return;
+  if (condition.property === propertyId) throw new ValidationError('A field cannot depend on itself.');
+  if (!object.properties.some((property) => property.id === condition.property)) throw new ValidationError(`${object.plural} have no property "${condition.property}".`);
 }
 
 export class SettingsService {
@@ -78,6 +98,9 @@ export class SettingsService {
       let id = base;
       for (let suffix = 2; definition.properties.some((item) => item.id === id); suffix += 1) id = `${base}${suffix}`;
       const choice = input.type === 'select' || input.type === 'multiselect';
+      checkCondition(definition, input.showWhen, id);
+      checkCondition(definition, input.requiredWhen, id);
+      if (input.formula) checkFormula(definition, id, input.formula);
       definition.properties.push({
         id,
         label: input.label.trim(),
@@ -88,10 +111,14 @@ export class SettingsService {
         onCreate: input.onCreate,
         required: input.required,
         unique: input.unique,
+        formula: input.formula?.trim() || undefined,
+        showWhen: input.showWhen,
+        requiredWhen: input.requiredWhen,
         custom: true,
       });
       if (input.addToViews) for (const view of definition.views) view.columns.push(id);
     });
+    if (input.formula) await this.recompute(ctx, object.id);
     return object;
   }
 
@@ -106,7 +133,20 @@ export class SettingsService {
       if (input.onCreate !== undefined) found.onCreate = input.onCreate;
       if (input.required !== undefined) found.required = input.required;
       if (input.unique !== undefined) found.unique = input.unique;
+      if (input.formula !== undefined) {
+        if (input.formula) checkFormula(definition, found.id, input.formula);
+        found.formula = input.formula?.trim() || undefined;
+      }
+      if (input.showWhen !== undefined) {
+        checkCondition(definition, input.showWhen, found.id);
+        found.showWhen = input.showWhen ?? undefined;
+      }
+      if (input.requiredWhen !== undefined) {
+        checkCondition(definition, input.requiredWhen, found.id);
+        found.requiredWhen = input.requiredWhen ?? undefined;
+      }
     });
+    if (input.formula) await this.recompute(ctx, object.id);
     return object;
   }
 
@@ -126,6 +166,52 @@ export class SettingsService {
       await this.records.dropProperty(ctx, definition.id, input.propertyId);
     });
     return object;
+  }
+
+  /** Which fields each stage needs, and whether stages can be skipped. Records already in a stage are not checked until they are next changed. */
+  async saveStageRules(ctx: Context, input: StageRules): Promise<ObjectDefinition> {
+    assertAllowed(actorOf(ctx), 'manageSettings', 'change how records move through stages');
+    const { object } = await this.change(ctx, input.objectId, (definition) => {
+      if (!definition.board) throw new ConflictError(`${definition.plural} do not move through stages.`);
+      const stages = definition.properties.find((property) => property.id === definition.board?.groupBy)?.options ?? [];
+      const required: Record<string, string[]> = {};
+      for (const [stage, fields] of Object.entries(input.required)) {
+        if (!stages.some((option) => option.id === stage)) throw new ValidationError(`There is no stage "${stage}".`);
+        const unknown = fields.find((id) => !definition.properties.some((property) => property.id === id));
+        if (unknown) throw new ValidationError(`${definition.plural} have no property "${unknown}".`);
+        if (fields.length > 0) required[stage] = fields;
+      }
+      definition.board = { ...definition.board, required, noSkipping: input.noSkipping };
+    });
+    return object;
+  }
+
+  /**
+   * Works every computed field out again for all of an object's records: after a formula is added
+   * or changed, and each day for formulas that count from today. Only records whose answer changed
+   * are written. Returns how many were.
+   */
+  async recompute(ctx: Context, objectId: string): Promise<number> {
+    const row = await this.objects.findById(ctx, objectId);
+    if (!row?.definition.properties.some((property) => property.formula)) return 0;
+    let written = 0;
+    for (let offset = 0; ; offset += 2_000) {
+      const page = await this.records.select(ctx, [sql`records.object_id = ${objectId}`], sql`records.id`, 2_000, offset);
+      if (page.length === 0) break;
+      const changes = page.flatMap((record) => {
+        const computed = compute(row.definition, record.properties);
+        const differing = Object.fromEntries(Object.entries(computed).filter(([key, value]) => JSON.stringify(record.properties[key] ?? null) !== JSON.stringify(value)));
+        return Object.keys(differing).length > 0 ? [{ id: record.id, changes: differing }] : [];
+      });
+      await this.records.patchMany(ctx, changes);
+      written += changes.length;
+    }
+    return written;
+  }
+
+  /** The objects that have a formula counting from today, whose answers change as days pass. */
+  async dated(ctx: Context): Promise<string[]> {
+    return (await this.objects.findMany(ctx, {}, { limit: 500 })).filter((row) => row.definition.properties.some((property) => property.formula && /\btoday\s*\(/i.test(property.formula))).map((row) => row.id);
   }
 
   async saveView(ctx: Context, input: SaveView): Promise<ViewDefinition> {

@@ -2,6 +2,7 @@ import type { Context } from '@mariachi/core';
 import { randomUUID } from 'node:crypto';
 import type { PropertyDefinition, PropertyValue, User } from '../../../../src/contracts/metadata';
 import type { CrmRecord, ImportRequest, ImportResult } from '../../../../src/contracts/records';
+import { compute } from '../../../../src/lib/rules';
 import { actorOf, assertCan } from '../people/access';
 import type { PeopleService } from '../people/people.service';
 import type { RecordEvents } from '../records/records.events';
@@ -154,7 +155,8 @@ export class ImportService {
       }
       const id = input.dryRun ? `row_${position}` : `${object.id.slice(0, 3)}_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
       claim(properties, id);
-      creates.push({ id, objectId: object.id, properties: { ...properties, createdAt: new Date().toISOString().slice(0, 10) } });
+      const whole = { ...properties, createdAt: new Date().toISOString().slice(0, 10) };
+      creates.push({ id, objectId: object.id, properties: { ...whole, ...compute(object, whole) } });
       result.created.push(id);
     });
 
@@ -168,7 +170,7 @@ export class ImportService {
         try {
           if (!record) throw new Error('It was deleted while the import ran.');
           assertCan(actor, 'edit', record, noun);
-          allowed.push({ record, changes: item.changes });
+          allowed.push({ record, changes: { ...item.changes, ...compute(object, { ...record.properties, ...item.changes }) } });
           result.updated += 1;
         } catch (error) {
           result.skipped.push({ row: item.row, reason: `Already in the CRM, and not changed: ${error instanceof Error ? error.message : 'you may not edit it.'}` });

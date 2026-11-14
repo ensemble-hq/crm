@@ -9,7 +9,7 @@ import type { SalesApi } from './sales';
 import type { SequencesApi } from './sequences';
 import type { Access, TeamApi } from './team';
 import type { WorkflowsApi } from './workflows';
-import { type CreateObject, type CreateProperty, type ObjectDefinition, type SaveView, type UpdateProperty, type User, type ViewDefinition, filterSchema, propertyValueSchema, sortSchema } from './metadata';
+import { type CreateObject, type CreateProperty, type ObjectDefinition, type SaveView, type StageRules, type UpdateProperty, type User, type ViewDefinition, filterSchema, propertyValueSchema, sortSchema } from './metadata';
 
 /**
  * Record contracts and the API the app talks to. The mock in `src/mock/api.ts` implements `CrmApi`
@@ -157,6 +157,22 @@ export const notificationSchema = z.object({
 });
 export type Notification = z.infer<typeof notificationSchema>;
 
+/** Records that look like the same thing entered twice: they share a value that should be one of a kind, such as an email address. */
+export const duplicatesQuerySchema = z.object({
+  objectId: z.string(),
+  /** The field to compare. Absent, the object's most telling one: an email address, a website, or failing those the name. */
+  property: z.string().optional(),
+});
+export const duplicatesSchema = z.object({
+  /** The field that was compared. */
+  property: z.string(),
+  /** Each set of records sharing a value, largest sets first. At most 50 sets, and five records of each. */
+  groups: z.array(z.object({ value: z.string(), count: z.number().int(), records: z.array(recordSchema) })),
+  /** How many sets there are in all. */
+  total: z.number().int(),
+});
+export type Duplicates = z.infer<typeof duplicatesSchema>;
+
 export type Workspace = {
   name: string;
   objects: ObjectDefinition[];
@@ -195,4 +211,7 @@ export interface CrmApi extends InboxApi, ReportsApi, SequencesApi, WorkflowsApi
   /** Creates a saved view, or replaces one's columns, filters and sort. */
   saveView(input: SaveView): Promise<ViewDefinition>;
   deleteView(input: { objectId: string; viewId: string }): Promise<ObjectDefinition>;
+  /** Sets which fields each stage needs and whether stages can be skipped. */
+  saveStageRules(input: StageRules): Promise<ObjectDefinition>;
+  findDuplicates(input: z.infer<typeof duplicatesQuerySchema>): Promise<Duplicates>;
 }

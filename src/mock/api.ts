@@ -788,6 +788,10 @@ export const mockApi: CrmApi = {
       return object;
     }),
 
+  // Stage rules and duplicate finding are the server's; the demo keeps neither.
+  saveStageRules: (input) => respond(() => definition(input.objectId)),
+  findDuplicates: (input) => respond(() => ({ property: definition(input.objectId).primaryProperty, groups: [], total: 0 })),
+
   importRecords: (input) => respond(() => importRecords(input)),
 
   mergeRecords: (input) => respond(() => mergeRecords(input)),

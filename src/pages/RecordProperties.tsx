@@ -5,15 +5,18 @@ import type { ObjectDefinition, PropertyDefinition, PropertyValue as Value } fro
 import type { CrmRecord, Reference } from '../contracts/records';
 import { PropertyInput } from '../ui/PropertyInput';
 import { PropertyValue } from '../ui/PropertyValue';
+import { isEditable, isShown } from '../lib/rules';
 import { ICON, rowDivider, small } from '../ui/styles';
 
 /** Types that save the moment a choice is made, with no separate confirm. */
 const INSTANT = new Set<PropertyDefinition['type']>(['select', 'user', 'boolean', 'reference']);
 
-function groupProperties(object: ObjectDefinition): Array<{ group: string; properties: PropertyDefinition[] }> {
+function groupProperties(object: ObjectDefinition, values: CrmRecord['properties']): Array<{ group: string; properties: PropertyDefinition[] }> {
   const groups: Array<{ group: string; properties: PropertyDefinition[] }> = [];
   for (const property of object.properties) {
     if (property.id === object.primaryProperty) continue;
+    // A field that only applies in some cases is left out when this is not one of them.
+    if (!isShown(property, values)) continue;
     const existing = groups.find((item) => item.group === property.group);
     if (existing) existing.properties.push(property);
     else groups.push({ group: property.group, properties: [property] });
@@ -42,7 +45,8 @@ function PropertyRow({
   const [draft, setDraft] = useState<Value>(value);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
-  const editable = !property.system;
+  // Automatic and computed fields are shown but not typed into.
+  const editable = isEditable(property);
   const inputId = `edit-${record.id}-${property.id}`;
   const wrapper = useRef<HTMLDivElement>(null);
 
@@ -196,7 +200,7 @@ function PropertyRow({
 export function RecordProperties({ object, record, references, onSaved }: { object: ObjectDefinition; record: CrmRecord; references: Record<string, Reference>; onSaved: () => void }) {
   return (
     <>
-      {groupProperties(object).map((section, index) => (
+      {groupProperties(object, record.properties).map((section, index) => (
         <section key={section.group} className="m-stack" data-gap="2" style={index === 0 ? undefined : { ...rowDivider, paddingBlockStart: 'var(--m-space-3)' }}>
           <h3 style={small}>{section.group}</h3>
           <dl className="m-stack" data-gap="2" style={{ margin: 0 }}>
