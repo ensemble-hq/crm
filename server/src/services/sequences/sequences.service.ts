@@ -35,6 +35,13 @@ export function afterWorkingDays(from: Date, days: number): Date {
   return date;
 }
 
+/**
+ * When a step with this wait becomes due. A step with no wait is due at once, and is dated a few
+ * seconds back so that it counts as due even where this server's clock runs slightly ahead of the
+ * database's.
+ */
+const dueAfter = (waitDays: number) => (waitDays <= 0 ? new Date(Date.now() - 5_000) : afterWorkingDays(new Date(), waitDays));
+
 function toEnrollment(row: EnrollmentRow): Enrollment {
   return { id: row.id, sequenceId: row.sequenceId, contactId: row.contactId, status: row.status as Enrollment['status'], stepsDone: row.stepsDone, enrolledAt: row.enrolledAt.toISOString(), nextRunAt: row.nextRunAt?.toISOString() ?? null };
 }
@@ -110,7 +117,7 @@ export class SequencesService {
     const preference = await this.rules.describe(ctx, contact.properties.email);
     if (preference.status !== 'subscribed') return `${name} has ${preference.status === 'blocked' ? 'an address that cannot be emailed' : 'unsubscribed'}.`;
     const first = sequence.steps[0];
-    await this.enrollments.create(ctx, { id: id('enr'), sequenceId: sequence.id, contactId: contact.id, status: 'active', stepsDone: 0, senderId, conversationId: null, problem: null, nextRunAt: sequence.status === 'active' && first ? afterWorkingDays(new Date(), first.waitDays) : null });
+    await this.enrollments.create(ctx, { id: id('enr'), sequenceId: sequence.id, contactId: contact.id, status: 'active', stepsDone: 0, senderId, conversationId: null, problem: null, nextRunAt: sequence.status === 'active' && first ? dueAfter(first.waitDays) : null });
     return undefined;
   }
 
@@ -166,7 +173,7 @@ export class SequencesService {
         }
         const conversationId = await this.perform(ctx, sequence, enrollment, step);
         const next = sequence.steps[enrollment.stepsDone + 1];
-        await this.enrollments.update(ctx, enrollment.id, { stepsDone: enrollment.stepsDone + 1, conversationId, status: next ? 'active' : 'finished', nextRunAt: next ? afterWorkingDays(new Date(), next.waitDays) : null });
+        await this.enrollments.update(ctx, enrollment.id, { stepsDone: enrollment.stepsDone + 1, conversationId, status: next ? 'active' : 'finished', nextRunAt: next ? dueAfter(next.waitDays) : null });
         return true;
       });
     } catch (error) {

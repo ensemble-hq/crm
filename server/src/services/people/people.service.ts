@@ -32,6 +32,8 @@ export class PeopleService {
    * applies "view as" when an administrator has switched it on.
    */
   async actor(ctx: Context): Promise<Actor> {
+    // The HTTP layer turns away anyone not signed in before they get here; this holds even if something else calls in.
+    if (!ctx.userId || !ctx.tenantId) throw new AuthError('auth/unauthorized', 'Sign in to do that.');
     const everyone = await this.people.findMany(ctx, {}, { limit: 1000 });
     const signedIn = everyone.find((person) => person.id === ctx.userId);
     if (!signedIn || signedIn.status === 'deactivated') throw new AuthError('auth/forbidden', 'You are signed in, but you do not have access to this CRM.');

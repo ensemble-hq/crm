@@ -73,16 +73,17 @@ export function problemWith(object: ObjectDefinition, before: Record<string, Pro
   if (!board || typeof stage !== 'string') return undefined;
   const moved = before === undefined || before[board.groupBy] !== stage;
   const label = stages.find((option) => option.id === stage)?.label ?? stage;
-  // What a stage needs is checked when a record arrives in it, and whenever one of those fields is cleared while it sits there.
-  for (const id of board.required?.[stage] ?? []) {
-    const property = object.properties.find((item) => item.id === id);
-    if (property && isEmpty(after[id])) return `${property.label} has to be filled in ${moved ? 'before' : 'while'} this ${object.singular.toLowerCase()} is in ${label}.`;
-  }
+  // Whether it may go there at all comes first; what it needs once there comes second.
   if (board.noSkipping && moved && before !== undefined) {
     // Stages that end the work (won, lost) can be reached from anywhere; going back is always allowed.
     const open = stages.filter((option) => option.tone !== 'success' && option.tone !== 'danger').map((option) => option.id);
     const [from, to] = [open.indexOf(String(before[board.groupBy])), open.indexOf(stage)];
     if (from >= 0 && to > from + 1) return `This ${object.singular.toLowerCase()} cannot skip from ${stages.find((option) => option.id === before[board.groupBy])?.label} straight to ${label}. Move it one stage at a time.`;
+  }
+  // What a stage needs is checked when a record arrives in it, and whenever one of those fields is cleared while it sits there.
+  for (const id of board.required?.[stage] ?? []) {
+    const property = object.properties.find((item) => item.id === id);
+    if (property && isEmpty(after[id])) return `${property.label} has to be filled in ${moved ? 'before' : 'while'} this ${object.singular.toLowerCase()} is in ${label}.`;
   }
   return undefined;
 }

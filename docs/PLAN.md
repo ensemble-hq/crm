@@ -304,6 +304,8 @@ Built so far (in `server/`):
 
 Not yet: the Ensemble sign-in and email adapters and connected mailboxes (only development providers exist), delivery and bounce reports, attachments and HTML bodies, time zones on booking pages, restoring deleted records, the assistant's words appearing letter by letter as the model writes them (events stream, text within one does not), and files given to the assistant on a model.
 
+Tests: `pnpm test` (needs `pnpm db:up`). Unit tests sit beside the shared code (`src/lib/*.test.ts`). The server tests in `server/test` run the real services against a real Postgres database, `crm_test`, which they create and empty themselves, and call operations the way the HTTP API and MCP do, so who is acting, an agent's limits and the audit log are exercised too. They cover access by role, records and import, computed fields and stage rules, email in and out with its failure cases, consent and opting out, sequences, workflows, agents, the audit log, public forms and booking, and the assistant on a scripted model.
+
 To run it: `pnpm db:up`, `pnpm db:seed` (once), `pnpm api`, `pnpm worker`, then `pnpm dev:live` and open http://localhost:5185. Plain `pnpm dev` still runs on the mock alone. Mariachi must be checked out beside this repo and built, because its packages are linked, not installed.
 
 Order: records end to end (contacts first; the other objects follow because they are metadata), auth and people, activity and tasks and the record brief, events with workflows and sequences, import, inbox and email, reports and forecast, the assistant on a real model.

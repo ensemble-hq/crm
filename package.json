@@ -13,7 +13,9 @@
     "db:generate": "cd server && node ../../../mariachi/packages/cli/dist/index.js db generate --schema src/schema/index.ts --out drizzle",
     "db:migrate": "cd server && node ../../../mariachi/packages/cli/dist/index.js db migrate --schema src/schema/index.ts --out drizzle",
     "db:seed": "cd server && tsx src/seed.ts",
-    "worker": "cd server && tsx watch src/worker.ts"
+    "worker": "cd server && tsx watch src/worker.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@ai-sdk/openai": "link:../../mariachi/packages/ai/node_modules/@ai-sdk/openai",
@@ -36,6 +38,7 @@
     "@xyflow/react": "^12.12.1",
     "drizzle-orm": "link:../../mariachi/packages/database-postgres/node_modules/drizzle-orm",
     "lucide-react": "^0.460.0",
+    "postgres": "link:../../mariachi/packages/database-postgres/node_modules/postgres",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.30.6",
@@ -50,6 +53,7 @@
     "drizzle-kit": "0.30.6",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "vitest": "^3.0.0"
   }
 }
