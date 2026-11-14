@@ -1,6 +1,7 @@
 import { api } from '../api';
 import type { Filter, ObjectDefinition, PropertyType, PropertyValue, User } from '../contracts/metadata';
 import type { CrmRecord } from '../contracts/records';
+import type { ReportSettings } from '../contracts/reports';
 import { matchColumn } from '../lib/columns';
 import { MOCK_NOW, MOCK_TODAY, OPEN_STAGES } from '../mock/definitions';
 import { formatDate } from '../ui/PropertyValue';
@@ -569,10 +570,73 @@ async function remind(ctx: EngineContext, what: string): Promise<void> {
   await ctx.say(`Done. "${name}" is on your task list${due ? `, due ${formatDate(due)}` : ''}${about}.`);
 }
 
+/** "Chart won deals by source": works out a report from the sentence, draws it, and offers to keep it. */
+async function buildReport(ctx: EngineContext, text: string): Promise<boolean> {
+  const object =
+    ctx.objects.find((item) => text.includes(item.plural.toLowerCase()) || new RegExp(`\\b${item.singular.toLowerCase()}\\b`).test(text)) ??
+    ctx.objects.find((item) => item.id === ctx.page.objectId) ??
+    ctx.objects.find((item) => item.id === 'deals');
+  const by = /\bby ([a-z ]+?)(?: (?:this|last|for|in|over|from)\b.*)?[.?]?$/.exec(text)?.[1]?.trim();
+  if (!object || !by) return false;
+
+  const dateProperty = object.properties.find((property) => property.id === 'closeDate') ?? object.properties.find((property) => property.id === 'createdAt');
+  const bucket = by === 'month' || by === 'quarter' ? by : undefined;
+  const group = bucket
+    ? dateProperty
+    : object.properties.find((property) => {
+        const label = property.label.toLowerCase();
+        return label === by || property.id.toLowerCase() === by.replace(/ /g, '') || label.includes(by) || by.includes(label) || (by === 'rep' && property.id === 'owner') || (by === 'person' && property.id === 'owner');
+      });
+  if (!group) return false;
+
+  const amount = object.properties.find((property) => property.type === 'currency');
+  const measure: ReportSettings['measure'] = amount && /average|avg/.test(text) ? { kind: 'average', property: amount.id } : amount && /value|amount|revenue|worth|total|\$/.test(text) ? { kind: 'sum', property: amount.id } : { kind: 'count' };
+  const filters = filtersFrom(text, object);
+  if (bucket && dateProperty) filters.push({ property: dateProperty.id, operator: 'gt', value: '$12monthsAgo' });
+  // Name the report for what it is restricted to, so "won deals by source" isn't saved as "deals by source".
+  const stageFilter = filters.find((filter) => filter.property === 'stage' && Array.isArray(filter.value) && filter.value.length === 1);
+  const stageWord = Array.isArray(stageFilter?.value) ? { won: 'Won', lost: 'Lost' }[stageFilter.value[0] ?? ''] : undefined;
+  const subject = `${stageWord ? `${stageWord} ` : filters.some((filter) => filter.property === 'owner' && filter.operator === 'in') ? 'My ' : ''}${object.plural.toLowerCase()}`;
+  const what = measure.kind === 'count' ? `${subject.slice(0, 1).toUpperCase()}${subject.slice(1)}` : `${measure.kind === 'sum' ? 'Total' : 'Average'} ${amount?.label.toLowerCase()} of ${subject}`;
+  const settings: ReportSettings = { name: `${what} by ${bucket ?? group.label.toLowerCase()}`, objectId: object.id, measure, groupBy: group.id, bucket, filters, chart: bucket ? 'columns' : 'bars' };
+
+  const result = await ctx.tool('run_report', `Working out ${settings.name.toLowerCase()}`, () => api.runReport(settings), (found) => `${plural(found.records, object.singular.toLowerCase())} in ${plural(found.rows.length, 'group')}`);
+  const money = measure.kind !== 'count' && amount;
+  const show = (value: number) => (money ? compactCurrency(value) : value.toLocaleString('en-US', { maximumFractionDigits: 1 }));
+  ctx.show({
+    kind: 'chart',
+    title: settings.name,
+    subtitle: `${plural(result.records, object.singular.toLowerCase())}${filters.length > 0 ? ` · ${filters.map((filter) => describeFilter(filter, object, ctx.users)).join('; ')}` : ''}`,
+    bars: result.rows.map((row) => ({ label: row.label, value: row.value, display: show(row.value), note: measure.kind === 'count' ? undefined : plural(row.count, object.singular.toLowerCase()) })),
+  });
+  const top = [...result.rows].sort((a, b) => b.value - a.value)[0];
+  await ctx.say(top ? `Here is ${settings.name.toLowerCase()}. The largest is ${top.label}, at ${show(top.value)}.` : `No ${object.plural.toLowerCase()} match, so there is nothing to chart.`);
+  if (!top) return true;
+  ctx.propose({
+    title: 'Keep this as a report',
+    summary: 'Saves the chart so it stays up to date, and puts it on the dashboard.',
+    steps: [
+      {
+        label: `Save the report "${settings.name}"`,
+        run: async () => {
+          const saved = await api.saveReport(settings);
+          const board = (await api.listDashboards())[0];
+          if (board) await api.saveDashboard({ ...board, reportIds: [...board.reportIds, saved.id] });
+        },
+      },
+      { label: 'Add it to the Sales overview dashboard', run: async () => ctx.touch() },
+    ],
+    doneText: `Saved. "${settings.name}" is on the dashboard and will stay current.`,
+    doneLink: { to: '/reports', label: 'Open the dashboard' },
+  });
+  ctx.suggest(['Run the plan']);
+  return true;
+}
+
 async function help(ctx: EngineContext): Promise<void> {
   await pause(300);
   await ctx.say('This is a scripted preview of the assistant, so it understands a few requests. Try one of these. The answers use the real data in this workspace.');
-  ctx.suggest(['What should I do today?', 'How is the pipeline looking?', 'Which big deals have gone quiet?', 'Import a spreadsheet of leads', 'Add a renewal date to deals', 'Build a customer portal']);
+  ctx.suggest(['What should I do today?', 'How is the pipeline looking?', 'Chart won deals by source', 'Which big deals have gone quiet?', 'Import a spreadsheet of leads', 'Add a renewal date to deals', 'Build a customer portal']);
 }
 
 /** Answers one message. Each branch stands in for what the model would decide to do. */
@@ -617,6 +681,7 @@ export async function respond(input: { text: string; attachments: Attachment[] }
     ctx.suggest(['Use a sample file']);
     return;
   }
+  if (/\b(chart|report|graph|break ?down|breakdown|split|count)\b/.test(text) && /\bby\b/.test(text) && (await buildReport(ctx, text))) return;
   if (/quiet|stale|no activity|cold|stuck|at risk|attention/.test(text)) return quietDeals(ctx);
   if (/closed|won\b|most|leader|best rep/.test(text)) return wonByOwner(ctx);
   if (/pipeline|stage|forecast|chart|graph/.test(text)) return pipelineByStage(ctx);

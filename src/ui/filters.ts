@@ -55,6 +55,8 @@ export const TOKENS: Record<string, string> = {
   $14daysAgo: '14 days ago',
   $lastMonthStart: 'the start of last month',
   $lastMonthEnd: 'the end of last month',
+  $12monthsAgo: '12 months ago',
+  $yearStart: 'the start of this year',
   $monthStart: 'the start of this month',
   $monthEnd: 'the end of this month',
 };

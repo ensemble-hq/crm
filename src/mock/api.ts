@@ -15,6 +15,7 @@ import type {
 import { CURRENT_USER_ID, MOCK_NOW, MOCK_TODAY, objects, users } from './definitions';
 import { dataset } from './generate';
 import { createInboxApi } from './inbox';
+import { createReportsApi } from './reports';
 
 /** In-memory implementation of `CrmApi`. Everything the pages know about data comes through here. */
 
@@ -75,6 +76,10 @@ function resolveToken(value: string): string {
       return monthEdge(-1, 'start');
     case '$lastMonthEnd':
       return monthEdge(-1, 'end');
+    case '$12monthsAgo':
+      return monthEdge(-11, 'start');
+    case '$yearStart':
+      return `${MOCK_TODAY.slice(0, 4)}-01-01`;
     default:
       return value;
   }
@@ -419,6 +424,7 @@ function logEmail(recordId: string, subject: string, body: string): void {
 
 export const mockApi: CrmApi = {
   ...createInboxApi(respond, logEmail),
+  ...createReportsApi({ respond, select, definition, labelOf: label }),
   getWorkspace: () => respond(() => ({ name: 'Northwind', objects, users, currentUserId: CURRENT_USER_ID })),
 
   listRecords: (query: ListQuery) =>
