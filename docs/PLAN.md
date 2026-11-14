@@ -8,6 +8,7 @@ On screen so far, all on mock data:
 
 - Today: tasks due, deals closing, deals gone quiet and the pipeline, read live, with a written briefing
 - Inbox: email threads linked to their contact, company and deal; assign, close, reply with templates or a drafted reply; sent replies are logged on the records (mock email until Gmail and Outlook sync exists)
+- Import: a four-step wizard for CSV files (match columns, dry-run review, import, undo), and CSV export of any view
 - Tasks: an object like any other, with one-click completion, created from any record or by asking the assistant
 - Contacts, companies and deals: lists with saved views, a filter builder, column choice, search, sorting, bulk edit and delete; a stage board; record pages with fields edited in place
 - Field rules: required and unique, checked on every save

@@ -9,6 +9,7 @@ import { WorkspaceProvider } from './app/WorkspaceProvider';
 import { AssistantPage } from './pages/Assistant';
 import { ComingSoon } from './pages/ComingSoon';
 import { Dashboard } from './pages/Dashboard';
+import { ImportPage } from './pages/Import';
 import { Inbox } from './pages/Inbox';
 import { RecordDetail } from './pages/RecordDetail';
 import { RecordList } from './pages/RecordList';
@@ -30,6 +31,7 @@ createRoot(root).render(
             <Route path="assistant" element={<AssistantPage />} />
             <Route path="inbox" element={<Inbox />} />
             <Route path="inbox/:conversationId" element={<Inbox />} />
+            <Route path="import" element={<ImportPage />} />
             <Route path="settings" element={<Settings />} />
             <Route path="settings/objects/:objectId" element={<ObjectSettings />} />
             {PLACEHOLDERS.map((path) => (

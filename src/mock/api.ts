@@ -4,6 +4,8 @@ import type {
   ActivityKind,
   CrmApi,
   CrmRecord,
+  ImportRequest,
+  ImportResult,
   ListQuery,
   Reference,
   RelatedGroup,
@@ -288,13 +290,123 @@ function validate(object: ObjectDefinition, values: Record<string, PropertyValue
 let sequence = 0;
 
 /** URL segments the app uses itself, so no object may take them. */
-const RESERVED = new Set(['assistant', 'inbox', 'tasks', 'sequences', 'workflows', 'reports', 'settings']);
+const RESERVED = new Set(['assistant', 'inbox', 'tasks', 'import', 'sequences', 'workflows', 'reports', 'settings']);
 
 /** "Renewal date" becomes `renewalDate` (joiner '') or `renewal-date` (joiner '-'). */
 function slug(text: string, joiner: '' | '-'): string {
   const words = text.trim().toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
   if (joiner === '-') return words.join('-');
   return words.map((word, index) => (index === 0 ? word : `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`)).join('');
+}
+
+/** Turns the text from a file's cell into the value a property holds. `undefined` means "could not understand it". */
+function coerce(text: string, definitionOf: PropertyDefinition): PropertyValue | undefined {
+  const value = text.trim();
+  if (value === '') return null;
+  const lower = value.toLowerCase();
+  switch (definitionOf.type) {
+    case 'number':
+    case 'currency': {
+      const parsed = Number(value.replace(/[^0-9.-]/g, ''));
+      return Number.isFinite(parsed) && /\d/.test(value) ? parsed : undefined;
+    }
+    case 'boolean':
+      if (['yes', 'true', '1', 'y'].includes(lower)) return true;
+      if (['no', 'false', '0', 'n'].includes(lower)) return false;
+      return undefined;
+    case 'date':
+    case 'datetime': {
+      const time = Date.parse(value);
+      return Number.isNaN(time) ? undefined : new Date(time).toISOString().slice(0, 10);
+    }
+    case 'select':
+      return definitionOf.options?.find((option) => option.label.toLowerCase() === lower || option.id === lower)?.id;
+    case 'multiselect': {
+      const ids = value.split(/[;|]/).map((part) => definitionOf.options?.find((option) => option.label.toLowerCase() === part.trim().toLowerCase())?.id);
+      return ids.every((id): id is string => id !== undefined) ? ids : undefined;
+    }
+    case 'user':
+      return users.find((user) => user.name.toLowerCase() === lower || user.email.toLowerCase() === lower)?.id;
+    case 'reference': {
+      const target = definitionOf.referenceObjectId ? definition(definitionOf.referenceObjectId) : undefined;
+      if (!target) return undefined;
+      return (dataset().byObject.get(target.id) ?? []).find((item) => String(item.properties[target.primaryProperty] ?? '').toLowerCase() === lower)?.id;
+    }
+    default:
+      return value;
+  }
+}
+
+function importRecords(input: ImportRequest): ImportResult {
+  const object = definition(input.objectId);
+  const data = dataset();
+  const result: ImportResult = { created: [], updated: 0, skipped: [], warnings: [] };
+  const matchOn = input.matchOn ? property(object, input.matchOn) : undefined;
+  // Existing records by the matching value, built once so a large file doesn't rescan for every row.
+  const existing = new Map<string, CrmRecord>();
+  if (matchOn) {
+    for (const item of data.byObject.get(object.id) ?? []) {
+      const key = item.properties[matchOn.id];
+      if (typeof key === 'string' && key !== '') existing.set(key.toLowerCase(), item);
+    }
+  }
+  const seen = new Set<string>();
+
+  input.rows.forEach((row, index) => {
+    const position = index + 1;
+    const values: Record<string, PropertyValue> = {};
+    for (const [propertyId, text] of Object.entries(row)) {
+      const definitionOf = property(object, propertyId);
+      if (!definitionOf || definitionOf.system) continue;
+      const value = coerce(text, definitionOf);
+      if (value === undefined) {
+        result.warnings.push({ row: position, message: `${definitionOf.label}: "${text}" was not understood and was left empty.` });
+        continue;
+      }
+      values[propertyId] = value;
+    }
+    const key = matchOn && typeof values[matchOn.id] === 'string' ? (values[matchOn.id] as string).toLowerCase() : undefined;
+    if (key && seen.has(key)) {
+      result.skipped.push({ row: position, reason: `Repeats ${matchOn?.label.toLowerCase()} "${String(values[matchOn?.id ?? ''])}" from an earlier row.` });
+      return;
+    }
+    if (key) seen.add(key);
+    const match = key ? existing.get(key) : undefined;
+    try {
+      if (match) {
+        if (input.onMatch === 'skip') {
+          result.skipped.push({ row: position, reason: `Already in the CRM (matched on ${matchOn?.label.toLowerCase()}).` });
+          return;
+        }
+        // Only fill in what the file has; an empty cell never wipes an existing value.
+        const changes = Object.fromEntries(Object.entries(values).filter(([, value]) => !isEmpty(value)));
+        validate(object, changes, match.id, false);
+        if (!input.dryRun) {
+          Object.assign(match.properties, changes);
+          match.updatedAt = new Date().toISOString();
+        }
+        result.updated += 1;
+        return;
+      }
+      const properties = { ...(input.defaults ?? {}), ...values };
+      validate(object, properties, undefined, true);
+      if (input.dryRun) {
+        result.created.push(`row_${position}`);
+        return;
+      }
+      const now = new Date().toISOString();
+      sequence += 1;
+      const item: CrmRecord = { id: `${object.id.slice(0, 3)}_new_${sequence}`, objectId: object.id, properties: { ...properties, createdAt: MOCK_TODAY }, createdAt: now, updatedAt: now };
+      data.byObject.get(object.id)?.unshift(item);
+      data.byId.set(item.id, item);
+      createdRecords.add(item.id);
+      if (key) existing.set(key, item);
+      result.created.push(item.id);
+    } catch (error) {
+      result.skipped.push({ row: position, reason: error instanceof Error ? error.message : 'Not valid.' });
+    }
+  });
+  return result;
 }
 
 /** Puts an email sent from the inbox on a record's timeline. */
@@ -493,6 +605,8 @@ export const mockApi: CrmApi = {
       object.views = object.views.filter((view) => view.id !== input.viewId);
       return object;
     }),
+
+  importRecords: (input) => respond(() => importRecords(input)),
 
   createActivity: (input) =>
     respond(() => {

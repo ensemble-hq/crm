@@ -1,38 +1,8 @@
 import { ArrowUp, AudioLines, Paperclip, X } from 'lucide-react';
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { parseCsv } from '../lib/csv';
 import { ICON, initials, small } from '../ui/styles';
 import type { Attachment, ChatMessage } from './types';
-
-/** Reads a CSV file into rows. Handles quoted values; enough for a spreadsheet export. */
-export function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let value = '';
-  let quoted = false;
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    if (quoted) {
-      if (char === '"' && text[index + 1] === '"') {
-        value += '"';
-        index += 1;
-      } else if (char === '"') quoted = false;
-      else value += char;
-    } else if (char === '"') quoted = true;
-    else if (char === ',') {
-      row.push(value.trim());
-      value = '';
-    } else if (char === '\n' || char === '\r') {
-      if (char === '\r' && text[index + 1] === '\n') index += 1;
-      row.push(value.trim());
-      value = '';
-      if (row.some((cell) => cell !== '')) rows.push(row);
-      row = [];
-    } else value += char;
-  }
-  row.push(value.trim());
-  if (row.some((cell) => cell !== '')) rows.push(row);
-  return rows;
-}
 
 export async function readAttachment(file: File): Promise<Attachment> {
   const isCsv = /\.csv$/i.test(file.name) || file.type === 'text/csv';

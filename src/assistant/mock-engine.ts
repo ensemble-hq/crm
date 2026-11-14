@@ -1,6 +1,7 @@
 import { api } from '../api';
 import type { Filter, ObjectDefinition, PropertyType, PropertyValue, User } from '../contracts/metadata';
 import type { CrmRecord } from '../contracts/records';
+import { matchColumn } from '../lib/columns';
 import { MOCK_NOW, MOCK_TODAY, OPEN_STAGES } from '../mock/definitions';
 import { formatDate } from '../ui/PropertyValue';
 import { describeFilter } from '../ui/filters';
@@ -193,15 +194,6 @@ const SAMPLE_FILE: Attachment = {
   ],
 };
 
-/** Which contact property a spreadsheet column most likely holds. */
-const COLUMN_HINTS: Array<{ property: string; pattern: RegExp }> = [
-  { property: 'email', pattern: /e-?mail/i },
-  { property: 'phone', pattern: /phone|mobile|tel/i },
-  { property: 'jobTitle', pattern: /title|role|position/i },
-  { property: 'city', pattern: /city|town/i },
-  { property: 'name', pattern: /name/i },
-];
-
 async function importFile(ctx: EngineContext, file: Attachment): Promise<void> {
   const contacts = ctx.objects.find((object) => object.id === 'contacts');
   const [header, ...rows] = file.rows ?? [];
@@ -218,7 +210,7 @@ async function importFile(ctx: EngineContext, file: Attachment): Promise<void> {
       return header.map((column, index) => ({
         column,
         index,
-        property: COLUMN_HINTS.find((hint) => hint.pattern.test(column))?.property ?? null,
+        property: matchColumn(column, contacts),
         sample: rows[0]?.[index] ?? '',
       }));
     },

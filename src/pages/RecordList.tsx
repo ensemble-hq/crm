@@ -9,6 +9,7 @@ import { CompleteButton, isComplete } from '../ui/CompleteButton';
 import { Modal } from '../ui/Modal';
 import { PropertyInput } from '../ui/PropertyInput';
 import { PropertyValue } from '../ui/PropertyValue';
+import { EXPORT_LIMIT, exportRecords } from '../lib/exportRecords';
 import { describeFilter } from '../ui/filters';
 import { objectIcon } from '../ui/icons';
 import { ICON, figure, small, toolbarButton } from '../ui/styles';
@@ -442,6 +443,8 @@ export function RecordList() {
   const [total, setTotal] = useState<number>();
   const [dialog, setDialog] = useState<{ kind: 'filter'; index?: number } | { kind: 'columns' } | { kind: 'save' }>();
   const [savingView, setSavingView] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [notice, setNotice] = useState<string>();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: the count belongs to one object
   useEffect(() => setTotal(undefined), [objectId]);
@@ -474,6 +477,24 @@ export function RecordList() {
   const setFilters = (next: Filter[]) => update({ f: JSON.stringify(next), page: undefined });
   const reset = () => update({ f: undefined, cols: undefined, sort: undefined, page: undefined });
 
+  async function exportView() {
+    if (!object || !view) return;
+    setExporting(true);
+    setNotice(undefined);
+    try {
+      const done = await exportRecords({ object, columns, filters, search, sort, users: workspace.users, fileName: `${object.id}-${view.id}.csv` });
+      setNotice(
+        done.exported < done.total
+          ? `Exported the first ${done.exported.toLocaleString('en-US')} of ${done.total.toLocaleString('en-US')} ${object.plural.toLowerCase()}. This mock stops at ${EXPORT_LIMIT.toLocaleString('en-US')} rows.`
+          : `Exported ${done.exported.toLocaleString('en-US')} ${done.exported === 1 ? object.singular.toLowerCase() : object.plural.toLowerCase()} to your downloads.`,
+      );
+    } catch (cause) {
+      setNotice(cause instanceof Error ? `The export failed: ${cause.message}` : 'The export failed.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function saveOver() {
     if (!object || !view) return;
     setSavingView(true);
@@ -493,11 +514,13 @@ export function RecordList() {
       wide
       actions={
         <>
-          <button type="button" className="m-button" data-size="sm" style={toolbarButton}>
-            <Upload size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Import
-          </button>
-          <button type="button" className="m-button" data-size="sm" style={toolbarButton}>
-            <Download size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Export
+          {object.completion ? null : (
+            <Link to={`/import?object=${object.id}`} className="m-button" data-size="sm" style={toolbarButton}>
+              <Upload size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Import
+            </Link>
+          )}
+          <button type="button" className="m-button" data-size="sm" style={toolbarButton} disabled={exporting} onClick={() => void exportView()} title={`Download "${view.name}" as a CSV file`}>
+            <Download size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> {exporting ? 'Exporting…' : 'Export'}
           </button>
           <button type="button" className="m-button" data-variant="primary" data-size="sm" onClick={() => setCreating(true)}>
             <Plus size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> {object.singular}
@@ -510,6 +533,13 @@ export function RecordList() {
           <h1 style={{ ...figure, fontVariantNumeric: 'normal' }}>{object.plural}</h1>
           {layout === 'table' && total !== undefined ? <span style={{ ...small, fontVariantNumeric: 'tabular-nums' }}>{total.toLocaleString('en-US')}</span> : null}
         </div>
+        {notice ? (
+          <output className="m-alert" data-tone="info">
+            <div className="m-alert-content">
+              <p className="m-alert-body">{notice}</p>
+            </div>
+          </output>
+        ) : null}
         <section className="m-card" aria-label={object.plural} style={{ padding: 0, overflow: 'hidden' }}>
           <div className="m-cluster" data-justify="between" style={{ padding: 'var(--m-space-2)' }}>
             <ViewTabs object={object} view={view} onSelect={(viewId) => update({ view: viewId, page: undefined, sort: undefined, f: undefined, cols: undefined })} />

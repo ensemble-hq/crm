@@ -100,6 +100,35 @@ export const createActivitySchema = z.object({
 });
 export type CreateActivity = z.infer<typeof createActivitySchema>;
 
+/**
+ * One import. Values arrive as the text from the file; the server turns them into each property's
+ * type (a choice by its label, a person by name or email, a linked record by its name).
+ * With `dryRun`, nothing is written and the result says what would happen.
+ */
+export const importRequestSchema = z.object({
+  objectId: z.string(),
+  /** One entry per row: property id to the text in that row's cell. */
+  rows: z.array(z.record(z.string())),
+  /** Rows are matched to existing records on this property. Absent, every row is new. */
+  matchOn: z.string().optional(),
+  /** What to do with a row that matches an existing record. */
+  onMatch: z.enum(['skip', 'update']),
+  /** Properties set on every created record, such as the owner. */
+  defaults: z.record(propertyValueSchema).optional(),
+  dryRun: z.boolean().optional(),
+});
+export type ImportRequest = z.infer<typeof importRequestSchema>;
+
+export const importResultSchema = z.object({
+  created: z.array(z.string()),
+  updated: z.number().int(),
+  /** Rows left out, by their position in the file (1 is the first data row), with the reason. */
+  skipped: z.array(z.object({ row: z.number().int(), reason: z.string() })),
+  /** Values that could not be understood and were left empty, such as an unknown choice. */
+  warnings: z.array(z.object({ row: z.number().int(), message: z.string() })),
+});
+export type ImportResult = z.infer<typeof importResultSchema>;
+
 export type Workspace = { name: string; objects: ObjectDefinition[]; users: User[]; currentUserId: string };
 
 export interface CrmApi extends InboxApi {
@@ -113,6 +142,7 @@ export interface CrmApi extends InboxApi {
   createRecord(input: CreateRecord): Promise<CrmRecord>;
   updateRecord(input: UpdateRecord): Promise<CrmRecord>;
   deleteRecords(ids: string[]): Promise<{ deleted: number }>;
+  importRecords(input: ImportRequest): Promise<ImportResult>;
   createActivity(input: CreateActivity): Promise<Activity>;
   /** Metadata changes. Each returns the object as it now stands. */
   createObject(input: CreateObject): Promise<ObjectDefinition>;
