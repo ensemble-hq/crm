@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { InboxApi } from './inbox';
 import type { ReportsApi } from './reports';
 import type { SequencesApi } from './sequences';
+import type { WorkflowsApi } from './workflows';
 import { type CreateObject, type CreateProperty, type ObjectDefinition, type SaveView, type UpdateProperty, type User, type ViewDefinition, filterSchema, propertyValueSchema, sortSchema } from './metadata';
 
 /**
@@ -133,7 +134,7 @@ export type ImportResult = z.infer<typeof importResultSchema>;
 
 export type Workspace = { name: string; objects: ObjectDefinition[]; users: User[]; currentUserId: string };
 
-export interface CrmApi extends InboxApi, ReportsApi, SequencesApi {
+export interface CrmApi extends InboxApi, ReportsApi, SequencesApi, WorkflowsApi {
   getWorkspace(): Promise<Workspace>;
   listRecords(query: ListQuery): Promise<ListResult>;
   summarize(query: SummaryQuery): Promise<SummaryRow[]>;

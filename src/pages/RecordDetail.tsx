@@ -278,6 +278,8 @@ export function RecordDetail() {
     if (!record || !object?.board) return;
     await api.updateRecord({ id: record.id, properties: { [object.board.groupBy]: optionId } });
     detail.reload();
+    // A stage change can set off workflows (a task, a note), so everything else on the page re-reads too.
+    touch();
   }
 
   return (

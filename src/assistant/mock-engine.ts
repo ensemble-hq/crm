@@ -2,6 +2,7 @@ import { api } from '../api';
 import type { Filter, ObjectDefinition, PropertyType, PropertyValue, User } from '../contracts/metadata';
 import type { CrmRecord } from '../contracts/records';
 import type { ReportSettings } from '../contracts/reports';
+import type { WorkflowSettings } from '../contracts/workflows';
 import { matchColumn } from '../lib/columns';
 import { MOCK_NOW, MOCK_TODAY, OPEN_STAGES } from '../mock/definitions';
 import { formatDate } from '../ui/PropertyValue';
@@ -764,4 +765,46 @@ export function draftSequence(goal: string): { name: string; steps: Array<{ kind
       { kind: 'email', waitDays: 5, templateId: 'tpl_nudge' },
     ],
   };
+}
+
+/**
+ * A first draft of a workflow from a sentence. Scripted: it reads a few keywords for what sets it
+ * off and what it should do. The real assistant builds the trigger, conditions and actions from
+ * the sentence and the workspace's own objects and fields.
+ */
+export function draftWorkflow(goal: string, objects: ObjectDefinition[]): WorkflowSettings {
+  const text = goal.toLowerCase();
+  const object =
+    objects.find((item) => !item.completion && (text.includes(item.plural.toLowerCase()) || new RegExp(`\\b${item.singular.toLowerCase()}\\b`).test(text))) ??
+    objects.find((item) => item.id === (/\b(lead|contact|person|sign ?up|form)\b/.test(text) ? 'contacts' : 'deals')) ??
+    (objects[0] as ObjectDefinition);
+  const has = (id: string) => object.properties.some((property) => property.id === id);
+
+  let trigger: WorkflowSettings['trigger'] = { kind: 'created' };
+  if (has('stage') && /\bwon\b|closes?\b|signed/.test(text)) trigger = { kind: 'changed', property: 'stage', to: 'won' };
+  else if (has('stage') && /\blost\b/.test(text)) trigger = { kind: 'changed', property: 'stage', to: 'lost' };
+  else if (has('stage') && /stage|moves?|negotiation|proposal/.test(text)) trigger = { kind: 'changed', property: 'stage', to: /negotiation/.test(text) ? 'negotiation' : /proposal/.test(text) ? 'proposal' : undefined };
+  else if (has('lifecycleStage') && /becomes? a customer|customer/.test(text)) trigger = { kind: 'changed', property: 'lifecycleStage', to: 'customer' };
+  else if (has('owner') && /owner changes|reassigned/.test(text)) trigger = { kind: 'changed', property: 'owner' };
+
+  const conditions: Filter[] = [];
+  const amount = /(?:over|above|more than|at least)\s*\$?\s*([\d,.]+)\s*(k|m)?/.exec(text);
+  if (amount?.[1] && has('amount')) conditions.push({ property: 'amount', operator: 'gt', value: Number(amount[1].replace(/,/g, '')) * (amount[2] === 'm' ? 1_000_000 : amount[2] === 'k' ? 1_000 : 1) });
+  if (/no owner|unassigned|without an owner/.test(text) && has('owner')) conditions.push({ property: 'owner', operator: 'empty' });
+
+  const actions: WorkflowSettings['actions'] = [];
+  const next = () => `a${actions.length + 1}`;
+  if (/assign|share out|round.?robin|route/.test(text) && has('owner')) actions.push({ id: next(), kind: 'assign', userIds: ['usr_priya', 'usr_jonas', 'usr_dario'] });
+  if (/high priority|urgent|flag/.test(text) && has('priority')) actions.push({ id: next(), kind: 'set-property', property: 'priority', value: 'high' });
+  const quoted = /["“]([^"”]+)["”]/.exec(goal)?.[1];
+  if (/task|remind|to-?do|follow.?up|call/.test(text)) actions.push({ id: next(), kind: 'create-task', title: quoted ?? (/call/.test(text) ? 'Call them' : /welcome/.test(text) ? 'Send the welcome pack' : 'Follow up'), dueInDays: /tomorrow|next day/.test(text) ? 1 : 2 });
+  if (/sequence|enrol/.test(text)) actions.push({ id: next(), kind: 'enroll', sequenceId: 'seq_new_lead' });
+  else if (/e-?mail|send (a|the|them)/.test(text)) actions.push({ id: next(), kind: 'send-email', templateId: /welcome|thank/.test(text) ? 'tpl_thanks' : 'tpl_intro' });
+  const stage = trigger.kind === 'changed' ? object.properties.find((property) => property.id === trigger.property)?.options?.find((option) => option.id === trigger.to)?.label : undefined;
+  const happened = trigger.kind === 'created' ? `A new ${object.singular.toLowerCase()} came in` : stage ? `A ${object.singular.toLowerCase()} of yours moved to ${stage}` : `A ${object.singular.toLowerCase()} of yours changed`;
+  if (/notify|tell|alert|let .* know|ping/.test(text) || actions.length === 0) actions.push({ id: next(), kind: 'notify', message: `${happened}.` });
+
+  // Named for what sets it off; the sentence under the name says the rest.
+  const name = trigger.kind === 'created' ? `New ${object.plural.toLowerCase()}` : stage ? `${object.plural} moved to ${stage}` : `${object.plural} that change`;
+  return { name: conditions.length > 0 ? `${name} (some)` : name, on: false, objectId: object.id, trigger, conditions, actions };
 }

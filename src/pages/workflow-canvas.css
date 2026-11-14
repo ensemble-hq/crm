@@ -1,0 +1,12 @@
+/*
+ * One compatibility rule for React Flow, and the only stylesheet in the app: everything else is
+ * styled with the design library's classes and tokens.
+ *
+ * The design library's reset gives every <svg> `max-inline-size: 100%`. React Flow draws its
+ * connectors in an <svg> inside a zero-width layer and relies on overflow, so that cap makes the
+ * svg zero pixels wide, and a zero-width svg paints nothing. Lifting the cap inside the canvas
+ * brings the connectors back.
+ */
+.react-flow svg {
+  max-inline-size: none;
+}

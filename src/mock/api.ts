@@ -16,7 +16,8 @@ import { CURRENT_USER_ID, MOCK_NOW, MOCK_TODAY, objects, users } from './definit
 import { dataset } from './generate';
 import { createInboxApi } from './inbox';
 import { createReportsApi } from './reports';
-import { createSequencesApi } from './sequences';
+import { createSequencesApi, enrollFromWorkflow } from './sequences';
+import { type WorkflowDeps, createWorkflowsApi, fire } from './workflows';
 
 /** In-memory implementation of `CrmApi`. Everything the pages know about data comes through here. */
 
@@ -423,10 +424,37 @@ function logEmail(recordId: string, subject: string, body: string): void {
   createdActivity.set(recordId, [logged, ...(createdActivity.get(recordId) ?? [])]);
 }
 
+/** Adds a record straight to the store: no validation and no workflows. For records the mock itself makes. */
+function insert(objectId: string, properties: Record<string, PropertyValue>): CrmRecord {
+  const data = dataset();
+  const now = new Date().toISOString();
+  sequence += 1;
+  const item: CrmRecord = { id: `${objectId.slice(0, 3)}_new_${sequence}`, objectId, properties: { ...properties, createdAt: MOCK_TODAY }, createdAt: now, updatedAt: now };
+  data.byObject.get(objectId)?.unshift(item);
+  data.byId.set(item.id, item);
+  createdRecords.add(item.id);
+  return item;
+}
+
+const workflowDeps: WorkflowDeps = {
+  respond,
+  definition,
+  matches,
+  records: (objectId) => dataset().byObject.get(objectId) ?? [],
+  find: (recordId) => dataset().byId.get(recordId),
+  labelOf: label,
+  createTask: (properties) => {
+    insert('tasks', properties);
+  },
+  logEmail,
+  enroll: enrollFromWorkflow,
+};
+
 export const mockApi: CrmApi = {
   ...createInboxApi(respond, logEmail),
   ...createReportsApi({ respond, select, definition, labelOf: label }),
   ...createSequencesApi(respond),
+  ...createWorkflowsApi(workflowDeps),
   getWorkspace: () => respond(() => ({ name: 'Northwind', objects, users, currentUserId: CURRENT_USER_ID })),
 
   listRecords: (query: ListQuery) =>
@@ -466,20 +494,9 @@ export const mockApi: CrmApi = {
 
   createRecord: (input) =>
     respond(() => {
-      const data = dataset();
       validate(definition(input.objectId), input.properties, undefined, true);
-      const now = new Date().toISOString();
-      sequence += 1;
-      const item: CrmRecord = {
-        id: `${input.objectId.slice(0, 3)}_new_${sequence}`,
-        objectId: input.objectId,
-        properties: { ...input.properties, createdAt: MOCK_TODAY },
-        createdAt: now,
-        updatedAt: now,
-      };
-      data.byObject.get(input.objectId)?.unshift(item);
-      data.byId.set(item.id, item);
-      createdRecords.add(item.id);
+      const item = insert(input.objectId, input.properties);
+      fire({ kind: 'created', record: item }, workflowDeps);
       return item;
     }),
 
@@ -487,8 +504,10 @@ export const mockApi: CrmApi = {
     respond(() => {
       const item = get(input.id);
       validate(definition(item.objectId), input.properties, item.id, false);
+      const changed = Object.fromEntries(Object.entries(input.properties).filter(([key, value]) => JSON.stringify(item.properties[key] ?? null) !== JSON.stringify(value)));
       Object.assign(item.properties, input.properties);
       item.updatedAt = new Date().toISOString();
+      if (Object.keys(changed).length > 0) fire({ kind: 'changed', record: item, changed }, workflowDeps);
       return item;
     }),
 

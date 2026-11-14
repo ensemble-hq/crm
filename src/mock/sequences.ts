@@ -113,6 +113,19 @@ function find(id: string): Stored {
   return sequence;
 }
 
+/** Enrols one contact, for a workflow. Returns what happened, in words; throws when it cannot be done. */
+export function enrollFromWorkflow(sequenceId: string, contactId: string): string {
+  const sequence = find(sequenceId);
+  const contact = dataset().byId.get(contactId);
+  const name = String(contact?.properties.name ?? 'The contact');
+  if (!contact || typeof contact.properties.email !== 'string' || contact.properties.email === '') throw new Error(`${name} has no email address.`);
+  if (allEnrollments().some((enrollment) => enrollment.sequenceId === sequenceId && enrollment.contactId === contactId && enrollment.status === 'active')) return `${name} was already in "${sequence.name}"`;
+  counter += 1;
+  const now = Date.now();
+  allEnrollments().push({ id: `enr_new_${counter}`, sequenceId, contactId, status: 'active', stepsDone: 0, enrolledAt: new Date(now).toISOString(), nextRunAt: sequence.status === 'active' ? nextRun(sequence, 0, now) : null });
+  return `Enrolled ${name} in "${sequence.name}"`;
+}
+
 /** The sequences half of the mock API. `respond` adds latency. */
 export function createSequencesApi(respond: <T>(compute: () => T) => Promise<T>): SequencesApi {
   return {
