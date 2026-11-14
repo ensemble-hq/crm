@@ -6,7 +6,8 @@ import { bootstrap } from '@mariachi/lifecycle';
 import { useConfigSection } from '@mariachi/config';
 import { CRM_CONFIG, type CrmSettings, TENANT_ID } from './config';
 import { createEmailProvider } from './email';
-import { emailQueued, emailReceived, recordChanged, recordCreated } from './events';
+import { conversationChanged, emailQueued, emailReceived, recordChanged, recordCreated, recordDeleted, settingsChanged } from './events';
+import { announce, createLive } from './live';
 import { createServices } from './services/index';
 
 /**
@@ -27,26 +28,55 @@ async function main(): Promise<void> {
   const settings = useConfigSection<CrmSettings>(CRM_CONFIG);
   const { runner, mail, sequences } = createServices({ db: database.db, transaction: database.transaction, source: config.serviceName, email: createEmailProvider(settings, database.db) });
 
+  // Live updates: once the work a change sets off is done, open browsers are told what to read again.
+  const live = lifecycle.manage('live', createLive(config.redis.url, config.serviceName, { logger, tracer, metrics }), { priority: 25 });
+  const recordsChanged = (ctx: Parameters<typeof announce>[1], objectId: string) => announce(live, ctx, { topic: 'records', objectId });
+  events.subscribe(recordDeleted, (ctx, payload) => recordsChanged(ctx, payload.objectId), { group: 'live', name: 'live.deleted' });
+  events.subscribe(settingsChanged, (ctx) => announce(live, ctx, { topic: 'settings' }), { group: 'live', name: 'live.settings' });
+  events.subscribe(conversationChanged, (ctx) => announce(live, ctx, { topic: 'inbox' }), { group: 'live', name: 'live.conversation' });
+
   // Changes a workflow made are announced too, for whoever else listens, but never set off workflows.
   events.subscribe(
     recordCreated,
     async (ctx, payload, meta) => {
-      if (payload.origin === 'person') await runner.handle(ctx, { kind: 'created', recordId: payload.recordId }, meta.id);
+      // A workflow may notify someone; what it creates or changes is announced by its own events.
+      if (payload.origin === 'person' && (await runner.handle(ctx, { kind: 'created', recordId: payload.recordId }, meta.id)) > 0) await announce(live, ctx, { topic: 'notifications' });
+      await recordsChanged(ctx, payload.objectId);
     },
     { group: 'workflows', name: 'workflows.created' },
   );
   events.subscribe(
     recordChanged,
     async (ctx, payload, meta) => {
-      if (payload.origin === 'person') await runner.handle(ctx, { kind: 'changed', recordId: payload.recordId, changed: payload.changed }, meta.id);
+      if (payload.origin === 'person' && (await runner.handle(ctx, { kind: 'changed', recordId: payload.recordId, changed: payload.changed }, meta.id)) > 0) await announce(live, ctx, { topic: 'notifications' });
+      await recordsChanged(ctx, payload.objectId);
     },
     { group: 'workflows', name: 'workflows.changed' },
   );
 
   // Moves committed events from the database to the bus. Started after the subscriptions exist.
   // Email: file what arrived, send what was queued. Both are safe to repeat.
-  events.subscribe(emailReceived, (ctx, payload) => mail.file(ctx, payload.inboundId), { group: 'email', name: 'email.file' });
-  events.subscribe(emailQueued, (ctx, payload) => mail.deliver(ctx, payload.messageId), { group: 'email', name: 'email.deliver' });
+  const inboxChanged = async (ctx: Parameters<typeof announce>[1]) => {
+    await announce(live, ctx, { topic: 'inbox' });
+    // A failed send tells its sender, and a filed email is logged on the contact.
+    await announce(live, ctx, { topic: 'notifications' });
+  };
+  events.subscribe(
+    emailReceived,
+    async (ctx, payload) => {
+      await mail.file(ctx, payload.inboundId);
+      await inboxChanged(ctx);
+    },
+    { group: 'email', name: 'email.file' },
+  );
+  events.subscribe(
+    emailQueued,
+    async (ctx, payload) => {
+      await mail.deliver(ctx, payload.messageId);
+      await inboxChanged(ctx);
+    },
+    { group: 'email', name: 'email.deliver' },
+  );
 
   // The sweep: on a timer, finish anything the events above did not, and ask the email service what it has that we were never told about.
   let sweeping = false;
@@ -60,6 +90,7 @@ async function main(): Promise<void> {
       if (steps > 0) logger.info({ steps }, 'Sequence steps carried out');
       const done = await mail.sweep(ctx);
       if (done.filed + done.sent + done.released + done.found > 0) logger.info(done, 'Email sweep picked up work the first path missed');
+      if (steps + done.filed + done.sent + done.found > 0) await inboxChanged(ctx);
     } catch (error) {
       logger.error({ error }, 'The email sweep failed; it will run again');
     } finally {

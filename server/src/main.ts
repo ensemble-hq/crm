@@ -5,11 +5,13 @@ import { ConfigError, KEYS } from '@mariachi/core';
 import { createPostgresDatabase, runMigrations } from '@mariachi/database-postgres';
 import { bootstrap } from '@mariachi/lifecycle';
 import { MemoryRateLimiter } from '@mariachi/rate-limit';
+import { WSAdapter } from '@mariachi/realtime';
 import { createControllers } from './api/controllers/index';
 import { createAuthStrategy } from './auth';
 import { CRM_CONFIG, type CrmSettings, TENANT_ID } from './config';
 import { createEmailProvider } from './email';
-import { registerServices } from './services/index';
+import { createLive } from './live';
+import { createServices, registerServices } from './services/index';
 
 async function main(): Promise<void> {
   const { config, logger, tracer, metrics, container, lifecycle } = bootstrap();
@@ -28,6 +30,8 @@ async function main(): Promise<void> {
   const email = createEmailProvider(settings, database.db);
   const operations = registerServices(communication, { db: database.db, transaction: database.transaction, source: config.serviceName, email });
 
+  const authenticate = createAuthStrategy(settings, { production: config.env === 'production', jwtSecret: config.auth?.jwtSecret, jwtIssuer: config.auth?.jwtIssuer, jwtAudience: config.auth?.jwtAudience });
+
   const api = createApiServer({
     name: 'api',
     prefix: '/api',
@@ -37,7 +41,7 @@ async function main(): Promise<void> {
     bodyLimitBytes: config.server.bodyLimitBytes,
     cors: config.server.corsOrigins.length > 0 ? { origins: config.server.corsOrigins } : false,
   })
-    .withAuthStrategy('session', createAuthStrategy(settings, { production: config.env === 'production', jwtSecret: config.auth?.jwtSecret, jwtIssuer: config.auth?.jwtIssuer, jwtAudience: config.auth?.jwtAudience }))
+    .withAuthStrategy('session', authenticate)
     // Email providers sign what they deliver; that signature is their sign-in.
     .withAuthStrategy('inbound', hmacSignatureStrategy({ secret: settings.inboundSecret, header: 'x-signature', provider: 'email', tenantId: TENANT_ID }))
     .withAuth('session')
@@ -46,6 +50,39 @@ async function main(): Promise<void> {
     .withHealth(lifecycle.health)
     .withOpenApi({ info: { title: 'CRM', version: '0.1.0' } });
   for (const controller of createControllers(communication, operations, { name: config.serviceName, version: '0.1.0' }, email.name)) api.registerController(controller);
+
+  // Live updates: browsers hold a WebSocket open on the API's own port, at /api/live, and are told
+  // when to read again. The connection is signed in the same way as any request, and only a member gets one.
+  if (config.redis) {
+    const live = lifecycle.manage('live', createLive(config.redis.url, config.serviceName, { logger, tracer, metrics }), { priority: 40 });
+    const { people } = createServices({ db: database.db, transaction: database.transaction, source: config.serviceName, email });
+    // The server's own setup runs this when it starts listening, which is after the startup hooks were
+    // gathered, so the socket layer is started here and stopped by a hook registered outside.
+    let sockets: WSAdapter | undefined;
+    lifecycle.shutdown.register({ name: 'live-sockets', priority: 110, fn: async () => sockets?.disconnect() });
+    api.configure((fastify) => {
+      sockets = new WSAdapter(
+        live,
+        {
+          server: fastify.server,
+          path: '/api/live',
+          allowedOrigins: config.server.corsOrigins.length > 0 ? config.server.corsOrigins : undefined,
+          authenticate: async (token, request) => {
+            try {
+              const identity = await authenticate({ headers: { ...request.headers, ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: undefined, params: {}, query: {}, method: 'GET', url: request.url ?? '', routePath: '/api/live', ip: request.socket.remoteAddress ?? '' });
+              if (!identity) return null;
+              const actor = await people.actor({ traceId: 'live', userId: identity.userId, tenantId: identity.tenantId, scopes: [], identityType: 'session', logger });
+              return { userId: actor.signedInId, tenantId: identity.tenantId };
+            } catch {
+              return null;
+            }
+          },
+        },
+        { logger, tracer, metrics },
+      );
+      void sockets.connect();
+    });
+  }
 
   lifecycle.startup.register({
     name: 'api',

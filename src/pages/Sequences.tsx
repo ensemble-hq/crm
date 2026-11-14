@@ -285,9 +285,9 @@ export function Sequences() {
 export function SequenceDetail() {
   const { sequenceId = '' } = useParams();
   const navigate = useNavigate();
-  const { touch } = useWorkspace();
+  const { touch, revision } = useWorkspace();
   const [version, setVersion] = useState(0);
-  const detail = useQuery(() => api.getSequence(sequenceId), [sequenceId, version]);
+  const detail = useQuery(() => api.getSequence(sequenceId), [sequenceId, version, revision]);
   const templates = useQuery(() => api.listEmailTemplates(), []);
   const [draft, setDraft] = useState<{ name: string; steps: SequenceStep[] }>();
   const [busy, setBusy] = useState(false);

@@ -49,6 +49,9 @@ export class InboxService {
     private readonly transaction: <T>(ctx: Context, fn: () => Promise<T>) => Promise<T>,
   ) {}
 
+  /** Announces, inside the transaction, that a conversation changed. */
+  changed?: (ctx: Context, conversationId: string) => Promise<void>;
+
   /** Says which sequence uses a template, if one does. */
   templateUsedBy?: (ctx: Context, templateId: string) => Promise<string | undefined>;
 
@@ -87,7 +90,11 @@ export class InboxService {
   async update(ctx: Context, input: UpdateConversation): Promise<Conversation> {
     await this.find(ctx, input.id);
     const { id: conversationId, ...changes } = input;
-    return toConversation(await this.conversations.update(ctx, conversationId, changes));
+    return this.transaction(ctx, async () => {
+      const updated = await this.conversations.update(ctx, conversationId, changes);
+      await this.changed?.(ctx, conversationId);
+      return toConversation(updated);
+    });
   }
 
   /** Sends a reply on the thread. It is stored as queued here; the worker sends it. */

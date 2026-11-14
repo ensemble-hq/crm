@@ -32,3 +32,9 @@ export const emailReceived = defineEvent('email.received', { schema: z.object({ 
 
 /** Someone sent an email; it is stored as queued and still has to go out. */
 export const emailQueued = defineEvent('email.queued', { schema: z.object({ messageId: z.string() }) });
+
+/** A conversation was assigned, closed, reopened or marked, so inboxes should read again. */
+export const conversationChanged = defineEvent('conversation.changed', { schema: z.object({ conversationId: z.string() }) });
+
+/** An object, a property or a saved view changed, so every browser should load the workspace again. */
+export const settingsChanged = defineEvent('settings.changed', { schema: z.object({ objectId: z.string() }) });

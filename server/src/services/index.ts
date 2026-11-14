@@ -5,6 +5,7 @@ import { Outbox } from '@mariachi/events/outbox';
 import { z } from 'zod';
 import { type Operation, operations } from '../../../src/contracts/operations';
 import { TENANT_ID } from '../config';
+import { conversationChanged, settingsChanged } from '../events';
 import { ActivityRepository } from './activity/activity.repository';
 import { ActivityService } from './activity/activity.service';
 import { BriefService } from './brief/brief.service';
@@ -51,7 +52,7 @@ export function createServices(deps: ServiceDeps) {
   const people = new PeopleService(new PeopleRepository(deps.db), new TeamsRepository(deps.db), new RolesRepository(deps.db), (ctx, fromId, toId) => recordsRepository.reassign(ctx, fromId, toId));
   const objectsRepository = new ObjectsRepository(deps.db);
   const workspace = new WorkspaceService(objectsRepository, people);
-  const settings = new SettingsService(objectsRepository, recordsRepository, deps.transaction);
+  const settings = new SettingsService(objectsRepository, recordsRepository, deps.transaction, async (ctx, objectId) => void (await outbox.add(ctx, settingsChanged, { objectId })));
   const records = new RecordsService(recordsRepository, workspace, events);
   const activityRepository = new ActivityRepository(deps.db);
   const activity = new ActivityService(activityRepository, records);
@@ -69,6 +70,7 @@ export function createServices(deps: ServiceDeps) {
   const inbox = new InboxService(conversations, messages, templates, inbound, cursors, mail, recordsRepository, activityRepository, people, workspace, deps.transaction);
   const sequences = new SequencesService(new SequencesRepository(deps.db), new EnrollmentsRepository(deps.db), templates, recordsRepository, events, mail, people, workspace, deps.transaction);
   mail.onReply = (ctx, contactId) => sequences.contactReplied(ctx, contactId);
+  inbox.changed = async (ctx, conversationId) => void (await outbox.add(ctx, conversationChanged, { conversationId }));
   inbox.templateUsedBy = (ctx, templateId) => sequences.usingTemplate(ctx, templateId);
   const runner = new WorkflowRunner(workflowsRepository, runsRepository, recordsRepository, events, workspace, people, notifications, templates, mail, sequences);
   const reports = new ReportsService(new ReportsRepository(deps.db), new DashboardsRepository(deps.db), new GoalsRepository(deps.db), records, recordsRepository, people, workspace);

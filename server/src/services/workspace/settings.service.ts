@@ -24,6 +24,8 @@ export class SettingsService {
     private readonly objects: ObjectsRepository,
     private readonly records: RecordsRepository,
     private readonly transaction: <T>(ctx: Context, fn: () => Promise<T>) => Promise<T>,
+    /** Announces, inside the transaction, that the CRM's shape changed. */
+    private readonly changed: (ctx: Context, objectId: string) => Promise<void>,
   ) {}
 
   /** Reads an object's definition, lets `change` alter it, and stores the result, as one step no other change can interleave with. */
@@ -35,6 +37,7 @@ export class SettingsService {
       const object = structuredClone(row.definition);
       const result = await change(object);
       await this.objects.update(ctx, objectId, { definition: object });
+      await this.changed(ctx, objectId);
       return { object, result };
     });
   }
@@ -58,7 +61,10 @@ export class SettingsService {
       views: [{ id: 'all', name: `All ${input.plural.toLowerCase()}`, columns: ['name', 'owner', 'createdAt'], filters: [], sort: { property: 'createdAt', direction: 'desc' } }],
       custom: true,
     };
-    await this.objects.create(ctx, { id, definition: created, position: await this.objects.count(ctx) });
+    await this.transaction(ctx, async () => {
+      await this.objects.create(ctx, { id, definition: created, position: await this.objects.count(ctx) });
+      await this.changed(ctx, id);
+    });
     return created;
   }
 

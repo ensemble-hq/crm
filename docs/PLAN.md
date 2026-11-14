@@ -279,6 +279,7 @@ Decided:
 - **Redis on every VM** for jobs, events and live updates.
 - **Mariachi's libraries** are used wherever one fits.
 - **MCP is part of the core,** not a plugin: it ships switched on in every instance.
+- **The assistant's model is the customer's choice.** The assistant talks to a model through one provider interface, as sign-in and email do. The customer picks the model in settings and can bring their own (their own key, or their own endpoint); further providers are plugins in `plugins/`. Nothing in the assistant is written against one vendor.
 
 Built so far (in `server/`):
 
@@ -291,11 +292,12 @@ Built so far (in `server/`):
 - Sequences really run. Each step is one database transaction with moving the contact on: the email is queued or the task created and the schedule advances, or none of it happens. Waits are working days. Later emails go out on the thread the first one started, and a contact who replies leaves the sequence.
 - Adding an object, a field or a saved view is a change to a row of data, made under a lock so two changes cannot overwrite each other, and takes effect at once. Deleting a field removes its values in the same transaction. Merging two records, and converting a lead, each happen entirely or not at all.
 - Forms and booking pages have operations a visitor's browser calls with no sign-in. Those take only what the form or page asks for, give back nothing about anyone else, never overwrite what the team has on a contact, and are held to a rate per address. A booking checks the time is really on offer while holding the hosts' calendars, so two visitors cannot be given the same slot.
+- Live updates. Browsers hold a WebSocket open on the API's own port (`/api/live`), signed in like any request, and are told which part of the CRM to read again when it changes: records of an object, the inbox, notifications, or the CRM's shape. A notice says where to look and never what is there, so it cannot show anyone something their role hides. Notices travel through Redis, so the worker reaches browsers connected to the API. A browser that loses the connection reconnects and reads once to catch up.
 - Reports and the forecast are grouping and adding up done by the database, over the records the acting person may see. Every seeded report and the forecast give the same numbers on the server as on the mock.
 - Sign-in behind an interface with `dev` and `jwt` providers, and a seed of the demo company.
 - The web app's live mode sends those operations to the server and everything else to the mock.
 
-Not yet: the Ensemble sign-in and email adapters and connected mailboxes (only development providers exist), delivery and bounce reports, attachments and HTML bodies, time zones on booking pages, live updates to the screen when the worker changes something, agents as members with their own role, restoring deleted records, and the assistant on a real model.
+Not yet: the Ensemble sign-in and email adapters and connected mailboxes (only development providers exist), delivery and bounce reports, attachments and HTML bodies, time zones on booking pages, agents as members with their own role, restoring deleted records, and the assistant on a real model.
 
 To run it: `pnpm db:up`, `pnpm db:seed` (once), `pnpm api`, `pnpm worker`, then `pnpm dev:live` and open http://localhost:5185. Plain `pnpm dev` still runs on the mock alone. Mariachi must be checked out beside this repo and built, because its packages are linked, not installed.
 

@@ -1,5 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
+import { listenForChanges } from '../api/live';
 import type { Workspace } from '../contracts/records';
 import { WorkspaceContext, type WorkspaceValue } from './workspace';
 
@@ -25,6 +26,26 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  // Live updates: when the server says something changed, every open list, record and count reads
+  // again. Notices that arrive together cause one re-read, not one each.
+  useEffect(() => {
+    let pending: ReturnType<typeof setTimeout> | undefined;
+    let shapeChanged = false;
+    const stop = listenForChanges((notice) => {
+      if (notice.topic === 'settings') shapeChanged = true;
+      clearTimeout(pending);
+      pending = setTimeout(() => {
+        if (shapeChanged) void reload();
+        shapeChanged = false;
+        touch();
+      }, 250);
+    });
+    return () => {
+      clearTimeout(pending);
+      stop();
+    };
+  }, [reload, touch]);
 
   const value = useMemo<WorkspaceValue | undefined>(() => {
     if (!data) return undefined;

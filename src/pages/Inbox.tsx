@@ -96,7 +96,7 @@ function MessageBubble({ message }: { message: Message }) {
 /** One thread: who it is with, what it is about, the messages, and the reply box. */
 function Thread({ conversationId, onChanged }: { conversationId: string; onChanged: () => void }) {
   const workspace = useWorkspace();
-  const { data, error, reload } = useQuery(() => api.getConversation(conversationId), [conversationId]);
+  const { data, error, reload } = useQuery(() => api.getConversation(conversationId), [conversationId, workspace.revision]);
   const templates = useQuery(() => api.listEmailTemplates(), []);
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
@@ -310,9 +310,10 @@ export function Inbox() {
   const [version, setVersion] = useState(0);
   const [search, setSearch] = useState('');
   const folder = (FOLDERS.find((item) => item.id === params.get('folder'))?.id ?? 'mine') as InboxFolder;
-  const list = useQuery(() => api.listConversations({ folder, search, page: 1, pageSize: PAGE_SIZE }), [folder, search, version]);
-  const counts = useQuery(() => api.inboxCounts(), [version]);
-  const { touch } = useWorkspace();
+  // `revision` goes up when the server says something changed, so a new email shows by itself.
+  const { touch, revision } = useWorkspace();
+  const list = useQuery(() => api.listConversations({ folder, search, page: 1, pageSize: PAGE_SIZE }), [folder, search, version, revision]);
+  const counts = useQuery(() => api.inboxCounts(), [version, revision]);
 
   // Other parts of the page (the sidebar count) re-read when the inbox changes.
   const onChanged = useCallback(() => {
