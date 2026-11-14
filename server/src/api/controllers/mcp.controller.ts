@@ -25,7 +25,7 @@ function toTool(operation: Operation): Tool {
   const name = operation.name.replace(/\./g, '_');
   if (operation.input instanceof z.ZodUndefined) return { operation, name, wrapped: false, inputSchema: { type: 'object', properties: {}, additionalProperties: false } };
   if (operation.input instanceof z.ZodObject) return { operation, name, wrapped: false, inputSchema: jsonSchema(operation.input) };
-  return { operation, name, wrapped: true, inputSchema: { type: 'object', properties: { input: jsonSchema(operation.input) }, required: ['input'], additionalProperties: false } };
+  return { operation, name, wrapped: true, inputSchema: { type: 'object', properties: { input: jsonSchema(operation.input) }, required: operation.input.isOptional() ? [] : ['input'], additionalProperties: false } };
 }
 
 const requestSchema = z.object({ jsonrpc: z.literal('2.0'), id: z.union([z.string(), z.number()]).optional(), method: z.string(), params: z.record(z.unknown()).optional() });

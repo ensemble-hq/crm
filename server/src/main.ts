@@ -23,7 +23,7 @@ async function main(): Promise<void> {
   // One communication layer per process: operations register on it; HTTP and MCP call through it.
   const communication = createCommunication({}, { logger, tracer, metrics });
   container.register(KEYS.Communication, communication);
-  const operations = registerServices(communication, { db: database.db });
+  const operations = registerServices(communication, { db: database.db, transaction: database.transaction, source: config.serviceName });
 
   const api = createApiServer({
     name: 'api',

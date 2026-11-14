@@ -3,9 +3,13 @@ import * as schema from '../../src/schema/index';
 import { toDrizzleImports } from '@mariachi/database-postgres';
 
 const compiled = toDrizzleImports(schema) as Record<string, any>;
+export const eventOutboxTable = compiled.eventOutboxTable;
 export const activitiesTable = compiled.activitiesTable;
+export const notificationsTable = compiled.notificationsTable;
 export const objectsTable = compiled.objectsTable;
 export const peopleTable = compiled.peopleTable;
 export const recordsTable = compiled.recordsTable;
 export const rolesTable = compiled.rolesTable;
 export const teamsTable = compiled.teamsTable;
+export const workflowRunsTable = compiled.workflowRunsTable;
+export const workflowsTable = compiled.workflowsTable;

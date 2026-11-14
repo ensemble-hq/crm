@@ -280,9 +280,18 @@ Decided:
 - **Mariachi's libraries** are used wherever one fits.
 - **MCP is part of the core,** not a plugin: it ships switched on in every instance.
 
-Built so far (in `server/`): the tables for objects, people, teams, roles, records and activity; filters, search and sorting over JSONB; 21 operations (workspace, records, activity, the record brief, people, teams, roles and "view as") served over HTTP at `/api/ops/<name>` and as MCP tools at `/api/mcp`, both generated from `src/contracts/operations.ts`; sign-in behind an interface with `dev` and `jwt` providers; a seed of the demo company. Every operation first works out who it runs as, and the records service turns that person's role into SQL, so the app, the API and an agent over MCP all get exactly what the person may see and change. The web app's live mode sends those operations to the server and everything else to the mock. Not yet: events and the worker, agents as members with their own role, and the rest of the operations.
+Built so far (in `server/`):
 
-To run it: `pnpm db:up`, `pnpm db:seed` (once), `pnpm api`, then `pnpm dev:live` and open http://localhost:5185. Plain `pnpm dev` still runs on the mock alone. Mariachi must be checked out beside this repo and built, because its packages are linked, not installed.
+- Tables for objects, people, teams, roles, records, activity, workflows and their runs, notifications, and the event outbox. Filters, search and sorting run over JSONB.
+- 28 operations (workspace, records, activity, the record brief, people, teams, roles, "view as", workflows and notifications), served over HTTP at `/api/ops/<name>` and as MCP tools at `/api/mcp`, both generated from `src/contracts/operations.ts`.
+- Every operation first works out who it runs as, and the records service turns that person's role into SQL, so the app, the API and an agent over MCP all get exactly what the person may see and change.
+- Every record write records an event in the same transaction. The worker (`server/src/worker.ts`) relays events through Redis and runs workflows from them; an event delivered twice runs a workflow once, and what a workflow changes never sets off another workflow.
+- Sign-in behind an interface with `dev` and `jwt` providers, and a seed of the demo company.
+- The web app's live mode sends those operations to the server and everything else to the mock.
+
+Not yet: email and sequences on the server (so those two workflow actions stop with a message), live updates to the screen when the worker changes something, agents as members with their own role, and the rest of the operations.
+
+To run it: `pnpm db:up`, `pnpm db:seed` (once), `pnpm api`, `pnpm worker`, then `pnpm dev:live` and open http://localhost:5185. Plain `pnpm dev` still runs on the mock alone. Mariachi must be checked out beside this repo and built, because its packages are linked, not installed.
 
 Order: records end to end (contacts first; the other objects follow because they are metadata), auth and people, activity and tasks and the record brief, events with workflows and sequences, import, inbox and email, reports and forecast, the assistant on a real model.
 

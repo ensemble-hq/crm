@@ -24,6 +24,14 @@
         "dev:live"
       ],
       "port": 5185
+    },
+    {
+      "name": "crm-worker",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "worker"
+      ],
+      "port": 0
     }
   ]
 }

@@ -12,7 +12,8 @@
     "db:up": "docker compose up -d",
     "db:generate": "cd server && node ../../../mariachi/packages/cli/dist/index.js db generate --schema src/schema/index.ts --out drizzle",
     "db:migrate": "cd server && node ../../../mariachi/packages/cli/dist/index.js db migrate --schema src/schema/index.ts --out drizzle",
-    "db:seed": "cd server && tsx src/seed.ts"
+    "db:seed": "cd server && tsx src/seed.ts",
+    "worker": "cd server && tsx watch src/worker.ts"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.1.0",
@@ -24,6 +25,7 @@
     "@mariachi/database": "link:../../mariachi/packages/database",
     "@mariachi/database-postgres": "link:../../mariachi/packages/database-postgres",
     "@mariachi/design": "link:../../mariachi/packages/design",
+    "@mariachi/events": "link:../../mariachi/packages/events",
     "@mariachi/lifecycle": "link:../../mariachi/packages/lifecycle",
     "@xyflow/react": "^12.12.1",
     "drizzle-orm": "link:../../mariachi/packages/database-postgres/node_modules/drizzle-orm",

@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { briefSchema } from './brief';
-import { objectDefinitionSchema, userSchema } from './metadata';
-import { activitySchema, createActivitySchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi } from './records';
+import { filterSchema, objectDefinitionSchema, userSchema } from './metadata';
+import { activitySchema, createActivitySchema, notificationSchema, referenceSchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi } from './records';
+import { workflowDetailSchema, workflowSchema, workflowSettingsSchema } from './workflows';
 import { accessSchema, deactivateMemberSchema, directorySchema, inviteMemberSchema, memberSchema, roleSchema, saveRoleSchema, saveTeamSchema, teamSchema, updateMemberSchema } from './team';
 
 /**
@@ -227,6 +228,70 @@ export const operations: Operation[] = [
     title: 'View the CRM as someone else',
     description: 'From now on, every operation you run sees and can change exactly what that person can, until you pass null to go back to yourself. Admins only. Useful for checking what a role allows.',
     input: z.string().nullable().describe('The person to view as, or null to stop.'),
+    output: z.void(),
+    effect: 'write',
+  },
+  {
+    name: 'workflows.list',
+    method: 'listWorkflows',
+    title: 'List workflows',
+    description: 'Returns every workflow: what sets it off, its conditions, its actions, whether it is on, and how many times it has run.',
+    input: none,
+    output: z.array(workflowSchema),
+    effect: 'read',
+  },
+  {
+    name: 'workflows.get',
+    method: 'getWorkflow',
+    title: 'Get a workflow and its recent runs',
+    description: 'Returns one workflow with its 25 most recent runs: which record each ran on, whether it finished, and what each action did in words.',
+    input: z.string().describe('The workflow\'s id.'),
+    output: workflowDetailSchema,
+    effect: 'read',
+  },
+  {
+    name: 'workflows.save',
+    method: 'saveWorkflow',
+    title: 'Create or change a workflow',
+    description:
+      'Creates a workflow, or replaces one when `id` is given. A workflow runs when a record of its object is created, or when one property changes (optionally to one value), and the record passes the conditions. Its actions run in order: set a property, create a task for the owner, notify the owner, give the record to the next person in turn, or post it to a webhook. Create it with `on: false` and check it with workflows.countMatches before switching it on.',
+    input: workflowSettingsSchema.extend({ id: z.string().optional() }),
+    output: workflowSchema,
+    effect: 'write',
+  },
+  {
+    name: 'workflows.delete',
+    method: 'deleteWorkflow',
+    title: 'Delete a workflow',
+    description: 'Deletes a workflow. It stops running at once; its past runs are kept.',
+    input: z.string().describe('The workflow\'s id.'),
+    output: z.void(),
+    effect: 'destructive',
+  },
+  {
+    name: 'workflows.countMatches',
+    method: 'countWorkflowMatches',
+    title: 'Count records that pass conditions',
+    description: 'Says how many records of an object pass a set of conditions right now, out of how many there are. Use it to check a workflow\'s conditions before switching it on.',
+    input: z.object({ objectId: z.string(), conditions: z.array(filterSchema) }),
+    output: z.object({ matching: z.number().int(), total: z.number().int() }),
+    effect: 'read',
+  },
+  {
+    name: 'notifications.list',
+    method: 'listNotifications',
+    title: 'List your notifications',
+    description: 'Returns the notifications addressed to you, newest first, with the names of the records they are about.',
+    input: none,
+    output: z.object({ notifications: z.array(notificationSchema), references: z.record(referenceSchema) }),
+    effect: 'read',
+  },
+  {
+    name: 'notifications.markRead',
+    method: 'markNotificationsRead',
+    title: 'Mark notifications read',
+    description: 'Marks one of your notifications read, or all of them when no id is given.',
+    input: z.string().optional().describe('A notification id, or leave out for all.'),
     output: z.void(),
     effect: 'write',
   },

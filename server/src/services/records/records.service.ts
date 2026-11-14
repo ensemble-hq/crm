@@ -5,6 +5,7 @@ import type { ObjectDefinition, PropertyValue } from '../../../../src/contracts/
 import type { CreateRecord, CrmRecord, ListQuery, ListResult, RecordDetail, Reference, RelatedGroup, SummaryQuery, SummaryRow, UpdateRecord } from '../../../../src/contracts/records';
 import { actorOf, assertCan, visibility } from '../people/access';
 import type { WorkspaceService } from '../workspace/workspace.service';
+import type { RecordEvents } from './records.events';
 import { condition, order, property, propertyText, search, tokens } from './records.query';
 import type { RecordsRepository } from './records.repository';
 
@@ -19,6 +20,7 @@ export class RecordsService {
   constructor(
     private readonly records: RecordsRepository,
     private readonly workspace: WorkspaceService,
+    private readonly events: RecordEvents,
   ) {}
 
   /** What the acting person may see comes first; filters and search only narrow it. */
@@ -134,7 +136,11 @@ export class RecordsService {
     const object = await this.workspace.definition(ctx, input.objectId);
     await this.validate(ctx, object, input.properties, undefined);
     const properties = { ...input.properties, createdAt: new Date().toISOString().slice(0, 10) };
-    return this.records.insert(ctx, { id: `${object.id.slice(0, 3)}_${randomUUID().replace(/-/g, '').slice(0, 12)}`, objectId: object.id, properties });
+    return this.events.transaction(ctx, async () => {
+      const record = await this.records.insert(ctx, { id: `${object.id.slice(0, 3)}_${randomUUID().replace(/-/g, '').slice(0, 12)}`, objectId: object.id, properties });
+      await this.events.created(ctx, record);
+      return record;
+    });
   }
 
   async update(ctx: Context, input: UpdateRecord): Promise<CrmRecord> {
@@ -142,7 +148,20 @@ export class RecordsService {
     const object = await this.workspace.definition(ctx, record.objectId);
     assertCan(actorOf(ctx), 'edit', record, object.singular.toLowerCase());
     await this.validate(ctx, object, input.properties, record.id);
-    return (await this.records.patch(ctx, record.id, input.properties)) ?? record;
+    // Only what really changed is announced, so saving a form untouched sets nothing off.
+    const changed = Object.fromEntries(Object.entries(input.properties).filter(([key, value]) => JSON.stringify(record.properties[key] ?? null) !== JSON.stringify(value ?? null)));
+    return this.events.transaction(ctx, async () => {
+      const updated = (await this.records.patch(ctx, record.id, input.properties)) ?? record;
+      await this.events.changed(ctx, updated, changed);
+      return updated;
+    });
+  }
+
+  /** How many of an object's records pass some conditions, out of how many the person can see. */
+  async count(ctx: Context, objectId: string, conditions: NonNullable<ListQuery['filters']>): Promise<{ matching: number; total: number }> {
+    const object = await this.workspace.definition(ctx, objectId);
+    const [matching, total] = await Promise.all([this.records.total(ctx, this.where(ctx, object, { filters: conditions })), this.records.total(ctx, this.where(ctx, object, {}))]);
+    return { matching, total };
   }
 
   reassign(ctx: Context, fromId: string, toId: string): Promise<number> {
@@ -155,6 +174,11 @@ export class RecordsService {
     const records = await this.records.byIds(ctx, ids, ...this.visible(ctx));
     // All or nothing: one record the person may not delete stops the whole request.
     for (const record of records) assertCan(actor, 'delete', record, objects.find((object) => object.id === record.objectId)?.singular.toLowerCase() ?? 'record');
-    return { deleted: records.length === 0 ? 0 : await this.records.remove(ctx, records.map((record) => record.id)) };
+    if (records.length === 0) return { deleted: 0 };
+    return this.events.transaction(ctx, async () => {
+      const deleted = await this.records.remove(ctx, records.map((record) => record.id));
+      for (const record of records) await this.events.deleted(ctx, record);
+      return { deleted };
+    });
   }
 }

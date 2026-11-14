@@ -1,6 +1,7 @@
 import { loadConfig } from '@mariachi/config';
 import { createPostgresDatabase, runMigrations } from '@mariachi/database-postgres';
 import { sql } from 'drizzle-orm';
+import type { WorkflowSettings } from '../../src/contracts/workflows';
 import { objects, users } from '../../src/mock/definitions';
 import { dataset, mulberry32 } from '../../src/mock/generate';
 import { PLACEMENT, roles, teams } from '../../src/mock/team';
@@ -26,6 +27,46 @@ const HAPPENINGS: Array<{ kind: string; title: string; body?: string }> = [
   { kind: 'note', title: 'Note', body: 'Prefers email to calls. Best reached before 10am their time.' },
 ];
 
+/** The workflows the demo company starts with. */
+const WORKFLOWS: Array<WorkflowSettings & { id: string }> = [
+  {
+    id: 'wf_won',
+    name: 'Welcome pack when a deal is won',
+    on: true,
+    objectId: 'deals',
+    trigger: { kind: 'changed', property: 'stage', to: 'won' },
+    conditions: [],
+    actions: [
+      { id: 'a1', kind: 'create-task', title: 'Send the welcome pack', dueInDays: 2 },
+      { id: 'a2', kind: 'notify', message: 'A deal you own was won. A welcome-pack task is on your list.' },
+    ],
+  },
+  {
+    id: 'wf_route',
+    name: 'Share out new contacts with no owner',
+    on: true,
+    objectId: 'contacts',
+    trigger: { kind: 'created' },
+    conditions: [{ property: 'owner', operator: 'empty' }],
+    actions: [
+      { id: 'a1', kind: 'assign', userIds: ['usr_priya', 'usr_jonas', 'usr_dario'] },
+      { id: 'a2', kind: 'create-task', title: 'Call the new lead', dueInDays: 1 },
+    ],
+  },
+  {
+    id: 'wf_big',
+    name: 'Flag large new deals',
+    on: false,
+    objectId: 'deals',
+    trigger: { kind: 'created' },
+    conditions: [{ property: 'amount', operator: 'gt', value: 100_000 }],
+    actions: [
+      { id: 'a1', kind: 'set-property', property: 'priority', value: 'high' },
+      { id: 'a2', kind: 'notify', message: 'A deal over $100,000 was created.' },
+    ],
+  },
+];
+
 async function main(): Promise<void> {
   const config = loadConfig();
   if (!config.database) throw new Error('DATABASE_URL is required');
@@ -34,7 +75,7 @@ async function main(): Promise<void> {
   const db = database.db;
   try {
     await runMigrations(database.adapter, { migrationsFolder: 'drizzle' });
-    if (process.argv.includes('--reset')) await db.execute(sql`truncate activities, records, objects, people, teams, roles`);
+    if (process.argv.includes('--reset')) await db.execute(sql`truncate activities, records, objects, people, teams, roles, workflows, workflow_runs, notifications, mariachi_event_outbox`);
     const [existing] = (await db.execute(sql`select count(*)::int as total from objects`)) as unknown as Array<{ total: number }>;
     if ((existing?.total ?? 0) > 0) {
       console.log('The database already has data. Run with --reset to replace it.');
@@ -52,6 +93,10 @@ async function main(): Promise<void> {
       const placement = PLACEMENT[user.id];
       // Staggered so the directory lists people in the order they joined.
       await db.execute(sql`insert into people (id, tenant_id, name, email, role_id, team_id, created_at) values (${user.id}, ${TENANT_ID}, ${user.name}, ${user.email}, ${placement?.roleId ?? 'role_rep'}, ${placement?.teamId ?? null}, now() - make_interval(mins => ${users.length - index}))`);
+    }
+
+    for (const [index, { id, ...settings }] of WORKFLOWS.entries()) {
+      await db.execute(sql`insert into workflows (id, tenant_id, settings, created_at) values (${id}, ${TENANT_ID}, ${JSON.stringify(settings)}::jsonb, now() - make_interval(mins => ${WORKFLOWS.length - index}))`);
     }
 
     const records = [...dataset().byId.values()];

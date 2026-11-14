@@ -35,6 +35,9 @@ importers:
       '@mariachi/design':
         specifier: link:../../mariachi/packages/design
         version: link:../../mariachi/packages/design
+      '@mariachi/events':
+        specifier: link:../../mariachi/packages/events
+        version: link:../../mariachi/packages/events
       '@mariachi/lifecycle':
         specifier: link:../../mariachi/packages/lifecycle
         version: link:../../mariachi/packages/lifecycle
