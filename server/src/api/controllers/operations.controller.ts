@@ -24,7 +24,7 @@ export class OperationsController extends BaseController {
 
   init(): void {
     for (const operation of this.operations) {
-      this.post(`/${operation.name}`, { schema: { body: z.object({ input: operation.input }), response: operation.output }, summary: operation.title, description: operation.description, ...(operation.large ? { bodyLimitBytes: LARGE_BODY_BYTES } : {}) }, (ctx, body) => {
+      this.post(`/${operation.name}`, { schema: { body: z.object({ input: operation.input }), response: operation.output }, summary: operation.title, description: operation.description, ...(operation.large ? { bodyLimitBytes: LARGE_BODY_BYTES } : {}), ...(operation.public ? { auth: false as const } : {}) }, (ctx, body) => {
         return this.call(ctx, operation.name, (body as { input?: unknown }).input);
       });
     }

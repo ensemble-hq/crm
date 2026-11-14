@@ -24,6 +24,51 @@ CREATE TABLE "activities" (
 );
 
 --> statement-breakpoint
+CREATE TABLE "booking_pages" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"settings" jsonb NOT NULL,
+	"turn" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
+CREATE TABLE "forms" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"settings" jsonb NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
+CREATE TABLE "meetings" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"booking_page_id" text NOT NULL,
+	"contact_id" text NOT NULL,
+	"host_id" text NOT NULL,
+	"starts_at" text NOT NULL,
+	"duration_minutes" integer NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
+CREATE TABLE "submissions" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"form_id" text NOT NULL,
+	"contact_id" text NOT NULL,
+	"is_new" boolean NOT NULL,
+	"values" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"submitted_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
 CREATE TABLE "conversations" (
 	"id" text PRIMARY KEY NOT NULL,
 	"tenant_id" text NOT NULL,
@@ -280,6 +325,16 @@ CREATE INDEX "mariachi_event_outbox_pending_idx" ON "mariachi_event_outbox" USIN
 CREATE INDEX "mariachi_event_outbox_published_idx" ON "mariachi_event_outbox" USING btree ("published_at") WHERE published_at IS NOT NULL;
 --> statement-breakpoint
 CREATE INDEX "activities_record_idx" ON "activities" USING btree ("tenant_id","record_id","occurred_at");
+--> statement-breakpoint
+CREATE INDEX "booking_pages_tenant_id_idx" ON "booking_pages" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX "forms_tenant_id_idx" ON "forms" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE UNIQUE INDEX "meetings_host_start_idx" ON "meetings" USING btree ("tenant_id","host_id","starts_at");
+--> statement-breakpoint
+CREATE INDEX "meetings_start_idx" ON "meetings" USING btree ("tenant_id","starts_at");
+--> statement-breakpoint
+CREATE INDEX "submissions_form_idx" ON "submissions" USING btree ("tenant_id","form_id","submitted_at");
 --> statement-breakpoint
 CREATE INDEX "conversations_folder_idx" ON "conversations" USING btree ("tenant_id","status","last_message_at");
 --> statement-breakpoint

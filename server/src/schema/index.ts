@@ -1,4 +1,5 @@
 export * from './activities';
+export * from './capture';
 export * from './email';
 export * from './notifications';
 export * from './objects';

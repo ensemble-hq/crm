@@ -274,7 +274,7 @@ export function PublicBooking() {
   if (slots.error) {
     return (
       <PublicPage>
-        <p style={{ margin: 0 }}>This booking page is no longer available.</p>
+        <p style={{ margin: 0 }}>{/not found/i.test(slots.error.message) ? 'This booking page is no longer available.' : `This booking page could not be loaded. ${slots.error.message}`}</p>
       </PublicPage>
     );
   }

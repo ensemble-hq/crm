@@ -41,6 +41,9 @@ importers:
       '@mariachi/lifecycle':
         specifier: link:../../mariachi/packages/lifecycle
         version: link:../../mariachi/packages/lifecycle
+      '@mariachi/rate-limit':
+        specifier: link:../../mariachi/packages/rate-limit
+        version: link:../../mariachi/packages/rate-limit
       '@xyflow/react':
         specifier: ^12.12.1
         version: 12.12.1(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

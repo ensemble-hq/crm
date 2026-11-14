@@ -4,6 +4,7 @@ import type { DrizzleDb } from '@mariachi/database-postgres';
 import { Outbox } from '@mariachi/events/outbox';
 import { z } from 'zod';
 import { type Operation, operations } from '../../../src/contracts/operations';
+import { TENANT_ID } from '../config';
 import { ActivityRepository } from './activity/activity.repository';
 import { ActivityService } from './activity/activity.service';
 import { BriefService } from './brief/brief.service';
@@ -11,6 +12,7 @@ import type { EmailProvider } from '../email';
 import { ConversationsRepository, EmailTemplatesRepository, InboundEmailsRepository, MailCursorsRepository, MessagesRepository } from './inbox/inbox.repository';
 import { InboxService } from './inbox/inbox.service';
 import { MailService } from './inbox/mail.service';
+import { BookingPagesRepository, CaptureService, FormsRepository, MeetingsRepository, SubmissionsRepository } from './capture/capture.service';
 import { ImportService } from './import/import.service';
 import { NotificationsRepository } from './notifications/notifications.repository';
 import { NotificationsService } from './notifications/notifications.service';
@@ -71,8 +73,9 @@ export function createServices(deps: ServiceDeps) {
   const runner = new WorkflowRunner(workflowsRepository, runsRepository, recordsRepository, events, workspace, people, notifications, templates, mail, sequences);
   const reports = new ReportsService(new ReportsRepository(deps.db), new DashboardsRepository(deps.db), new GoalsRepository(deps.db), records, recordsRepository, people, workspace);
   const sales = new SalesService(new LineItemsRepository(deps.db), records, recordsRepository, events, activityRepository, workspace);
+  const capture = new CaptureService(new FormsRepository(deps.db), new SubmissionsRepository(deps.db), new BookingPagesRepository(deps.db), new MeetingsRepository(deps.db), recordsRepository, events, activityRepository, people, workspace);
   const importer = new ImportService(recordsRepository, events, workspace, people);
-  return { people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences, settings, sales };
+  return { people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences, settings, sales, capture };
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: each handler's input is checked against its operation's schema before it runs
@@ -83,7 +86,7 @@ type Handler = (ctx: Context, input: any) => Promise<unknown>;
  * is left out of what the server offers.
  */
 export function registerServices(communication: CommunicationLayer, deps: ServiceDeps): Operation[] {
-  const { people, workspace, records, activity, brief, notifications, workflows, importer, inbox, mail, reports, sequences, settings, sales } = createServices(deps);
+  const { people, workspace, records, activity, brief, notifications, workflows, importer, inbox, mail, reports, sequences, settings, sales, capture } = createServices(deps);
 
   const handlers: Record<string, Handler> = {
     'workspace.get': (ctx) => workspace.get(ctx),
@@ -140,6 +143,18 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     'properties.delete': (ctx, input) => settings.deleteProperty(ctx, input),
     'views.save': (ctx, input) => settings.saveView(ctx, input),
     'views.delete': (ctx, input) => settings.deleteView(ctx, input),
+    'forms.list': (ctx) => capture.listForms(ctx),
+    'forms.get': (ctx, input) => capture.getForm(ctx, input),
+    'forms.save': (ctx, input) => capture.saveForm(ctx, input),
+    'forms.delete': (ctx, input) => capture.deleteForm(ctx, input),
+    'forms.public': (ctx, input) => capture.publicForm(ctx, input),
+    'forms.submit': (ctx, input) => capture.submit(ctx, input),
+    'booking.pages': (ctx) => capture.listPages(ctx),
+    'booking.savePage': (ctx, input) => capture.savePage(ctx, input),
+    'booking.deletePage': (ctx, input) => capture.deletePage(ctx, input),
+    'booking.slots': (ctx, input) => capture.slots(ctx, input),
+    'booking.book': (ctx, input) => capture.book(ctx, input),
+    'booking.meetings': (ctx) => capture.listMeetings(ctx),
     'sequences.list': (ctx) => sequences.list(ctx),
     'sequences.get': (ctx, input) => sequences.get(ctx, input),
     'sequences.save': (ctx, input) => sequences.save(ctx, input),
@@ -162,8 +177,9 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     const handler = handlers[operation.name] as Handler;
     communication.register(operation.name, {
       schema: { input: operation.input, output: operation.output },
-      // Every operation starts by working out who it runs as; nothing below this line can skip it.
-      handler: async (ctx, input) => handler(actingContext(ctx, await people.actor(ctx)), input),
+      // Every operation starts by working out who it runs as; nothing below this line can skip it. The
+      // few a visitor's browser calls run as nobody, in this instance's one tenant.
+      handler: operation.public ? (ctx, input) => handler({ ...ctx, tenantId: TENANT_ID, userId: null }, input) : async (ctx, input) => handler(actingContext(ctx, await people.actor(ctx)), input),
     });
   }
 

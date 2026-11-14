@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { briefSchema } from './brief';
+import { bookingPageSchema, bookingPageSettingsSchema, daySlotsSchema, formDetailSchema, formSchema, formSettingsSchema, meetingSchema, publicFormSchema } from './capture';
 import { conversationDetailSchema, conversationListSchema, conversationQuerySchema, conversationSchema, emailHealthSchema, emailTemplateSchema, inboxCountsSchema, messageSchema, updateConversationSchema } from './inbox';
 import { createObjectSchema, createPropertySchema, filterSchema, objectDefinitionSchema, saveViewSchema, updatePropertySchema, userSchema, viewDefinitionSchema } from './metadata';
 import { activitySchema, createActivitySchema, mergeRecordsSchema, importRequestSchema, importResultSchema, notificationSchema, referenceSchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi } from './records';
@@ -32,6 +33,8 @@ export type Operation = {
   effect: Effect;
   /** Takes a whole file's worth of data, so the server allows a larger request than usual. */
   large?: boolean;
+  /** Open to anyone with the link, with no sign-in: what a public form or booking page calls. Such an operation checks everything it is given and returns nothing private. */
+  public?: boolean;
 };
 
 export const workspaceSchema = z.object({
@@ -609,5 +612,117 @@ export const operations: Operation[] = [
     input: z.object({ objectId: z.string(), viewId: z.string() }),
     output: objectDefinitionSchema,
     effect: 'destructive',
+  },
+  {
+    name: 'forms.list',
+    method: 'listForms',
+    title: 'List forms',
+    description: 'Returns every form with its fields and how many times it has been submitted. A form\'s public page is at /f/<id>.',
+    input: none,
+    output: z.array(formSchema),
+    effect: 'read',
+  },
+  {
+    name: 'forms.get',
+    method: 'getForm',
+    title: 'Get a form and its recent submissions',
+    description: 'Returns one form with its 15 most recent submissions: which contact, when, and whether the submission created them.',
+    input: z.string().describe('The form\'s id.'),
+    output: formDetailSchema,
+    effect: 'read',
+  },
+  {
+    name: 'forms.save',
+    method: 'saveForm',
+    title: 'Create or change a form',
+    description: 'Creates a form, or replaces one when `id` is given. Each field fills one contact property; a form must include the email field so a submission can be matched to a contact.',
+    input: formSettingsSchema.extend({ id: z.string().optional() }),
+    output: formSchema,
+    effect: 'write',
+  },
+  {
+    name: 'forms.delete',
+    method: 'deleteForm',
+    title: 'Delete a form',
+    description: 'Deletes a form. Its public page stops working at once; the contacts it created are kept.',
+    input: z.string().describe('The form\'s id.'),
+    output: z.void(),
+    effect: 'destructive',
+  },
+  {
+    name: 'forms.public',
+    method: 'getPublicForm',
+    title: 'Get a form as a visitor sees it',
+    description: 'Returns a form and the fields it asks for, with nothing about who has filled it in. This is what the public page loads.',
+    input: z.string().describe('The form\'s id.'),
+    output: publicFormSchema,
+    effect: 'read',
+    public: true,
+  },
+  {
+    name: 'forms.submit',
+    method: 'submitForm',
+    title: 'Submit a form',
+    description: 'Submits a form as a visitor would: `values` maps the form\'s property ids to what was typed. Creates a contact, or adds missing details to the one with that email.',
+    input: z.object({ formId: z.string(), values: z.record(z.string()) }),
+    output: z.object({ contactId: z.string(), isNew: z.boolean() }),
+    effect: 'write',
+    public: true,
+  },
+  {
+    name: 'booking.pages',
+    method: 'listBookingPages',
+    title: 'List booking pages',
+    description: 'Returns the pages where people outside the team can book a meeting: who can be booked, for how long, on which days and hours, and how many meetings each has taken. A page\'s public link is /book/<id>.',
+    input: none,
+    output: z.array(bookingPageSchema),
+    effect: 'read',
+  },
+  {
+    name: 'booking.savePage',
+    method: 'saveBookingPage',
+    title: 'Create or change a booking page',
+    description: 'Creates a booking page, or replaces one when `id` is given. With several hosts, bookings go to each in turn. Days are 1 (Monday) to 7 (Sunday); hours are on the 24-hour clock.',
+    input: bookingPageSettingsSchema.extend({ id: z.string().optional() }),
+    output: bookingPageSchema,
+    effect: 'write',
+  },
+  {
+    name: 'booking.deletePage',
+    method: 'deleteBookingPage',
+    title: 'Delete a booking page',
+    description: 'Deletes a booking page. Its link stops working; meetings already booked are kept.',
+    input: z.string().describe('The booking page\'s id.'),
+    output: z.void(),
+    effect: 'destructive',
+  },
+  {
+    name: 'booking.slots',
+    method: 'listSlots',
+    title: 'List free times on a booking page',
+    description: 'Returns the times still free on a booking page for its next eight open days.',
+    input: z.string().describe('The booking page\'s id.'),
+    output: z.object({ page: bookingPageSchema, days: z.array(daySlotsSchema) }),
+    effect: 'read',
+    public: true,
+  },
+  {
+    name: 'booking.book',
+    method: 'bookMeeting',
+    title: 'Book a meeting',
+    description: 'Books one of the free times from booking.slots for a person, by name and email. `startsAt` is the day and time joined with "T", such as 2026-11-17T10:30. Creates the contact if they are new and logs the meeting on their record.',
+    input: z.object({ bookingPageId: z.string(), startsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/), name: z.string(), email: z.string() }),
+    output: meetingSchema,
+    effect: 'write',
+    public: true,
+  },
+  {
+    name: 'booking.meetings',
+    method: 'listMeetings',
+    title: 'List upcoming meetings',
+    description: 'Returns the meetings booked from today on, soonest first, with who each is with.',
+    input: none,
+    output: z.object({ meetings: z.array(meetingSchema), references: z.record(referenceSchema) }),
+    effect: 'read',
   },
 ];

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { propertyDefinitionSchema } from './metadata';
 import { referenceSchema } from './records';
 
 /**
@@ -35,6 +36,10 @@ export type Submission = z.infer<typeof submissionSchema>;
 export const formDetailSchema = z.object({ form: formSchema, recent: z.array(submissionSchema), references: z.record(referenceSchema) });
 export type FormDetail = z.infer<typeof formDetailSchema>;
 
+/** What a visitor's browser is given to draw a form: the form itself and the fields it asks for. Nothing about who else has filled it in. */
+export const publicFormSchema = z.object({ form: formSettingsSchema.extend({ id: z.string() }), fields: z.array(propertyDefinitionSchema) });
+export type PublicForm = z.infer<typeof publicFormSchema>;
+
 export const bookingPageSettingsSchema = z.object({
   name: z.string().min(1),
   /** Who can be booked. With several people, bookings go to each in turn. */
@@ -68,6 +73,8 @@ export type DaySlots = z.infer<typeof daySlotsSchema>;
 export interface CaptureApi {
   listForms(): Promise<Form[]>;
   getForm(id: string): Promise<FormDetail>;
+  /** What the public page loads. Open to anyone with the link. */
+  getPublicForm(id: string): Promise<PublicForm>;
   /** Creates a form, or replaces one when `id` is given. */
   saveForm(input: FormSettings & { id?: string }): Promise<Form>;
   deleteForm(id: string): Promise<void>;

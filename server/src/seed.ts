@@ -2,6 +2,7 @@ import { loadConfig } from '@mariachi/config';
 import { createPostgresDatabase, runMigrations } from '@mariachi/database-postgres';
 import { sql } from 'drizzle-orm';
 import type { WorkflowSettings } from '../../src/contracts/workflows';
+import { forms, pages, seededMeetings } from '../../src/mock/capture';
 import { objects, users } from '../../src/mock/definitions';
 import { dataset, mulberry32 } from '../../src/mock/generate';
 import { emailTemplates, inbox } from '../../src/mock/inbox';
@@ -81,7 +82,7 @@ async function main(): Promise<void> {
   const db = database.db;
   try {
     await runMigrations(database.adapter, { migrationsFolder: 'drizzle' });
-    if (process.argv.includes('--reset')) await db.execute(sql`truncate activities, records, objects, people, teams, roles, workflows, workflow_runs, notifications, mariachi_event_outbox, conversations, messages, inbound_emails, email_templates, mail_cursors, dev_mail, reports, dashboards, goals, sequences, enrollments, line_items`);
+    if (process.argv.includes('--reset')) await db.execute(sql`truncate activities, records, objects, people, teams, roles, workflows, workflow_runs, notifications, mariachi_event_outbox, conversations, messages, inbound_emails, email_templates, mail_cursors, dev_mail, reports, dashboards, goals, sequences, enrollments, line_items, forms, submissions, booking_pages, meetings`);
     const [existing] = (await db.execute(sql`select count(*)::int as total from objects`)) as unknown as Array<{ total: number }>;
     if ((existing?.total ?? 0) > 0) {
       console.log('The database already has data. Run with --reset to replace it.');
@@ -164,6 +165,28 @@ async function main(): Promise<void> {
       insert into enrollments (id, tenant_id, sequence_id, contact_id, status, steps_done, enrolled_at, next_run_at)
       select row.id, ${TENANT_ID}, row."sequenceId", row."contactId", row.status, row."stepsDone", row."enrolledAt", row."nextRunAt"
       from jsonb_to_recordset(${JSON.stringify(allEnrollments())}::jsonb) as row(id text, "sequenceId" text, "contactId" text, status text, "stepsDone" int, "enrolledAt" timestamptz, "nextRunAt" timestamptz)`);
+
+    // Forms with a history of submissions, and booking pages with a few meetings already in the diary.
+    const contactIds = records.filter((record) => record.objectId === 'contacts').map((record) => record.id);
+    const submitted: Array<Record<string, string | boolean>> = [];
+    for (const [index, { id, submissions: _count, ...settings }] of forms.entries()) {
+      await db.execute(sql`insert into forms (id, tenant_id, settings, created_at) values (${id}, ${TENANT_ID}, ${JSON.stringify(settings)}::jsonb, now() - make_interval(mins => ${forms.length - index}))`);
+      for (let count = 0; count < (id === 'form_demo' ? 86 : 240); count += 1) {
+        submitted.push({ id: `sub_${id}_${count}`, formId: id, contactId: contactIds[Math.floor(random() * contactIds.length)] ?? '', isNew: random() < 0.7, submittedAt: new Date(now - Math.floor(random() ** 2 * 90 * 24) * 3_600_000).toISOString() });
+      }
+    }
+    await db.execute(sql`
+      insert into submissions (id, tenant_id, form_id, contact_id, is_new, submitted_at)
+      select row.id, ${TENANT_ID}, row."formId", row."contactId", row."isNew", row."submittedAt"
+      from jsonb_to_recordset(${JSON.stringify(submitted)}::jsonb) as row(id text, "formId" text, "contactId" text, "isNew" boolean, "submittedAt" timestamptz)`);
+    for (const [index, { id, ...settings }] of pages.entries()) {
+      await db.execute(sql`insert into booking_pages (id, tenant_id, settings, created_at) values (${id}, ${TENANT_ID}, ${JSON.stringify(settings)}::jsonb, now() - make_interval(mins => ${pages.length - index}))`);
+    }
+    await db.execute(sql`
+      insert into meetings (id, tenant_id, booking_page_id, contact_id, host_id, starts_at, duration_minutes)
+      select row.id, ${TENANT_ID}, row."bookingPageId", row."contactId", row."hostId", row."startsAt", row."durationMinutes"
+      from jsonb_to_recordset(${JSON.stringify(seededMeetings())}::jsonb) as row(id text, "bookingPageId" text, "contactId" text, "hostId" text, "startsAt" text, "durationMinutes" int)
+      on conflict do nothing`);
 
     console.log(`Seeded ${objects.length} objects, ${users.length} people, ${records.length} records and ${activities.length} activities.`);
   } finally {

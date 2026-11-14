@@ -1,7 +1,7 @@
 import type { BookingPage, BookingPageSettings, CaptureApi, DaySlots, Form, FormSettings, Meeting, Submission } from '../contracts/capture';
 import type { PropertyValue } from '../contracts/metadata';
 import type { CrmRecord, Reference } from '../contracts/records';
-import { MOCK_NOW, MOCK_TODAY, users } from './definitions';
+import { MOCK_NOW, MOCK_TODAY, objects, users } from './definitions';
 import { dataset, mulberry32 } from './generate';
 
 /** Forms and booking pages, in memory. Submitting either really creates or updates a contact. */
@@ -9,7 +9,7 @@ import { dataset, mulberry32 } from './generate';
 type StoredForm = FormSettings & { id: string; submissions: number };
 type StoredPage = BookingPageSettings & { id: string };
 
-const forms: StoredForm[] = [
+export const forms: StoredForm[] = [
   {
     id: 'form_demo',
     name: 'Demo request',
@@ -38,7 +38,7 @@ const forms: StoredForm[] = [
   },
 ];
 
-const pages: StoredPage[] = [
+export const pages: StoredPage[] = [
   { id: 'intro-call', name: '30-minute intro call', hostIds: ['usr_maya'], durationMinutes: 30, days: [1, 2, 3, 4, 5], fromHour: 9, toHour: 17 },
   { id: 'team-demo', name: 'Demo with the team', hostIds: ['usr_priya', 'usr_jonas', 'usr_dario'], durationMinutes: 45, days: [1, 2, 3, 4], fromHour: 10, toHour: 16 },
 ];
@@ -55,6 +55,12 @@ const pad = (value: number) => String(value).padStart(2, '0');
 function dayAt(offset: number): { date: string; weekday: number } {
   const date = new Date(Date.parse(MOCK_TODAY) + offset * DAY);
   return { date: date.toISOString().slice(0, 10), weekday: date.getUTCDay() || 7 };
+}
+
+/** The meetings the demo starts with. */
+export function seededMeetings(): Meeting[] {
+  seed();
+  return meetings ?? [];
 }
 
 function seed(): void {
@@ -159,6 +165,13 @@ export function createCaptureApi(deps: CaptureDeps): CaptureApi {
         seed();
         const recent = (submissions ?? []).filter((submission) => submission.formId === id).slice(0, 15);
         return { form: findForm(id), recent, references: referencesFor(recent.map((submission) => submission.contactId)) };
+      }),
+
+    getPublicForm: (id) =>
+      deps.respond(() => {
+        const { submissions: _count, ...form } = findForm(id);
+        const contacts = objects.find((object) => object.id === 'contacts');
+        return { form, fields: (contacts?.properties ?? []).filter((property) => form.fields.some((field) => field.property === property.id)) };
       }),
 
     saveForm: (input) =>

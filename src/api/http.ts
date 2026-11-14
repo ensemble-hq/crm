@@ -11,6 +11,7 @@ async function call(base: string, name: string, input: unknown): Promise<unknown
   const body: unknown = response.status === 204 ? undefined : await response.json().catch(() => undefined);
   if (!response.ok) {
     // The server answers every failure with `{ error: { code, message } }`, in words meant for a person.
+    if (response.status === 429) throw new Error('Too many requests from here in the last minute. Wait a moment and try again.');
     const message = (body as { error?: { message?: string } } | undefined)?.error?.message;
     throw new Error(message ?? `The server could not do that (${response.status}).`);
   }

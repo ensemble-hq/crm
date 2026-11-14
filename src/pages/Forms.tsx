@@ -28,7 +28,7 @@ export function PublicPage({ children }: { children: ReactNode }) {
 }
 
 /** The form itself, as a visitor sees it. Used on the public page and as the builder's live preview. */
-export function FormView({ form, formId, contacts, onSubmitted }: { form: FormSettings; formId: string | undefined; contacts: ObjectDefinition; onSubmitted?: () => void }) {
+export function FormView({ form, formId, contacts, onSubmitted }: { form: FormSettings; formId: string | undefined; contacts: Pick<ObjectDefinition, 'properties'>; onSubmitted?: () => void }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -102,13 +102,12 @@ export function FormView({ form, formId, contacts, onSubmitted }: { form: FormSe
 /** The public page a form lives on: `/f/<id>`. */
 export function PublicForm() {
   const { formId = '' } = useParams();
-  const workspace = useWorkspace();
-  const detail = useQuery(() => api.getForm(formId), [formId]);
-  const contacts = workspace.object('contacts');
+  // A visitor is not signed in, so the page asks only for what it needs to draw the form.
+  const detail = useQuery(() => api.getPublicForm(formId), [formId]);
   return (
     <PublicPage>
-      {detail.error ? <p style={{ margin: 0 }}>This form is no longer available.</p> : null}
-      {detail.data && contacts ? <FormView form={detail.data.form} formId={formId} contacts={contacts} /> : null}
+      {detail.error ? <p style={{ margin: 0 }}>{/not found/i.test(detail.error.message) ? 'This form is no longer available.' : `This form could not be loaded. ${detail.error.message}`}</p> : null}
+      {detail.data ? <FormView form={detail.data.form} formId={formId} contacts={{ properties: detail.data.fields }} /> : null}
       {!detail.data && !detail.error ? <span className="m-spinner" role="status" aria-label="Loading the form" /> : null}
     </PublicPage>
   );

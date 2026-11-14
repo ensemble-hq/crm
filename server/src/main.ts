@@ -4,6 +4,7 @@ import { useConfigSection } from '@mariachi/config';
 import { ConfigError, KEYS } from '@mariachi/core';
 import { createPostgresDatabase, runMigrations } from '@mariachi/database-postgres';
 import { bootstrap } from '@mariachi/lifecycle';
+import { MemoryRateLimiter } from '@mariachi/rate-limit';
 import { createControllers } from './api/controllers/index';
 import { createAuthStrategy } from './auth';
 import { CRM_CONFIG, type CrmSettings, TENANT_ID } from './config';
@@ -40,6 +41,8 @@ async function main(): Promise<void> {
     // Email providers sign what they deliver; that signature is their sign-in.
     .withAuthStrategy('inbound', hmacSignatureStrategy({ secret: settings.inboundSecret, header: 'x-signature', provider: 'email', tenantId: TENANT_ID }))
     .withAuth('session')
+    // Anyone can reach the public form and booking operations, so callers who are not signed in are held to a modest rate per address.
+    .withRateLimit({ limiter: new MemoryRateLimiter(), default: { windowMs: 60_000, maxRequests: 6_000 }, anonymous: { windowMs: 60_000, maxRequests: 60 } })
     .withHealth(lifecycle.health)
     .withOpenApi({ info: { title: 'CRM', version: '0.1.0' } });
   for (const controller of createControllers(communication, operations, { name: config.serviceName, version: '0.1.0' }, email.name)) api.registerController(controller);

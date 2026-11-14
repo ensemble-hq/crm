@@ -29,36 +29,40 @@ if (!root) throw new Error('Missing #root element');
 createRoot(root).render(
   <StrictMode>
     <BrowserRouter>
-      <WorkspaceProvider>
-        <Routes>
-          {/* Public pages: no navigation, for people outside the team. */}
-          <Route path="f/:formId" element={<PublicForm />} />
-          <Route path="book/:pageId" element={<PublicBooking />} />
-          <Route element={<Shell />}>
-            <Route index element={<Dashboard />} />
-            <Route path="assistant" element={<AssistantPage />} />
-            <Route path="inbox" element={<Inbox />} />
-            <Route path="inbox/:conversationId" element={<Inbox />} />
-            <Route path="import" element={<ImportPage />} />
-            <Route path="forecast" element={<Forecast />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="reports/:reportId" element={<ReportBuilder />} />
-            <Route path="sequences" element={<Sequences />} />
-            <Route path="sequences/:sequenceId" element={<SequenceDetail />} />
-            <Route path="workflows" element={<Workflows />} />
-            <Route path="workflows/:workflowId" element={<WorkflowBuilder />} />
-            <Route path="forms" element={<Forms />} />
-            <Route path="forms/:formId" element={<FormBuilder />} />
-            <Route path="meetings" element={<Meetings />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="settings/objects/:objectId" element={<ObjectSettings />} />
-            <Route path="settings/people" element={<People />} />
-            <Route path=":objectId" element={<RecordList />} />
-            <Route path=":objectId/:recordId" element={<RecordDetail />} />
-            <Route path="*" element={<ComingSoon />} />
-          </Route>
-        </Routes>
-      </WorkspaceProvider>
+      <Routes>
+        {/* Public pages: no navigation and no sign-in, for people outside the team. They sit outside the workspace, which only members can load. */}
+        <Route path="f/:formId" element={<PublicForm />} />
+        <Route path="book/:pageId" element={<PublicBooking />} />
+        <Route
+          element={
+            <WorkspaceProvider>
+              <Shell />
+            </WorkspaceProvider>
+          }
+        >
+          <Route index element={<Dashboard />} />
+          <Route path="assistant" element={<AssistantPage />} />
+          <Route path="inbox" element={<Inbox />} />
+          <Route path="inbox/:conversationId" element={<Inbox />} />
+          <Route path="import" element={<ImportPage />} />
+          <Route path="forecast" element={<Forecast />} />
+          <Route path="reports" element={<Reports />} />
+          <Route path="reports/:reportId" element={<ReportBuilder />} />
+          <Route path="sequences" element={<Sequences />} />
+          <Route path="sequences/:sequenceId" element={<SequenceDetail />} />
+          <Route path="workflows" element={<Workflows />} />
+          <Route path="workflows/:workflowId" element={<WorkflowBuilder />} />
+          <Route path="forms" element={<Forms />} />
+          <Route path="forms/:formId" element={<FormBuilder />} />
+          <Route path="meetings" element={<Meetings />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="settings/objects/:objectId" element={<ObjectSettings />} />
+          <Route path="settings/people" element={<People />} />
+          <Route path=":objectId" element={<RecordList />} />
+          <Route path=":objectId/:recordId" element={<RecordDetail />} />
+          <Route path="*" element={<ComingSoon />} />
+        </Route>
+      </Routes>
     </BrowserRouter>
   </StrictMode>,
 );

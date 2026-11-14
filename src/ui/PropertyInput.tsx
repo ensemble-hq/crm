@@ -1,4 +1,5 @@
-import { useWorkspace } from '../app/workspace';
+import { useContext } from 'react';
+import { WorkspaceContext } from '../app/workspace';
 import type { PropertyDefinition, PropertyValue } from '../contracts/metadata';
 import { RecordPicker } from './RecordPicker';
 
@@ -25,7 +26,8 @@ export function PropertyInput({
   onChange: (value: PropertyValue) => void;
   required?: boolean;
 }) {
-  const { users } = useWorkspace();
+  // A public form is drawn for someone who is not signed in, so there may be no workspace and no list of people.
+  const users = useContext(WorkspaceContext)?.users ?? [];
 
   if (property.type === 'select' || property.type === 'user') {
     const options = property.type === 'user' ? users.map((user) => ({ id: user.id, label: user.name })) : (property.options ?? []);
