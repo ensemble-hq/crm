@@ -14,6 +14,7 @@ import type {
 } from '../contracts/records';
 import { CURRENT_USER_ID, MOCK_NOW, MOCK_TODAY, objects, users } from './definitions';
 import { dataset } from './generate';
+import { createCaptureApi } from './capture';
 import { createInboxApi } from './inbox';
 import { createReportsApi } from './reports';
 import { createSequencesApi, enrollFromWorkflow } from './sequences';
@@ -297,7 +298,7 @@ function validate(object: ObjectDefinition, values: Record<string, PropertyValue
 let sequence = 0;
 
 /** URL segments the app uses itself, so no object may take them. */
-const RESERVED = new Set(['assistant', 'inbox', 'tasks', 'import', 'sequences', 'workflows', 'reports', 'settings']);
+const RESERVED = new Set(['assistant', 'inbox', 'tasks', 'import', 'sequences', 'workflows', 'reports', 'forms', 'meetings', 'settings', 'f', 'book']);
 
 /** "Renewal date" becomes `renewalDate` (joiner '') or `renewal-date` (joiner '-'). */
 function slug(text: string, joiner: '' | '-'): string {
@@ -450,11 +451,37 @@ const workflowDeps: WorkflowDeps = {
   enroll: enrollFromWorkflow,
 };
 
+/** A contact from a public page (a form, a booking): the one with that email is updated, otherwise one is created. */
+function upsertContact(properties: Record<string, PropertyValue>): { record: CrmRecord; isNew: boolean } {
+  const object = definition('contacts');
+  const email = typeof properties.email === 'string' ? properties.email.toLowerCase() : '';
+  const existing = email ? (dataset().byObject.get('contacts') ?? []).find((item) => String(item.properties.email ?? '').toLowerCase() === email) : undefined;
+  if (existing) {
+    // A visitor's form never downgrades what the team already knows: only the details they typed are taken.
+    const { source: _source, lifecycleStage: _stage, leadStatus: _status, ...typed } = properties;
+    validate(object, typed, existing.id, false);
+    Object.assign(existing.properties, typed);
+    existing.updatedAt = new Date().toISOString();
+    return { record: existing, isNew: false };
+  }
+  validate(object, properties, undefined, true);
+  const record = insert('contacts', properties);
+  fire({ kind: 'created', record }, workflowDeps);
+  return { record, isNew: true };
+}
+
+function logActivity(recordId: string, kind: 'note' | 'meeting', title: string, body: string): void {
+  sequence += 1;
+  const logged: Activity = { id: `act_new_${sequence}`, recordId, kind, title, body, actorId: CURRENT_USER_ID, occurredAt: new Date().toISOString() };
+  createdActivity.set(recordId, [logged, ...(createdActivity.get(recordId) ?? [])]);
+}
+
 export const mockApi: CrmApi = {
   ...createInboxApi(respond, logEmail),
   ...createReportsApi({ respond, select, definition, labelOf: label }),
   ...createSequencesApi(respond),
   ...createWorkflowsApi(workflowDeps),
+  ...createCaptureApi({ respond, upsertContact, logActivity }),
   getWorkspace: () => respond(() => ({ name: 'Northwind', objects, users, currentUserId: CURRENT_USER_ID })),
 
   listRecords: (query: ListQuery) =>

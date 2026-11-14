@@ -12,6 +12,8 @@ On screen so far, all on mock data:
 - Reports: a dashboard of saved reports, a report builder with live preview (count, total or average, split by any property or by month or quarter), and reports built by asking the assistant
 - Sequences: steps of emails, calls and tasks with waits, drafted from a sentence, with enrolment from the contacts list and per-sequence results; editable email templates shared with the inbox
 - Workflows: a canvas builder (React Flow) for "when this happens, if these conditions, do these things", built from a sentence or by hand; workflows that are on really run in the mock, with a history of runs
+- Forms: a builder with a working preview, a hosted public page per form, and submissions that create or update a contact by email
+- Meetings: booking pages (who, how long, which days and hours, round robin) with a public page to pick a day and time
 - Tasks: an object like any other, with one-click completion, created from any record or by asking the assistant
 - Contacts, companies and deals: lists with saved views, a filter builder, column choice, search, sorting, bulk edit and delete; a stage board; record pages with fields edited in place
 - Field rules: required and unique, checked on every save

@@ -9,8 +9,10 @@ import { WorkspaceProvider } from './app/WorkspaceProvider';
 import { AssistantPage } from './pages/Assistant';
 import { ComingSoon } from './pages/ComingSoon';
 import { Dashboard } from './pages/Dashboard';
+import { FormBuilder, Forms, PublicForm } from './pages/Forms';
 import { ImportPage } from './pages/Import';
 import { Inbox } from './pages/Inbox';
+import { Meetings, PublicBooking } from './pages/Meetings';
 import { RecordDetail } from './pages/RecordDetail';
 import { RecordList } from './pages/RecordList';
 import { ReportBuilder, Reports } from './pages/Reports';
@@ -27,6 +29,9 @@ createRoot(root).render(
     <BrowserRouter>
       <WorkspaceProvider>
         <Routes>
+          {/* Public pages: no navigation, for people outside the team. */}
+          <Route path="f/:formId" element={<PublicForm />} />
+          <Route path="book/:pageId" element={<PublicBooking />} />
           <Route element={<Shell />}>
             <Route index element={<Dashboard />} />
             <Route path="assistant" element={<AssistantPage />} />
@@ -39,6 +44,9 @@ createRoot(root).render(
             <Route path="sequences/:sequenceId" element={<SequenceDetail />} />
             <Route path="workflows" element={<Workflows />} />
             <Route path="workflows/:workflowId" element={<WorkflowBuilder />} />
+            <Route path="forms" element={<Forms />} />
+            <Route path="forms/:formId" element={<FormBuilder />} />
+            <Route path="meetings" element={<Meetings />} />
             <Route path="settings" element={<Settings />} />
             <Route path="settings/objects/:objectId" element={<ObjectSettings />} />
             <Route path=":objectId" element={<RecordList />} />

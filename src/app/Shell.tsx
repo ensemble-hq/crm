@@ -1,4 +1,4 @@
-import { BarChart3, Bell, Bookmark, House, Inbox, type LucideIcon, Monitor, Moon, PanelLeft, PanelLeftOpen, Search, Send, Settings, Sparkles, Sun, Workflow } from 'lucide-react';
+import { BarChart3, Bell, Bookmark, CalendarDays, FileText, House, Inbox, type LucideIcon, Monitor, Moon, PanelLeft, PanelLeftOpen, Search, Send, Settings, Sparkles, Sun, Workflow } from 'lucide-react';
 import { type CSSProperties, useEffect, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { api, useQuery } from '../api';
@@ -75,6 +75,8 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
     ...workspace.objects.filter((object) => object !== taskObject).map((object) => ({ to: `/${object.id}`, label: object.plural, icon: objectIcon(object.icon) })),
     { to: '/sequences', label: 'Sequences', icon: Send },
     { to: '/workflows', label: 'Workflows', icon: Workflow },
+    { to: '/forms', label: 'Forms', icon: FileText },
+    { to: '/meetings', label: 'Meetings', icon: CalendarDays },
     { to: '/reports', label: 'Reports', icon: BarChart3 },
   ];
 
