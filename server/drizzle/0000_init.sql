@@ -199,6 +199,21 @@ CREATE TABLE "roles" (
 );
 
 --> statement-breakpoint
+CREATE TABLE "line_items" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"deal_id" text NOT NULL,
+	"product_id" text,
+	"name" text NOT NULL,
+	"quantity" double precision NOT NULL,
+	"unit_price" double precision NOT NULL,
+	"discount_percent" double precision DEFAULT 0 NOT NULL,
+	"position" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
 CREATE TABLE "enrollments" (
 	"id" text PRIMARY KEY NOT NULL,
 	"tenant_id" text NOT NULL,
@@ -299,6 +314,8 @@ CREATE INDEX "goals_tenant_id_idx" ON "goals" USING btree ("tenant_id");
 CREATE INDEX "reports_tenant_id_idx" ON "reports" USING btree ("tenant_id");
 --> statement-breakpoint
 CREATE INDEX "roles_tenant_id_idx" ON "roles" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX "line_items_deal_idx" ON "line_items" USING btree ("tenant_id","deal_id","position");
 --> statement-breakpoint
 CREATE INDEX "enrollments_due_idx" ON "enrollments" USING btree ("tenant_id","status","next_run_at");
 --> statement-breakpoint

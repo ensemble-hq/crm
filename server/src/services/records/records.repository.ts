@@ -113,6 +113,29 @@ export class RecordsRepository extends DrizzleRepository<RecordRow> {
       where ${this.scope(ctx, sql`records.id = item.id`)}`);
   }
 
+  /** Takes a property off every record of an object, when the property itself is deleted. */
+  async dropProperty(ctx: Context, objectId: string, propertyId: string): Promise<void> {
+    await this.db.execute(sql`update records set properties = records.properties - ${propertyId}::text where ${this.scope(ctx, sql`records.object_id = ${objectId}`, sql`records.properties ? ${propertyId}`)}`);
+  }
+
+  /** Makes everything that pointed at one record point at another: linked records, activity, conversations, enrolments, line items and notifications. */
+  async repoint(ctx: Context, fromId: string, toId: string, references: Array<{ objectId: string; propertyId: string }>): Promise<void> {
+    for (const reference of references) {
+      await this.db.execute(
+        sql`update records set properties = jsonb_set(records.properties, array[${reference.propertyId}::text], to_jsonb(${toId}::text)), updated_at = now() where ${this.scope(ctx, sql`records.object_id = ${reference.objectId}`, sql`records.properties->>${reference.propertyId}::text = ${fromId}`)}`,
+      );
+    }
+    const tenant = sql`tenant_id = ${ctx.tenantId}`;
+    await this.db.execute(sql`update activities set record_id = ${toId} where ${tenant} and record_id = ${fromId}`);
+    await this.db.execute(sql`update notifications set record_id = ${toId} where ${tenant} and record_id = ${fromId}`);
+    await this.db.execute(sql`update workflow_runs set record_id = ${toId} where ${tenant} and record_id = ${fromId}`);
+    await this.db.execute(sql`update conversations set contact_id = ${toId} where ${tenant} and contact_id = ${fromId}`);
+    await this.db.execute(sql`update conversations set company_id = ${toId} where ${tenant} and company_id = ${fromId}`);
+    await this.db.execute(sql`update conversations set deal_id = ${toId} where ${tenant} and deal_id = ${fromId}`);
+    await this.db.execute(sql`update enrollments set contact_id = ${toId} where ${tenant} and contact_id = ${fromId}`);
+    await this.db.execute(sql`update line_items set deal_id = ${toId} where ${tenant} and deal_id = ${fromId}`);
+  }
+
   /** Hands every record one person owns to another. */
   async reassign(ctx: Context, fromId: string, toId: string): Promise<number> {
     const rows = await this.rows<{ id: string }>(

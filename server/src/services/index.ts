@@ -22,11 +22,13 @@ import { RecordsRepository } from './records/records.repository';
 import { RecordsService } from './records/records.service';
 import { DashboardsRepository, GoalsRepository, ReportsRepository } from './reports/reports.repository';
 import { ReportsService } from './reports/reports.service';
+import { LineItemsRepository, SalesService } from './sales/sales.service';
 import { EnrollmentsRepository, SequencesRepository } from './sequences/sequences.repository';
 import { SequencesService } from './sequences/sequences.service';
 import { WorkflowRunner } from './workflows/workflow.runner';
 import { WorkflowRunsRepository, WorkflowsRepository } from './workflows/workflows.repository';
 import { WorkflowsService } from './workflows/workflows.service';
+import { SettingsService } from './workspace/settings.service';
 import { ObjectsRepository } from './workspace/workspace.repository';
 import { WorkspaceService } from './workspace/workspace.service';
 
@@ -45,7 +47,9 @@ export function createServices(deps: ServiceDeps) {
   const outbox = new Outbox(deps.db, { source: deps.source });
   const events = new RecordEvents(outbox, deps.transaction);
   const people = new PeopleService(new PeopleRepository(deps.db), new TeamsRepository(deps.db), new RolesRepository(deps.db), (ctx, fromId, toId) => recordsRepository.reassign(ctx, fromId, toId));
-  const workspace = new WorkspaceService(new ObjectsRepository(deps.db), people);
+  const objectsRepository = new ObjectsRepository(deps.db);
+  const workspace = new WorkspaceService(objectsRepository, people);
+  const settings = new SettingsService(objectsRepository, recordsRepository, deps.transaction);
   const records = new RecordsService(recordsRepository, workspace, events);
   const activityRepository = new ActivityRepository(deps.db);
   const activity = new ActivityService(activityRepository, records);
@@ -66,8 +70,9 @@ export function createServices(deps: ServiceDeps) {
   inbox.templateUsedBy = (ctx, templateId) => sequences.usingTemplate(ctx, templateId);
   const runner = new WorkflowRunner(workflowsRepository, runsRepository, recordsRepository, events, workspace, people, notifications, templates, mail, sequences);
   const reports = new ReportsService(new ReportsRepository(deps.db), new DashboardsRepository(deps.db), new GoalsRepository(deps.db), records, recordsRepository, people, workspace);
+  const sales = new SalesService(new LineItemsRepository(deps.db), records, recordsRepository, events, activityRepository, workspace);
   const importer = new ImportService(recordsRepository, events, workspace, people);
-  return { people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences };
+  return { people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences, settings, sales };
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: each handler's input is checked against its operation's schema before it runs
@@ -78,7 +83,7 @@ type Handler = (ctx: Context, input: any) => Promise<unknown>;
  * is left out of what the server offers.
  */
 export function registerServices(communication: CommunicationLayer, deps: ServiceDeps): Operation[] {
-  const { people, workspace, records, activity, brief, notifications, workflows, importer, inbox, mail, reports, sequences } = createServices(deps);
+  const { people, workspace, records, activity, brief, notifications, workflows, importer, inbox, mail, reports, sequences, settings, sales } = createServices(deps);
 
   const handlers: Record<string, Handler> = {
     'workspace.get': (ctx) => workspace.get(ctx),
@@ -119,6 +124,22 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     'templates.list': (ctx) => inbox.listTemplates(ctx),
     'templates.save': (ctx, input) => inbox.saveTemplate(ctx, input),
     'templates.delete': (ctx, input) => inbox.deleteTemplate(ctx, input),
+    'records.merge': async (ctx, input) => {
+      const other = await records.find(ctx, input.mergeId);
+      const kept = await records.merge(ctx, input);
+      const primary = (await workspace.definition(ctx, kept.objectId)).primaryProperty;
+      await activity.create(ctx, { recordId: kept.id, kind: 'change', title: `Merged with ${String(other.properties[primary] ?? 'another record')}` });
+      return kept;
+    },
+    'lineItems.list': (ctx, input) => sales.listLineItems(ctx, input),
+    'lineItems.save': (ctx, input) => sales.saveLineItems(ctx, input),
+    'leads.convert': (ctx, input) => sales.convertLead(ctx, input),
+    'objects.create': (ctx, input) => settings.createObject(ctx, input),
+    'properties.create': (ctx, input) => settings.createProperty(ctx, input),
+    'properties.update': (ctx, input) => settings.updateProperty(ctx, input),
+    'properties.delete': (ctx, input) => settings.deleteProperty(ctx, input),
+    'views.save': (ctx, input) => settings.saveView(ctx, input),
+    'views.delete': (ctx, input) => settings.deleteView(ctx, input),
     'sequences.list': (ctx) => sequences.list(ctx),
     'sequences.get': (ctx, input) => sequences.get(ctx, input),
     'sequences.save': (ctx, input) => sequences.save(ctx, input),

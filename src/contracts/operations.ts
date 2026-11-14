@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import { briefSchema } from './brief';
 import { conversationDetailSchema, conversationListSchema, conversationQuerySchema, conversationSchema, emailHealthSchema, emailTemplateSchema, inboxCountsSchema, messageSchema, updateConversationSchema } from './inbox';
-import { filterSchema, objectDefinitionSchema, userSchema } from './metadata';
-import { activitySchema, createActivitySchema, importRequestSchema, importResultSchema, notificationSchema, referenceSchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi } from './records';
+import { createObjectSchema, createPropertySchema, filterSchema, objectDefinitionSchema, saveViewSchema, updatePropertySchema, userSchema, viewDefinitionSchema } from './metadata';
+import { activitySchema, createActivitySchema, mergeRecordsSchema, importRequestSchema, importResultSchema, notificationSchema, referenceSchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi } from './records';
 import { workflowDetailSchema, workflowSchema, workflowSettingsSchema } from './workflows';
 import { dashboardSchema, reportDefinitionSchema, reportResultSchema, reportSettingsSchema } from './reports';
-import { forecastSchema } from './sales';
+import { convertLeadSchema, forecastSchema, lineItemSchema } from './sales';
 import { enrollResultSchema, saveSequenceSchema, sequenceDetailSchema, sequenceSchema } from './sequences';
 import { accessSchema, deactivateMemberSchema, directorySchema, inviteMemberSchema, memberSchema, roleSchema, saveRoleSchema, saveTeamSchema, teamSchema, updateMemberSchema } from './team';
 
@@ -519,5 +519,95 @@ export const operations: Operation[] = [
     input: z.string().describe('The enrolment\'s id.'),
     output: z.void(),
     effect: 'write',
+  },
+  {
+    name: 'records.merge',
+    method: 'mergeRecords',
+    title: 'Merge two records',
+    description: 'Folds one record into another of the same kind. The kept record takes the values given in `properties` (for the fields where the two differ); everything that pointed at the other record (linked records, activity, emails, tasks) now points at the kept one; the other record is removed. This cannot be undone from the app: ask the person first.',
+    input: mergeRecordsSchema,
+    output: recordSchema,
+    effect: 'destructive',
+  },
+  {
+    name: 'lineItems.list',
+    method: 'listLineItems',
+    title: "List a deal's line items",
+    description: 'Returns the products on a deal, each with its quantity, unit price and discount.',
+    input: z.string().describe('The deal\'s id.'),
+    output: z.array(lineItemSchema),
+    effect: 'read',
+  },
+  {
+    name: 'lineItems.save',
+    method: 'saveLineItems',
+    title: "Replace a deal's line items",
+    description: 'Replaces every line item on a deal with the ones given. Products come from the products object (records.list with objectId "products"); copy a product\'s name and price into the line, with its id as productId. With setAmount true, the deal\'s amount becomes the total.',
+    input: z.object({ dealId: z.string(), items: z.array(lineItemSchema), setAmount: z.boolean() }),
+    output: z.object({ items: z.array(lineItemSchema), total: z.number() }),
+    effect: 'write',
+  },
+  {
+    name: 'leads.convert',
+    method: 'convertLead',
+    title: 'Convert a lead',
+    description: 'Turns a qualified lead into a contact (reusing one with the same email), their company (reusing one with the same name) and, with createDeal, a deal in the first stage. The lead is kept, marked qualified and linked to what it became.',
+    input: convertLeadSchema,
+    output: z.object({ contactId: z.string(), companyId: z.string().nullable(), dealId: z.string().nullable() }),
+    effect: 'write',
+  },
+  {
+    name: 'objects.create',
+    method: 'createObject',
+    title: 'Add a kind of record',
+    description: 'Adds a new object to the CRM, such as "Projects" or "Subscriptions", with a name, an owner and a first view. It appears in the navigation at once. Add its fields with properties.create. Needs permission to manage settings.',
+    input: createObjectSchema,
+    output: objectDefinitionSchema,
+    effect: 'write',
+  },
+  {
+    name: 'properties.create',
+    method: 'createProperty',
+    title: 'Add a field to an object',
+    description: 'Adds a property to an object: text, number, currency, date, a choice (with options), several choices, yes/no, a person, or a link to another kind of record (with referenceObjectId). Returns the object as it now stands, including the new property\'s id.',
+    input: createPropertySchema,
+    output: objectDefinitionSchema,
+    effect: 'write',
+  },
+  {
+    name: 'properties.update',
+    method: 'updateProperty',
+    title: 'Change a field',
+    description: 'Renames a property, moves it to another group, replaces a choice\'s options, or changes whether it is required, unique or asked for when a record is created. Its type and id never change.',
+    input: updatePropertySchema,
+    output: objectDefinitionSchema,
+    effect: 'write',
+  },
+  {
+    name: 'properties.delete',
+    method: 'deleteProperty',
+    title: 'Delete a field and its values',
+    description: 'Deletes a property that was added to this CRM, and its value on every record. This cannot be undone: ask the person first. Properties that come with the CRM cannot be deleted.',
+    input: z.object({ objectId: z.string(), propertyId: z.string() }),
+    output: objectDefinitionSchema,
+    effect: 'destructive',
+  },
+  {
+    name: 'views.save',
+    method: 'saveView',
+    title: 'Create or change a saved view',
+    description: 'Saves a list of records as a view: which columns it shows, which filters it applies and how it is sorted. Give viewId to replace an existing view.',
+    input: saveViewSchema,
+    output: viewDefinitionSchema,
+    effect: 'write',
+  },
+  {
+    name: 'views.delete',
+    method: 'deleteView',
+    title: 'Delete a saved view',
+    description: 'Deletes a saved view. The records in it are not affected. An object keeps at least one view.',
+    input: z.object({ objectId: z.string(), viewId: z.string() }),
+    output: objectDefinitionSchema,
+    effect: 'destructive',
   },
 ];

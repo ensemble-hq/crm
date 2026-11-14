@@ -6,6 +6,7 @@ export * from './people';
 export * from './records';
 export * from './reports';
 export * from './roles';
+export * from './sales';
 export * from './sequences';
 export * from './teams';
 export * from './workflows';

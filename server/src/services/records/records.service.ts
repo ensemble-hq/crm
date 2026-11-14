@@ -2,7 +2,7 @@ import { ConflictError, type Context, NotFoundError, ValidationError } from '@ma
 import { type SQL, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import type { ObjectDefinition, PropertyValue } from '../../../../src/contracts/metadata';
-import type { CreateRecord, CrmRecord, ListQuery, ListResult, RecordDetail, Reference, RelatedGroup, SummaryQuery, SummaryRow, UpdateRecord } from '../../../../src/contracts/records';
+import type { CreateRecord, CrmRecord, MergeRecords, ListQuery, ListResult, RecordDetail, Reference, RelatedGroup, SummaryQuery, SummaryRow, UpdateRecord } from '../../../../src/contracts/records';
 import { actorOf, assertCan, visibility } from '../people/access';
 import type { WorkspaceService } from '../workspace/workspace.service';
 import type { RecordEvents } from './records.events';
@@ -153,6 +153,35 @@ export class RecordsService {
     return this.events.transaction(ctx, async () => {
       const updated = (await this.records.patch(ctx, record.id, input.properties)) ?? record;
       await this.events.changed(ctx, updated, changed);
+      return updated;
+    });
+  }
+
+  /**
+   * Folds one record into another: the kept record takes the chosen values, everything that pointed
+   * at the other now points at it, and the other is removed. All of it happens or none of it does.
+   */
+  async merge(ctx: Context, input: MergeRecords): Promise<CrmRecord> {
+    if (input.keepId === input.mergeId) throw new ValidationError('Choose two different records.');
+    const [keep, merged] = [await this.find(ctx, input.keepId), await this.find(ctx, input.mergeId)];
+    if (keep.objectId !== merged.objectId) throw new ValidationError('Only two records of the same kind can be merged.');
+    const objects = await this.workspace.definitions(ctx);
+    const object = objects.find((item) => item.id === keep.objectId);
+    if (!object) throw new NotFoundError('object', keep.objectId);
+    const actor = actorOf(ctx);
+    const noun = object.singular.toLowerCase();
+    assertCan(actor, 'edit', keep, noun);
+    assertCan(actor, 'delete', merged, noun);
+    const references = objects.flatMap((other) => other.properties.filter((item) => item.type === 'reference' && item.referenceObjectId === object.id).map((item) => ({ objectId: other.id, propertyId: item.id })));
+    const changed = Object.fromEntries(Object.entries(input.properties).filter(([key, value]) => JSON.stringify(keep.properties[key] ?? null) !== JSON.stringify(value ?? null)));
+    return this.events.transaction(ctx, async () => {
+      // The other record goes first, so a unique value moving across does not clash with itself.
+      await this.records.remove(ctx, [merged.id]);
+      await this.validate(ctx, object, input.properties, keep.id);
+      const updated = (await this.records.patch(ctx, keep.id, input.properties)) ?? keep;
+      await this.records.repoint(ctx, merged.id, keep.id, references);
+      await this.events.changed(ctx, updated, changed);
+      await this.events.deleted(ctx, merged);
       return updated;
     });
   }
