@@ -136,6 +136,17 @@ CREATE TABLE "submissions" (
 );
 
 --> statement-breakpoint
+CREATE TABLE "consents" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"email" text NOT NULL,
+	"text" text NOT NULL,
+	"source" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
 CREATE TABLE "conversations" (
 	"id" text PRIMARY KEY NOT NULL,
 	"tenant_id" text NOT NULL,
@@ -159,6 +170,29 @@ CREATE TABLE "dev_mail" (
 	"direction" text NOT NULL,
 	"payload" jsonb NOT NULL,
 	"sequence" bigint NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
+CREATE TABLE "email_preferences" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"email" text NOT NULL,
+	"status" text NOT NULL,
+	"source" text NOT NULL,
+	"reason" text,
+	"changed_by" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
+CREATE TABLE "email_settings" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"weekly_limit" integer DEFAULT 3 NOT NULL,
+	"postal_address" text DEFAULT '' NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -215,6 +249,7 @@ CREATE TABLE "messages" (
 	"status" text NOT NULL,
 	"message_id_header" text,
 	"provider_id" text,
+	"purpose" text DEFAULT 'conversation' NOT NULL,
 	"sender_id" text,
 	"attempts" integer DEFAULT 0 NOT NULL,
 	"last_error" text,
@@ -419,9 +454,15 @@ CREATE INDEX "meetings_start_idx" ON "meetings" USING btree ("tenant_id","starts
 --> statement-breakpoint
 CREATE INDEX "submissions_form_idx" ON "submissions" USING btree ("tenant_id","form_id","submitted_at");
 --> statement-breakpoint
+CREATE INDEX "consents_email_idx" ON "consents" USING btree ("tenant_id","email","created_at");
+--> statement-breakpoint
 CREATE INDEX "conversations_folder_idx" ON "conversations" USING btree ("tenant_id","status","last_message_at");
 --> statement-breakpoint
 CREATE INDEX "conversations_contact_idx" ON "conversations" USING btree ("tenant_id","contact_id");
+--> statement-breakpoint
+CREATE UNIQUE INDEX "email_preferences_email_idx" ON "email_preferences" USING btree ("tenant_id","email");
+--> statement-breakpoint
+CREATE INDEX "email_settings_tenant_id_idx" ON "email_settings" USING btree ("tenant_id");
 --> statement-breakpoint
 CREATE INDEX "email_templates_tenant_id_idx" ON "email_templates" USING btree ("tenant_id");
 --> statement-breakpoint

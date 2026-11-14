@@ -5,6 +5,7 @@ import type { CrmRecord, Reference } from '../../../../src/contracts/records';
 import type { EnrollResult, Enrollment, SaveSequence, Sequence, SequenceDetail, SequenceStep } from '../../../../src/contracts/sequences';
 import type { EnrollmentRow, SequenceRow } from '../../schema';
 import type { EmailTemplatesRepository } from '../inbox/inbox.repository';
+import { type EmailRules, OverLimit } from '../inbox/email-rules.service';
 import type { MailService } from '../inbox/mail.service';
 import type { PeopleService } from '../people/people.service';
 import type { RecordEvents } from '../records/records.events';
@@ -49,6 +50,7 @@ export class SequencesService {
     private readonly people: PeopleService,
     private readonly workspace: WorkspaceService,
     private readonly transaction: <T>(ctx: Context, fn: () => Promise<T>) => Promise<T>,
+    private readonly rules: EmailRules,
   ) {}
 
   private async find(ctx: Context, sequenceId: string): Promise<SequenceRow> {
@@ -105,6 +107,8 @@ export class SequencesService {
     const name = String(contact?.properties.name ?? 'This contact');
     if (!contact || typeof contact.properties.email !== 'string' || contact.properties.email === '') return `${name} has no email address.`;
     if (await this.enrollments.exists(ctx, { sequenceId: sequence.id, contactId: contact.id, status: 'active' })) return `${name} is already in this sequence.`;
+    const preference = await this.rules.describe(ctx, contact.properties.email);
+    if (preference.status !== 'subscribed') return `${name} has ${preference.status === 'blocked' ? 'an address that cannot be emailed' : 'unsubscribed'}.`;
     const first = sequence.steps[0];
     await this.enrollments.create(ctx, { id: id('enr'), sequenceId: sequence.id, contactId: contact.id, status: 'active', stepsDone: 0, senderId, conversationId: null, problem: null, nextRunAt: sequence.status === 'active' && first ? afterWorkingDays(new Date(), first.waitDays) : null });
     return undefined;
@@ -166,6 +170,11 @@ export class SequencesService {
         return true;
       });
     } catch (error) {
+      // Too much email this week is a reason to wait, not to give up: the step is put off until there is room.
+      if (error instanceof OverLimit) {
+        await this.enrollments.update(ctx, enrollmentId, { nextRunAt: error.until });
+        return false;
+      }
       // A step that cannot be carried out stops that contact's run and says why, instead of failing again every few seconds.
       await this.enrollments.update(ctx, enrollmentId, { status: 'stopped', nextRunAt: null, problem: error instanceof Error ? error.message : String(error) });
       ctx.logger.warn({ enrollmentId, error }, 'A sequence step could not be carried out; the enrolment was stopped');
@@ -188,10 +197,10 @@ export class SequencesService {
       const fill = (text: string) => text.replace(/\{\{firstName\}\}/g, String(contact.properties.name ?? '').split(' ')[0] ?? '').replace(/\{\{myName\}\}/g, sender.name.split(' ')[0] ?? sender.name);
       // Later emails go out on the thread the first one started, so the contact sees one conversation.
       if (enrollment.conversationId) {
-        await this.mail.queue(ctx, { conversationId: enrollment.conversationId, sender, toEmail: String(contact.properties.email ?? ''), subject: fill(template.subject || template.name), body: fill(template.body) });
+        await this.mail.queue(ctx, { conversationId: enrollment.conversationId, sender, toEmail: String(contact.properties.email ?? ''), subject: fill(template.subject || template.name), body: fill(template.body), purpose: 'automated' });
         return enrollment.conversationId;
       }
-      return (await this.mail.compose(ctx, { contact, sender, subject: fill(template.subject || template.name), body: fill(template.body) })).conversationId;
+      return (await this.mail.compose(ctx, { contact, sender, subject: fill(template.subject || template.name), body: fill(template.body), purpose: 'automated' })).conversationId;
     }
 
     const tasks = (await this.workspace.definitions(ctx)).find((object) => object.completion);

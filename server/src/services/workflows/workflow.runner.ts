@@ -169,7 +169,7 @@ export class WorkflowRunner {
         const sender = users.find((user) => user.id === owner);
         if (!sender) throw new ActionFailed('The record has no owner to send the email from.');
         const fill = (text: string) => text.replace(/\{\{firstName\}\}/g, String(contact.properties.name ?? '').split(' ')[0] ?? '').replace(/\{\{myName\}\}/g, sender.name.split(' ')[0] ?? sender.name);
-        await this.mail.compose(ctx, { contact, sender, subject: fill(template.subject || template.name), body: fill(template.body), dealId: record.objectId === 'deals' ? record.id : null });
+        await this.mail.compose(ctx, { contact, sender, subject: fill(template.subject || template.name), body: fill(template.body), dealId: record.objectId === 'deals' ? record.id : null, purpose: 'automated' });
         return `Sent "${template.name}" to ${String(contact.properties.name ?? 'the contact')}`;
       }
       case 'enroll': {

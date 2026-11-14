@@ -87,6 +87,8 @@ export const messagesTable = defineTable(
     messageIdHeader: column.text(),
     /** The provider's id once it has accepted the message. */
     providerId: column.text(),
+    /** `conversation` for something a person wrote to one contact; `automated` for a sequence step or a workflow's email. Only automated email obeys unsubscribes and the weekly limit, and carries an unsubscribe link. */
+    purpose: column.text().notNull().default('conversation'),
     /** Who sent it, to tell when it fails. */
     senderId: column.text(),
     attempts: column.integer().notNull().default(0),
@@ -137,3 +139,50 @@ export const devMailTable = defineTable('dev_mail', {
   createdAt: column.timestamp().notNull().defaultNow(),
   updatedAt: column.timestamp().notNull().defaultNow(),
 });
+
+/** Whether an address may be emailed. Kept by address so it outlives the contact. */
+export const emailPreferencesTable = defineTable(
+  'email_preferences',
+  {
+    id: column.text().primaryKey(),
+    tenantId: column.text().notNull(),
+    /** Lower case. */
+    email: column.text().notNull(),
+    status: column.text().notNull(),
+    source: column.text().notNull(),
+    reason: column.text(),
+    changedBy: column.text(),
+    createdAt: column.timestamp().notNull().defaultNow(),
+    updatedAt: column.timestamp().notNull().defaultNow(),
+  },
+  { indexes: [index('email_preferences_email_idx').on('tenantId', 'email').unique()] },
+);
+export type EmailPreferenceRow = InferEntity<typeof emailPreferencesTable>;
+
+/** That someone agreed to be emailed: the words they agreed to, where, and when. Never changed afterwards. */
+export const consentsTable = defineTable(
+  'consents',
+  {
+    id: column.text().primaryKey(),
+    tenantId: column.text().notNull(),
+    email: column.text().notNull(),
+    text: column.text().notNull(),
+    /** Where it was given, such as the form's name. */
+    source: column.text().notNull(),
+    createdAt: column.timestamp().notNull().defaultNow(),
+    updatedAt: column.timestamp().notNull().defaultNow(),
+  },
+  { indexes: [index('consents_email_idx').on('tenantId', 'email', 'createdAt')] },
+);
+export type ConsentRow = InferEntity<typeof consentsTable>;
+
+/** The rules for automated email. One row. */
+export const emailSettingsTable = defineTable('email_settings', {
+  id: column.text().primaryKey(),
+  tenantId: column.text().notNull(),
+  weeklyLimit: column.integer().notNull().default(3),
+  postalAddress: column.text().notNull().default(''),
+  createdAt: column.timestamp().notNull().defaultNow(),
+  updatedAt: column.timestamp().notNull().defaultNow(),
+});
+export type EmailSettingsRow = InferEntity<typeof emailSettingsTable>;

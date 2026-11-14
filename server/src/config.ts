@@ -20,6 +20,8 @@ const crmSchema = z.object({
   sweepSeconds: z.number().int().min(1).default(15),
   /** Encrypts secrets the CRM stores, such as the assistant's model key. At least 32 characters; set a real one in production. */
   secretsKey: z.string().min(32).default('dev-only-secrets-key-change-me-0123456789'),
+  /** Where people reach the app, for links in email such as unsubscribe. */
+  appOrigin: z.string().url().default('http://localhost:5185'),
   /** Apply pending migrations when the server starts, as a hosted instance does. */
   migrateOnStart: z.boolean().default(true),
 });
@@ -36,6 +38,7 @@ registerConfigSection(CRM_CONFIG, {
     inboundSecret: optional(read('EMAIL_INBOUND_SECRET')),
     sweepSeconds: optional(read('EMAIL_SWEEP_SECONDS')) === undefined ? undefined : Number(read('EMAIL_SWEEP_SECONDS')),
     secretsKey: optional(read('CRM_SECRETS_KEY')),
+    appOrigin: optional(read('APP_ORIGIN')),
     migrateOnStart: optional(read('MIGRATE_ON_START')) === undefined ? undefined : read('MIGRATE_ON_START') === 'true',
   }),
 });

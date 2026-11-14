@@ -3,6 +3,7 @@ import { assistantReplySchema, assistantSettingsSchema, assistantTurnSchema, ass
 import { auditCheckSchema, auditPageSchema, auditQuerySchema } from './audit';
 import { briefSchema } from './brief';
 import { bookingPageSchema, bookingPageSettingsSchema, daySlotsSchema, formDetailSchema, formSchema, formSettingsSchema, meetingSchema, publicFormSchema } from './capture';
+import { emailPreferenceSchema, emailSettingsSchema, setEmailPreferenceSchema, unsubscribePageSchema } from './inbox';
 import { conversationDetailSchema, conversationListSchema, conversationQuerySchema, conversationSchema, emailHealthSchema, emailTemplateSchema, inboxCountsSchema, messageSchema, updateConversationSchema } from './inbox';
 import { createObjectSchema, createPropertySchema, filterSchema, objectDefinitionSchema, saveViewSchema, updatePropertySchema, userSchema, viewDefinitionSchema } from './metadata';
 import { activitySchema, createActivitySchema, mergeRecordsSchema, importRequestSchema, importResultSchema, notificationSchema, referenceSchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi } from './records';
@@ -842,6 +843,64 @@ export const operations: Operation[] = [
     input: none,
     output: auditCheckSchema,
     effect: 'read',
+    internal: true,
+  },
+  {
+    name: 'email.preference',
+    method: 'getEmailPreference',
+    title: 'Check whether an address may be emailed',
+    description: 'Returns whether an email address is subscribed, unsubscribed (no automated email) or blocked (no email at all), who changed that and why, any consent on record, and how many automated emails it has had this week against the limit. Check it before proposing to email someone.',
+    input: z.string().describe('The email address.'),
+    output: emailPreferenceSchema,
+    effect: 'read',
+  },
+  {
+    name: 'email.setPreference',
+    method: 'setEmailPreference',
+    title: 'Stop or resume email to an address',
+    description: 'Sets an address to subscribed, unsubscribed or blocked. Resuming email needs a reason, and only someone who manages settings may undo a choice the recipient made themselves.',
+    input: setEmailPreferenceSchema,
+    output: emailPreferenceSchema,
+    effect: 'write',
+  },
+  {
+    name: 'email.settings',
+    method: 'getEmailSettings',
+    title: 'Get the email sending rules',
+    description: 'Returns the weekly limit on automated email per address and the postal address put at the foot of automated email.',
+    input: none,
+    output: emailSettingsSchema,
+    effect: 'read',
+  },
+  {
+    name: 'email.saveSettings',
+    method: 'saveEmailSettings',
+    title: 'Change the email sending rules',
+    description: 'Sets the weekly limit on automated email per address and the postal address in its footer.',
+    input: emailSettingsSchema,
+    output: emailSettingsSchema,
+    effect: 'write',
+  },
+  {
+    name: 'email.unsubscribePage',
+    method: 'getUnsubscribePage',
+    title: 'Open an unsubscribe link',
+    description: 'What the unsubscribe page loads from the link in an email.',
+    input: z.string(),
+    output: unsubscribePageSchema,
+    effect: 'read',
+    public: true,
+    internal: true,
+  },
+  {
+    name: 'email.unsubscribe',
+    method: 'unsubscribe',
+    title: 'Unsubscribe from email',
+    description: 'What the unsubscribe page calls when the recipient confirms.',
+    input: z.object({ token: z.string(), resubscribe: z.boolean().optional() }),
+    output: unsubscribePageSchema,
+    effect: 'write',
+    public: true,
     internal: true,
   },
 ];

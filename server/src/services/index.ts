@@ -14,6 +14,7 @@ import { ActivityService } from './activity/activity.service';
 import { BriefService } from './brief/brief.service';
 import type { EmailProvider } from '../email';
 import { ConversationsRepository, EmailTemplatesRepository, InboundEmailsRepository, MailCursorsRepository, MessagesRepository } from './inbox/inbox.repository';
+import { EmailRules } from './inbox/email-rules.service';
 import { InboxService } from './inbox/inbox.service';
 import { MailService } from './inbox/mail.service';
 import { BookingPagesRepository, CaptureService, FormsRepository, MeetingsRepository, SubmissionsRepository } from './capture/capture.service';
@@ -48,6 +49,8 @@ export interface ServiceDeps {
   email: EmailProvider;
   /** Encrypts secrets the CRM stores. */
   secretsKey: string;
+  /** Where people reach the app, for links in email. */
+  appOrigin: string;
   /** Sends something to one person's open browsers. Absent where there is no live connection. */
   push?: Push;
 }
@@ -79,18 +82,19 @@ export function createServices(deps: ServiceDeps) {
   const inbound = new InboundEmailsRepository(deps.db);
   const cursors = new MailCursorsRepository(deps.db);
   const templates = new EmailTemplatesRepository(deps.db);
-  const mail = new MailService(deps.email, inbound, conversations, messages, cursors, recordsRepository, activityRepository, notifications, outbox, events, deps.transaction);
+  const rules = new EmailRules(deps.db, deps.secretsKey, deps.appOrigin, 'Northwind');
+  const mail = new MailService(deps.email, inbound, conversations, messages, cursors, recordsRepository, activityRepository, notifications, outbox, events, deps.transaction, rules);
   const inbox = new InboxService(conversations, messages, templates, inbound, cursors, mail, recordsRepository, activityRepository, people, workspace, deps.transaction);
-  const sequences = new SequencesService(new SequencesRepository(deps.db), new EnrollmentsRepository(deps.db), templates, recordsRepository, events, mail, people, workspace, deps.transaction);
+  const sequences = new SequencesService(new SequencesRepository(deps.db), new EnrollmentsRepository(deps.db), templates, recordsRepository, events, mail, people, workspace, deps.transaction, rules);
   mail.onReply = (ctx, contactId) => sequences.contactReplied(ctx, contactId);
   inbox.changed = async (ctx, conversationId) => void (await outbox.add(ctx, conversationChanged, { conversationId }));
   inbox.templateUsedBy = (ctx, templateId) => sequences.usingTemplate(ctx, templateId);
   const runner = new WorkflowRunner(workflowsRepository, runsRepository, recordsRepository, events, workspace, people, notifications, templates, mail, sequences);
   const reports = new ReportsService(new ReportsRepository(deps.db), new DashboardsRepository(deps.db), new GoalsRepository(deps.db), records, recordsRepository, people, workspace);
   const sales = new SalesService(new LineItemsRepository(deps.db), records, recordsRepository, events, activityRepository, workspace);
-  const capture = new CaptureService(new FormsRepository(deps.db), new SubmissionsRepository(deps.db), new BookingPagesRepository(deps.db), new MeetingsRepository(deps.db), recordsRepository, events, activityRepository, people, workspace);
+  const capture = new CaptureService(new FormsRepository(deps.db), new SubmissionsRepository(deps.db), new BookingPagesRepository(deps.db), new MeetingsRepository(deps.db), recordsRepository, events, activityRepository, people, workspace, rules);
   const importer = new ImportService(recordsRepository, events, workspace, people);
-  return { people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences, settings, sales, capture, agents, audit };
+  return { people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences, settings, sales, capture, agents, audit, rules };
 }
 
 /** How long a slow operation, such as a turn of the assistant on a model, may run. */
@@ -104,7 +108,7 @@ type Handler = (ctx: Context, input: any) => Promise<unknown>;
  * is left out of what the server offers.
  */
 export function registerServices(communication: CommunicationLayer, deps: ServiceDeps): Operation[] {
-  const { people, workspace, records, activity, brief, notifications, workflows, importer, inbox, mail, reports, sequences, settings, sales, capture, agents, audit } = createServices(deps);
+  const { people, workspace, records, activity, brief, notifications, workflows, importer, inbox, mail, reports, sequences, settings, sales, capture, agents, audit, rules } = createServices(deps);
 
   // The assistant reaches the CRM the way everything else does: through the operations, as the person asking.
   const assistant = new AssistantService(new AssistantSettingsRepository(deps.db), createEncryption({ adapter: 'local', keys: { primary: deps.secretsKey } }), operations, (ctx, operation, input) => communication.call(ctx, operation, input), new AssistantTurnsRepository(deps.db), deps.push);
@@ -145,6 +149,12 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     'inbox.reply': (ctx, input) => inbox.reply(ctx, input),
     'inbox.counts': (ctx) => inbox.counts(ctx),
     'inbox.health': (ctx) => inbox.health(ctx),
+    'email.preference': (ctx, input) => rules.describe(ctx, input),
+    'email.setPreference': (ctx, input) => rules.set(ctx, input),
+    'email.settings': (ctx) => rules.getSettings(ctx),
+    'email.saveSettings': (ctx, input) => rules.saveSettings(ctx, input),
+    'email.unsubscribePage': (ctx, input) => rules.page(ctx, input),
+    'email.unsubscribe': (ctx, input) => rules.unsubscribe(ctx, input.token, input.resubscribe === true),
     'templates.list': (ctx) => inbox.listTemplates(ctx),
     'templates.save': (ctx, input) => inbox.saveTemplate(ctx, input),
     'templates.delete': (ctx, input) => inbox.deleteTemplate(ctx, input),

@@ -33,7 +33,7 @@ async function main(): Promise<void> {
   const email = createEmailProvider(settings, database.db);
   // Live updates need Redis; without it the CRM works, and browsers simply read on their own.
   const live = config.redis ? lifecycle.manage('live', createLive(config.redis.url, config.serviceName, { logger, tracer, metrics }), { priority: 40 }) : undefined;
-  const deps = { db: database.db, transaction: database.transaction, source: config.serviceName, email, secretsKey: settings.secretsKey, push: live ? (ctx: Parameters<typeof live.sendToUser>[0], userId: string, data: unknown) => live.sendToUser(ctx, userId, data) : undefined };
+  const deps = { db: database.db, transaction: database.transaction, source: config.serviceName, email, secretsKey: settings.secretsKey, appOrigin: settings.appOrigin, push: live ? (ctx: Parameters<typeof live.sendToUser>[0], userId: string, data: unknown) => live.sendToUser(ctx, userId, data) : undefined };
   const operations = registerServices(communication, deps);
 
   const agentKeys = createServices(deps).agents;

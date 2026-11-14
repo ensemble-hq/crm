@@ -16,7 +16,17 @@ export interface EmailProvider {
   listInboundSince?(position: string | null): Promise<{ messages: ProviderInbound[]; position: string | null }>;
 }
 
-export type OutboundEmail = { fromName: string; fromEmail: string; toEmail: string; subject: string; text: string; messageId: string; inReplyTo?: string };
+export type OutboundEmail = {
+  fromName: string;
+  fromEmail: string;
+  toEmail: string;
+  subject: string;
+  text: string;
+  messageId: string;
+  inReplyTo?: string;
+  /** For automated email: where the recipient unsubscribes. A provider sends it as the `List-Unsubscribe` and `List-Unsubscribe-Post` headers, so mail apps can offer their own unsubscribe button. */
+  unsubscribeUrl?: string;
+};
 
 export type ProviderInbound = { providerMessageId: string; payload: InboundPayload };
 

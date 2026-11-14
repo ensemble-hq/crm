@@ -87,6 +87,13 @@ export function FormView({ form, formId, contacts, onSubmitted }: { form: FormSe
           </div>
         );
       })}
+      {form.consentText ? (
+        // Not required and not ticked for them: agreement only counts if it is freely given.
+        <label className="m-field" data-layout="inline">
+          <input className="m-checkbox" type="checkbox" checked={values.__consent === 'yes'} onChange={(event) => setValues((previous) => ({ ...previous, __consent: event.target.checked ? 'yes' : '' }))} />
+          {form.consentText}
+        </label>
+      ) : null}
       {error ? (
         <p className="m-field-error" role="alert" style={{ margin: 0 }}>
           {error}
@@ -234,7 +241,7 @@ export function FormBuilder() {
   }
 
   const form: FormSettings = draft ?? saved;
-  const set = (changes: Partial<FormSettings>) => setDraft({ name: form.name, heading: form.heading, fields: form.fields, submitLabel: form.submitLabel, thanks: form.thanks, ...changes });
+  const set = (changes: Partial<FormSettings>) => setDraft({ name: form.name, heading: form.heading, fields: form.fields, submitLabel: form.submitLabel, thanks: form.thanks, consentText: form.consentText, ...changes });
   const available = contacts.properties.filter((property) => FORM_TYPES.has(property.type) && !property.system && !form.fields.some((field) => field.property === property.id));
   const setField = (property: string, changes: Partial<FormSettings['fields'][number]>) => set({ fields: form.fields.map((field) => (field.property === property ? { ...field, ...changes } : field)) });
 
@@ -353,6 +360,13 @@ export function FormBuilder() {
                   Message after submitting
                 </label>
                 <textarea className="m-input" id="form-thanks" rows={2} value={form.thanks} onChange={(event) => set({ thanks: event.target.value })} />
+              </div>
+              <div className="m-field">
+                <label className="m-field-label" htmlFor="form-consent">
+                  Ask for agreement to be emailed
+                </label>
+                <textarea className="m-input" id="form-consent" rows={2} placeholder="Yes, email me news and offers. I can unsubscribe at any time." value={form.consentText ?? ''} onChange={(event) => set({ consentText: event.target.value || undefined })} />
+                <p className="m-field-hint">Leave empty for no tick box. When someone ticks it, these exact words are kept with the date as their consent.</p>
               </div>
               {error ? (
                 <p className="m-field-error" role="alert" style={{ margin: 0 }}>

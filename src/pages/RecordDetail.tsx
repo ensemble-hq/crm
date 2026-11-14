@@ -10,6 +10,7 @@ import { CompleteButton, isComplete } from '../ui/CompleteButton';
 import { PropertyValue, formatDate, formatDateTime } from '../ui/PropertyValue';
 import { ConvertLeadDialog } from './ConvertLeadDialog';
 import { CreateRecordDialog } from './CreateRecordDialog';
+import { EmailPreference } from '../ui/EmailPreference';
 import { LineItems } from './LineItems';
 import { RecordBrief } from './RecordBrief';
 import { RecordProperties } from './RecordProperties';
@@ -372,6 +373,7 @@ export function RecordDetail() {
                     touch();
                   }}
                 />
+                {typeof record.properties.email === 'string' && record.properties.email ? <EmailPreference email={record.properties.email} /> : null}
                 <Related groups={related.data ?? []} />
               </div>
             </aside>

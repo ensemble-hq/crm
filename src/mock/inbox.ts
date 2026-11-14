@@ -233,6 +233,14 @@ export function createInboxApi(respond: <T>(compute: () => T) => Promise<T>, log
 
     listEmailTemplates: () => respond(() => emailTemplates),
 
+    // The demo sends no email, so there is nobody to stop emailing.
+    getEmailPreference: (email) => respond(() => ({ email, status: 'subscribed' as const, source: 'none' as const, reason: null, changedAt: null, consent: null, sentThisWeek: 0, weeklyLimit: 3 })),
+    setEmailPreference: () => Promise.reject(new Error('Email preferences need the server. This is the demo, which runs in your browser.')),
+    getEmailSettings: () => respond(() => ({ weeklyLimit: 3, postalAddress: '' })),
+    saveEmailSettings: () => Promise.reject(new Error('Email settings need the server.')),
+    getUnsubscribePage: () => Promise.reject(new Error('This link is not valid.')),
+    unsubscribe: () => Promise.reject(new Error('This link is not valid.')),
+
     // The mock sends nothing, so nothing is ever waiting or failed.
     getEmailHealth: () => respond(() => ({ queued: 0, oldestQueuedSeconds: null, failedOutgoing: 0, waitingIncoming: 0, failedIncoming: 0, lastSweepAt: null })),
 

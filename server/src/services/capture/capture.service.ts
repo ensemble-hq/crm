@@ -8,6 +8,7 @@ import type { CrmRecord, Reference } from '../../../../src/contracts/records';
 import { type BookingPageRow, type FormRow, type MeetingRow, type SubmissionRow, bookingPagesTable, formsTable, meetingsTable, submissionsTable } from '../../schema';
 import type { ActivityRepository } from '../activity/activity.repository';
 import { actorOf, assertAllowed } from '../people/access';
+import type { EmailRules } from '../inbox/email-rules.service';
 import type { PeopleService } from '../people/people.service';
 import type { RecordEvents } from '../records/records.events';
 import type { RecordsRepository } from '../records/records.repository';
@@ -110,6 +111,7 @@ export class CaptureService {
     private readonly activities: ActivityRepository,
     private readonly people: PeopleService,
     private readonly workspace: WorkspaceService,
+    private readonly rules: EmailRules,
   ) {}
 
   private async references(ctx: Context, ids: string[]): Promise<Record<string, Reference>> {
@@ -211,6 +213,8 @@ export class CaptureService {
     return this.events.transaction(ctx, async () => {
       const { record, isNew } = await this.upsertContact(ctx, typed);
       await this.submissions.create(ctx, { id: id('sub'), formId: row.id, contactId: record.id, isNew, values: kept });
+      // Ticking the box is kept as said: the words agreed to, where and when.
+      if (row.settings.consentText && input.values.__consent === 'yes') await this.rules.recordConsent(ctx, String(typed.email), row.settings.consentText, `the "${row.settings.name}" form`);
       await this.activities.create(ctx, { id: id('act'), recordId: record.id, kind: 'note', title: 'Form submitted', body: `Submitted the "${row.settings.name}" form.`, actorId: 'system' });
       return { contactId: record.id, isNew };
     });

@@ -17,6 +17,7 @@ import { Meetings, PublicBooking } from './pages/Meetings';
 import { People } from './pages/People';
 import { RecordDetail } from './pages/RecordDetail';
 import { RecordList } from './pages/RecordList';
+import { Unsubscribe } from './pages/Unsubscribe';
 import { AuditLog } from './pages/AuditLog';
 import { ReportBuilder, Reports } from './pages/Reports';
 import { SequenceDetail, Sequences } from './pages/Sequences';
@@ -34,6 +35,7 @@ createRoot(root).render(
         {/* Public pages: no navigation and no sign-in, for people outside the team. They sit outside the workspace, which only members can load. */}
         <Route path="f/:formId" element={<PublicForm />} />
         <Route path="book/:pageId" element={<PublicBooking />} />
+        <Route path="u/:token" element={<Unsubscribe />} />
         <Route
           element={
             <WorkspaceProvider>

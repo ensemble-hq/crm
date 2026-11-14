@@ -24,6 +24,8 @@ export const formSettingsSchema = z.object({
   submitLabel: z.string().min(1),
   /** Shown after a successful submission. */
   thanks: z.string(),
+  /** When set, the form asks for agreement to be emailed in these words, with a box to tick. What was agreed, and when, is kept. */
+  consentText: z.string().optional(),
 });
 export type FormSettings = z.infer<typeof formSettingsSchema>;
 

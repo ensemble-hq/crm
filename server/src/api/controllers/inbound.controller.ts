@@ -32,6 +32,12 @@ export class InboundController extends BaseController {
   }
 
   init(): void {
+    // What a mail app's own "unsubscribe" button calls (one-click unsubscribe, RFC 8058): a POST to the address in the List-Unsubscribe header.
+    this.post('/unsubscribe/:token', { auth: false, schema: { params: z.object({ token: z.string() }) }, summary: 'One-click unsubscribe from a mail app' }, async (ctx, _body, params) => {
+      await this.call(ctx, 'email.unsubscribe', { token: (params as { token: string }).token });
+      return undefined;
+    });
+
     this.post('/email', { auth: 'inbound', schema: { body: delivery, response: z.object({ status: z.enum(['stored', 'duplicate']) }) }, summary: 'Receive an email from the provider' }, (ctx, body) => {
       const mail = body as z.infer<typeof delivery>;
       return this.call(ctx, RECEIVE_EMAIL, {

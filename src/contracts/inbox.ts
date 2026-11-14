@@ -103,6 +103,45 @@ export const emailHealthSchema = z.object({
 });
 export type EmailHealth = z.infer<typeof emailHealthSchema>;
 
+/**
+ * Whether an address may be emailed. Kept by address, not by contact, so it survives a contact being
+ * merged or deleted and re-imported.
+ *
+ * - `subscribed`: anything may be sent.
+ * - `unsubscribed`: no automated email (sequences, workflows). A person may still reply to them one to one.
+ * - `blocked`: nothing at all. Set when an address bounces or complains, or by hand.
+ */
+export const emailStatusSchema = z.enum(['subscribed', 'unsubscribed', 'blocked']);
+export type EmailStatus = z.infer<typeof emailStatusSchema>;
+
+export const emailPreferenceSchema = z.object({
+  email: z.string(),
+  status: emailStatusSchema,
+  /** Who changed it last: the recipient themselves, a member of the team, or the email service reporting a bounce. */
+  source: z.enum(['recipient', 'member', 'bounce', 'none']),
+  reason: z.string().nullable(),
+  changedAt: z.string().nullable(),
+  /** When this person agreed to be emailed, and what they agreed to, if a form recorded it. */
+  consent: z.object({ text: z.string(), source: z.string(), at: z.string() }).nullable(),
+  /** Automated emails sent to them in the last seven days, against the limit. */
+  sentThisWeek: z.number().int(),
+  weeklyLimit: z.number().int(),
+});
+export type EmailPreference = z.infer<typeof emailPreferenceSchema>;
+
+export const setEmailPreferenceSchema = z.object({ email: z.string(), status: emailStatusSchema, reason: z.string().optional() });
+
+export const emailSettingsSchema = z.object({
+  /** The most automated emails one address is sent in seven days. Replies written by a person do not count. */
+  weeklyLimit: z.number().int().min(1).max(50),
+  /** Your organization's postal address, put at the foot of automated email. Many countries require it. */
+  postalAddress: z.string(),
+});
+export type EmailSettings = z.infer<typeof emailSettingsSchema>;
+
+/** What the unsubscribe page shows the person who followed the link. */
+export const unsubscribePageSchema = z.object({ email: z.string(), status: emailStatusSchema, organization: z.string() });
+
 export interface InboxApi {
   listConversations(query: ConversationQuery): Promise<ConversationList>;
   getConversation(id: string): Promise<ConversationDetail>;
@@ -112,4 +151,13 @@ export interface InboxApi {
   listEmailTemplates(): Promise<EmailTemplate[]>;
   inboxCounts(): Promise<InboxCounts>;
   getEmailHealth(): Promise<EmailHealth>;
+  getEmailPreference(email: string): Promise<EmailPreference>;
+  /** Stops or resumes email to an address. Resuming needs a reason, and only an admin may undo a choice the recipient made. */
+  setEmailPreference(input: z.infer<typeof setEmailPreferenceSchema>): Promise<EmailPreference>;
+  getEmailSettings(): Promise<EmailSettings>;
+  saveEmailSettings(input: EmailSettings): Promise<EmailSettings>;
+  /** What the public unsubscribe page loads, from the link in an email. */
+  getUnsubscribePage(token: string): Promise<z.infer<typeof unsubscribePageSchema>>;
+  /** What the public unsubscribe page calls. `resubscribe` undoes it, for someone who clicked by mistake. */
+  unsubscribe(input: { token: string; resubscribe?: boolean }): Promise<z.infer<typeof unsubscribePageSchema>>;
 }
