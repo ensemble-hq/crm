@@ -5,7 +5,9 @@ import type { ObjectDefinition, PropertyDefinition, PropertyValue as Value } fro
 import type { CrmRecord, Reference } from '../contracts/records';
 import { PropertyInput } from '../ui/PropertyInput';
 import { PropertyValue } from '../ui/PropertyValue';
-import { isEditable, isShown } from '../lib/rules';
+import { useWorkspace } from '../app/workspace';
+import { describeFilter } from '../ui/filters';
+import { isEditable, isShown, scoreParts } from '../lib/rules';
 import { ICON, rowDivider, small } from '../ui/styles';
 
 /** Types that save the moment a choice is made, with no separate confirm. */
@@ -30,11 +32,13 @@ function groupProperties(object: ObjectDefinition, values: CrmRecord['properties
  * searching for the new one. Automatic fields are read-only.
  */
 function PropertyRow({
+  object,
   property,
   record,
   references,
   onSaved,
 }: {
+  object: ObjectDefinition;
   property: PropertyDefinition;
   record: CrmRecord;
   references: Record<string, Reference>;
@@ -187,10 +191,38 @@ function PropertyRow({
         </dt>
         <dd style={{ margin: 0, textAlign: 'end', minInlineSize: 0, overflowWrap: 'anywhere', opacity: saving ? 0.6 : 1 }}>{control}</dd>
       </div>
+      {property.scoring ? <ScoreReasons property={property} object={object} record={record} /> : null}
       {error ? (
         <p className="m-field-error" role="alert" style={{ margin: 0, textAlign: 'end' }}>
           {error}
         </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Under a score: which of its rules this record meets, so the number can be believed and argued with. */
+function ScoreReasons({ property, object, record }: { property: PropertyDefinition; object: ObjectDefinition; record: CrmRecord }) {
+  const { users } = useWorkspace();
+  const [open, setOpen] = useState(false);
+  const parts = scoreParts(property, record.properties);
+  const met = parts.filter((part) => part.met);
+  if (parts.length === 0) return null;
+  return (
+    <div className="m-stack" data-gap="1" style={{ alignItems: 'flex-end' }}>
+      <button type="button" className="m-button" data-variant="ghost" data-size="sm" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? 'Hide why' : `Why: ${met.length} of ${parts.length} rules`}
+      </button>
+      {open ? (
+        <ul className="m-stack" data-gap="1" style={{ ...small, listStyle: 'none', margin: 0, padding: 0, inlineSize: '100%' }}>
+          {parts.map((part, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: rules have no id and do not reorder here
+            <li key={index} className="m-cluster" data-justify="between" style={{ flexWrap: 'nowrap', gap: 'var(--m-space-2)', opacity: part.met ? 1 : 0.55 }}>
+              <span style={{ textDecoration: part.met ? undefined : 'line-through' }}>{describeFilter(part.when, object, users)}</span>
+              <span style={{ flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{part.met ? (part.points > 0 ? `+${part.points}` : part.points) : 'no'}</span>
+            </li>
+          ))}
+        </ul>
       ) : null}
     </div>
   );
@@ -205,7 +237,7 @@ export function RecordProperties({ object, record, references, onSaved }: { obje
           <h3 style={small}>{section.group}</h3>
           <dl className="m-stack" data-gap="2" style={{ margin: 0 }}>
             {section.properties.map((property) => (
-              <PropertyRow key={property.id} property={property} record={record} references={references} onSaved={onSaved} />
+              <PropertyRow key={property.id} object={object} property={property} record={record} references={references} onSaved={onSaved} />
             ))}
           </dl>
         </section>

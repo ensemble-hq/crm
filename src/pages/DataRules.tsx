@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, useQuery } from '../api';
 import { useWorkspace } from '../app/workspace';
-import type { Filter, ObjectDefinition } from '../contracts/metadata';
+import type { Filter, ObjectDefinition, ScoreRule } from '../contracts/metadata';
+import { isEditable } from '../lib/rules';
 import { Modal } from '../ui/Modal';
 import { describeFilter } from '../ui/filters';
 import { ICON, cardTitle, medium, plainList, rowDivider, small } from '../ui/styles';
@@ -44,6 +45,56 @@ export function ConditionPicker({ label, hint, object, value, onChange }: { labe
   );
 }
 
+/** The rules of a score: points for each condition a record meets. */
+export function ScoreRulesEditor({ object, exceptId, value, onChange }: { object: ObjectDefinition; exceptId?: string; value: ScoreRule[]; onChange: (value: ScoreRule[]) => void }) {
+  const { users } = useWorkspace();
+  const [choosing, setChoosing] = useState<number | 'new'>();
+  // A score cannot count on itself.
+  const readable = { ...object, properties: object.properties.filter((property) => property.id !== exceptId) };
+  const most = value.reduce((sum, rule) => sum + Math.max(rule.points, 0), 0);
+  return (
+    <div className="m-stack" data-gap="2">
+      {value.map((rule, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: rules have no id and are only ever edited in place
+        <div key={index} className="m-cluster" data-gap="2" style={{ flexWrap: 'nowrap' }}>
+          <input
+            className="m-input"
+            type="number"
+            aria-label={`Points for rule ${index + 1}`}
+            value={rule.points}
+            onChange={(event) => onChange(value.map((item, at) => (at === index ? { ...item, points: Math.round(Number(event.target.value) || 0) } : item)))}
+            style={{ inlineSize: 80, flexShrink: 0 }}
+          />
+          <span style={{ ...small, flexShrink: 0 }}>when</span>
+          <button type="button" className="m-badge" onClick={() => setChoosing(index)} title="Change the condition" style={{ cursor: 'pointer', minInlineSize: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {describeFilter(rule.when, object, users)}
+          </button>
+          <button type="button" className="m-button" data-variant="ghost" data-size="sm" onClick={() => onChange(value.filter((_, at) => at !== index))} style={{ marginInlineStart: 'auto', flexShrink: 0 }}>
+            Remove
+          </button>
+        </div>
+      ))}
+      <div className="m-cluster" data-gap="2">
+        <button type="button" className="m-button" data-size="sm" onClick={() => setChoosing('new')}>
+          Add a rule
+        </button>
+        {value.length > 0 ? <span style={small}>The most a {object.singular.toLowerCase()} can score is {most}.</span> : null}
+      </div>
+      {choosing !== undefined ? (
+        <FilterDialog
+          object={readable}
+          initial={choosing === 'new' ? undefined : value[choosing]?.when}
+          onClose={() => setChoosing(undefined)}
+          onSave={(filter) => {
+            onChange(choosing === 'new' ? [...value, { points: 10, when: filter }] : value.map((item, at) => (at === choosing ? { ...item, when: filter } : item)));
+            setChoosing(undefined);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 /** For an object with stages: what each stage needs filled in, and whether stages can be skipped. */
 export function StageRulesCard({ object, onSaved }: { object: ObjectDefinition; onSaved: () => Promise<void> }) {
   const board = object.board;
@@ -54,7 +105,7 @@ export function StageRulesCard({ object, onSaved }: { object: ObjectDefinition; 
   const [error, setError] = useState<string>();
   const [saved, setSaved] = useState(false);
   if (!board || !import.meta.env.VITE_API_URL) return null;
-  const fields = object.properties.filter((property) => !property.system && !property.formula && property.id !== board.groupBy && property.id !== object.primaryProperty);
+  const fields = object.properties.filter((property) => isEditable(property) && property.id !== board.groupBy && property.id !== object.primaryProperty);
 
   async function save() {
     setBusy(true);

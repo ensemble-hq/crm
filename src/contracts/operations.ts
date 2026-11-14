@@ -582,7 +582,7 @@ export const operations: Operation[] = [
     name: 'properties.create',
     method: 'createProperty',
     title: 'Add a field to an object',
-    description: 'Adds a property to an object: text, number, currency, date, a choice (with options), several choices, yes/no, a person, or a link to another kind of record (with referenceObjectId). Returns the object as it now stands, including the new property\'s id.',
+    description: 'Adds a property to an object: text, number, currency, date, a choice (with options), several choices, yes/no, a person, or a link to another kind of record (with referenceObjectId). A number can be a score: give `scoring`, a list of rules each with `points` (negative allowed) and a `when` condition; a record\'s score is the sum of the points of the rules it meets, kept up to date as records change, and can be filtered, sorted and reported on like any number. Returns the object as it now stands, including the new property\'s id.',
     input: createPropertySchema,
     output: objectDefinitionSchema,
     effect: 'write',

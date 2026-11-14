@@ -39,14 +39,27 @@ export function isShown(property: PropertyDefinition, values: Record<string, Pro
   return !property.showWhen || meets(values, property.showWhen);
 }
 
-/** Whether a person may type into a field: not one the system sets, and not one worked out by a formula. */
-export const isEditable = (property: PropertyDefinition) => !property.system && !property.formula;
+/** Whether a field is worked out from the record's other fields: by a formula, or as a score. */
+export const isComputed = (property: PropertyDefinition) => Boolean(property.formula) || property.scoring !== undefined;
+
+/** Whether a person may type into a field: not one the system sets, and not one that is worked out. */
+export const isEditable = (property: PropertyDefinition) => !property.system && !isComputed(property);
+
+/** A score's rules, each with whether this record meets it. The score is the sum of the points of those it meets. */
+export function scoreParts(property: PropertyDefinition, values: Record<string, PropertyValue>): Array<{ points: number; when: Filter; met: boolean }> {
+  return (property.scoring ?? []).map((rule) => ({ points: rule.points, when: rule.when, met: meets(values, rule.when) }));
+}
 
 /** Works out every computed field of a record from its other values. A formula that no longer makes sense leaves its field empty. */
 export function compute(object: ObjectDefinition, values: Record<string, PropertyValue>): Record<string, PropertyValue> {
   const result: Record<string, PropertyValue> = {};
   const ids = object.properties.map((property) => property.id);
   for (const property of object.properties) {
+    if (property.scoring) {
+      // A score sees the computed fields above it, so it can count on a formula's answer.
+      result[property.id] = scoreParts(property, { ...values, ...result }).reduce((sum, part) => sum + (part.met ? part.points : 0), 0);
+      continue;
+    }
     if (!property.formula) continue;
     try {
       result[property.id] = evaluateFormula(parseFormula(property.formula, ids), { ...values, ...result });

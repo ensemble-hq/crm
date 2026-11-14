@@ -14,6 +14,7 @@ import type {
   SummaryQuery,
   SummaryRow,
 } from '../contracts/records';
+import { compute } from '../lib/rules';
 import { MOCK_NOW, MOCK_TODAY, objects, users } from './definitions';
 import { dataset } from './generate';
 import { createCaptureApi } from './capture';
@@ -641,6 +642,7 @@ export const mockApi: CrmApi = {
     respond(() => {
       validate(definition(input.objectId), input.properties, undefined, true);
       const item = insert(input.objectId, input.properties);
+      Object.assign(item.properties, compute(definition(item.objectId), item.properties));
       fire({ kind: 'created', record: item }, workflowDeps);
       return item;
     }),
@@ -652,6 +654,7 @@ export const mockApi: CrmApi = {
       validate(definition(item.objectId), input.properties, item.id, false);
       const changed = Object.fromEntries(Object.entries(input.properties).filter(([key, value]) => JSON.stringify(item.properties[key] ?? null) !== JSON.stringify(value)));
       Object.assign(item.properties, input.properties);
+      Object.assign(item.properties, compute(definition(item.objectId), item.properties));
       item.updatedAt = new Date().toISOString();
       if (Object.keys(changed).length > 0) fire({ kind: 'changed', record: item, changed }, workflowDeps);
       return item;

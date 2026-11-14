@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ObjectDefinition } from '../contracts/metadata';
-import { compute, isShown, meets, problemWith } from './rules';
+import { compute, isEditable, isShown, meets, problemWith, scoreParts } from './rules';
 
 const deals: ObjectDefinition = {
   id: 'deals',
@@ -75,5 +75,46 @@ describe('what is wrong with a record', () => {
     expect(problemWith(deals, { stage: 'qualified' }, { stage: 'discovery' })).toBeUndefined();
     expect(problemWith(deals, { stage: 'proposal', contact: 'c' }, { stage: 'qualified', contact: 'c' })).toBeUndefined();
     expect(problemWith(deals, { stage: 'qualified' }, { stage: 'won' })).toBeUndefined();
+  });
+});
+
+describe('scores', () => {
+  const leads: ObjectDefinition = {
+    id: 'leads',
+    singular: 'Lead',
+    plural: 'Leads',
+    icon: 'star',
+    primaryProperty: 'name',
+    properties: [
+      { id: 'name', label: 'Name', type: 'text', group: 'About' },
+      { id: 'source', label: 'Source', type: 'select', group: 'About', options: [{ id: 'referral', label: 'Referral' }, { id: 'import', label: 'Import' }] },
+      { id: 'value', label: 'Value', type: 'currency', group: 'About' },
+      { id: 'weighted', label: 'Weighted', type: 'number', group: 'About', formula: 'value / 2' },
+      {
+        id: 'score',
+        label: 'Score',
+        type: 'number',
+        group: 'About',
+        scoring: [
+          { points: 30, when: { property: 'source', operator: 'eq', value: 'referral' } },
+          { points: 20, when: { property: 'weighted', operator: 'gt', value: 5_000 } },
+          { points: -15, when: { property: 'source', operator: 'eq', value: 'import' } },
+        ],
+      },
+    ],
+    views: [],
+  };
+  const score = leads.properties[4];
+
+  it('add up the points of the rules a record meets, counting on computed fields above', () => {
+    expect(compute(leads, { source: 'referral', value: 20_000 })).toMatchObject({ weighted: 10_000, score: 50 });
+    expect(compute(leads, { source: 'import', value: 1_000 }).score).toBe(-15);
+    expect(compute(leads, {}).score).toBe(0);
+  });
+
+  it('are not typed into, and say which rules counted', () => {
+    if (!score) throw new Error('no score');
+    expect(isEditable(score)).toBe(false);
+    expect(scoreParts(score, { source: 'referral', weighted: 100 }).map((part) => part.met)).toEqual([true, false, false]);
   });
 });

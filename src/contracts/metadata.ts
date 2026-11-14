@@ -56,6 +56,8 @@ export const propertyDefinitionSchema = z.object({
   required: z.boolean().optional(),
   /** Worked out from the record's other fields, not typed. See `lib/formula.ts` for what a formula may say. */
   formula: z.string().optional(),
+  /** For a number: a score. It is the sum of the points of every rule the record meets, worked out again whenever the record changes. */
+  scoring: z.array(z.lazy(() => scoreRuleSchema)).optional(),
   /** Only shown when the record meets this condition. */
   showWhen: z.lazy(() => filterSchema).optional(),
   /** Cannot be left empty when the record meets this condition. */
@@ -78,6 +80,10 @@ export const filterSchema = z.object({
   value: propertyValueSchema.optional(),
 });
 export type Filter = z.infer<typeof filterSchema>;
+
+/** One rule of a score: this many points (they can be negative) for a record that meets the condition. */
+export const scoreRuleSchema = z.object({ points: z.number().int().min(-1000).max(1000), when: filterSchema });
+export type ScoreRule = z.infer<typeof scoreRuleSchema>;
 
 export const sortSchema = z.object({
   property: z.string(),
@@ -157,6 +163,7 @@ export const createPropertySchema = z.object({
   /** Also show it as a column in every saved view of the object. */
   addToViews: z.boolean().optional(),
   formula: z.string().optional(),
+  scoring: z.array(z.lazy(() => scoreRuleSchema)).max(50).optional(),
   showWhen: z.lazy(() => filterSchema).optional(),
   requiredWhen: z.lazy(() => filterSchema).optional(),
 });
@@ -174,6 +181,7 @@ export const updatePropertySchema = z.object({
   unique: z.boolean().optional(),
   /** Null removes it. */
   formula: z.string().nullable().optional(),
+  scoring: z.array(z.lazy(() => scoreRuleSchema)).max(50).nullable().optional(),
   showWhen: z.lazy(() => filterSchema).nullable().optional(),
   requiredWhen: z.lazy(() => filterSchema).nullable().optional(),
 });

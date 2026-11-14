@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, ChevronRight, Pencil, Plus, ScrollText, Settings as SettingsIcon, Trash2, Users } from 'lucide-react';
 import { AssistantSettingsCard } from './AssistantSettings';
-import { ConditionPicker, StageRulesCard } from './DataRules';
+import { ConditionPicker, ScoreRulesEditor, StageRulesCard } from './DataRules';
 import { parseFormula } from '../lib/formula';
 import { EmailSettingsCard } from './EmailSettings';
 import { type CSSProperties, useState } from 'react';
@@ -8,7 +8,7 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { Page } from '../app/Page';
 import { useWorkspace } from '../app/workspace';
-import type { Filter, ObjectDefinition, Option, PropertyDefinition, PropertyType, Tone } from '../contracts/metadata';
+import type { Filter, ObjectDefinition, Option, PropertyDefinition, PropertyType, ScoreRule, Tone } from '../contracts/metadata';
 import { Modal } from '../ui/Modal';
 import { OptionBadge } from '../ui/PropertyValue';
 import { objectIcon, objectIcons } from '../ui/icons';
@@ -133,7 +133,7 @@ function OptionsEditor({ options, onChange }: { options: Option[]; onChange: (op
   );
 }
 
-type PropertyDraft = { label: string; type: PropertyType; group: string; options: Option[]; referenceObjectId: string; onCreate: boolean; required: boolean; unique: boolean; addToViews: boolean; formula: string; showWhen?: Filter; requiredWhen?: Filter };
+type PropertyDraft = { label: string; type: PropertyType; group: string; options: Option[]; referenceObjectId: string; onCreate: boolean; required: boolean; unique: boolean; addToViews: boolean; formula: string; scoring?: ScoreRule[]; showWhen?: Filter; requiredWhen?: Filter };
 
 /** Create a property, or edit one. A property's type is fixed once it exists, because data already uses it. */
 function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectDefinition; editing: PropertyDefinition | 'new'; onClose: () => void; onSaved: () => void }) {
@@ -151,6 +151,7 @@ function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectD
     unique: existing?.unique ?? false,
     addToViews: false,
     formula: existing?.formula ?? '',
+    scoring: existing?.scoring,
     showWhen: existing?.showWhen,
     requiredWhen: existing?.requiredWhen,
   });
@@ -160,6 +161,8 @@ function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectD
   // Computed fields and conditions are worked out and enforced by the server.
   const live = Boolean(import.meta.env.VITE_API_URL);
   const computable = ['text', 'number', 'currency', 'date', 'boolean'].includes(draft.type);
+  // A number is typed, worked out by a formula, or a score: one of the three.
+  const scored = draft.type === 'number' && draft.scoring !== undefined && !draft.formula.trim();
   let formulaProblem: string | undefined;
   if (draft.formula.trim()) {
     try {
@@ -178,7 +181,7 @@ function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectD
     setError(undefined);
     try {
       if (existing) {
-        await api.updateProperty({ objectId: object.id, propertyId: existing.id, label: draft.label, group: draft.group, onCreate: draft.onCreate, required: draft.required, unique: draft.unique, ...(live ? { formula: draft.formula.trim() || null, showWhen: draft.showWhen ?? null, requiredWhen: draft.requiredWhen ?? null } : {}), options: hasOptions(existing.type) ? draft.options : undefined });
+        await api.updateProperty({ objectId: object.id, propertyId: existing.id, label: draft.label, group: draft.group, onCreate: draft.onCreate, required: draft.required, unique: draft.unique, ...(live ? { formula: draft.formula.trim() || null, scoring: scored ? (draft.scoring ?? null) : null, showWhen: draft.showWhen ?? null, requiredWhen: draft.requiredWhen ?? null } : {}), options: hasOptions(existing.type) ? draft.options : undefined });
       } else {
         await api.createProperty({
           objectId: object.id,
@@ -191,7 +194,7 @@ function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectD
           required: draft.required,
           unique: draft.unique,
           addToViews: draft.addToViews,
-          ...(live ? { formula: draft.formula.trim() || undefined, showWhen: draft.showWhen, requiredWhen: draft.requiredWhen } : {}),
+          ...(live ? { formula: draft.formula.trim() || undefined, scoring: scored ? draft.scoring : undefined, showWhen: draft.showWhen, requiredWhen: draft.requiredWhen } : {}),
         });
       }
       onSaved();
@@ -283,10 +286,25 @@ function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectD
           )}
         </div>
       ) : null}
+      {live && draft.type === 'number' && !draft.formula.trim() ? (
+        <div className="m-field">
+          <label className="m-field" data-layout="inline">
+            <input className="m-checkbox" type="checkbox" checked={draft.scoring !== undefined} onChange={(event) => set({ scoring: event.target.checked ? [] : undefined })} /> Use it as a score
+          </label>
+          {draft.scoring !== undefined ? (
+            <>
+              <ScoreRulesEditor object={object} exceptId={existing?.id} value={draft.scoring} onChange={(scoring) => set({ scoring })} />
+              <p className="m-field-hint">
+                A {object.singular.toLowerCase()} gets the points of every rule it meets, added up. Points can be negative. The score is worked out again whenever the {object.singular.toLowerCase()} changes, and the record shows which rules counted.
+              </p>
+            </>
+          ) : null}
+        </div>
+      ) : null}
       {live ? (
         <>
           <ConditionPicker label="Show it" hint="Leave as Always, or show this field only for records that meet a condition." object={object} value={draft.showWhen} onChange={(showWhen) => set({ showWhen })} />
-          {draft.formula.trim() ? null : <ConditionPicker label="Require it" hint="On top of Required above: make it required only for records that meet a condition." object={object} value={draft.requiredWhen} onChange={(requiredWhen) => set({ requiredWhen })} />}
+          {draft.formula.trim() || scored ? null : <ConditionPicker label="Require it" hint="On top of Required above: make it required only for records that meet a condition." object={object} value={draft.requiredWhen} onChange={(requiredWhen) => set({ requiredWhen })} />}
         </>
       ) : null}
       {existing ? null : (

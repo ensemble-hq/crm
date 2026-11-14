@@ -1,8 +1,8 @@
 import { sql } from 'drizzle-orm';
 import { ConflictError, type Context, NotFoundError, ValidationError } from '@mariachi/core';
-import type { CreateObject, CreateProperty, Filter, ObjectDefinition, SaveView, StageRules, UpdateProperty, ViewDefinition } from '../../../../src/contracts/metadata';
+import type { CreateObject, CreateProperty, Filter, ObjectDefinition, SaveView, ScoreRule, StageRules, UpdateProperty, ViewDefinition } from '../../../../src/contracts/metadata';
 import { FormulaError, formulaFields, parseFormula } from '../../../../src/lib/formula';
-import { compute } from '../../../../src/lib/rules';
+import { compute, isComputed } from '../../../../src/lib/rules';
 import { actorOf, assertAllowed } from '../people/access';
 import type { RecordsRepository } from '../records/records.repository';
 import type { ObjectsRepository } from './workspace.repository';
@@ -37,6 +37,17 @@ function checkCondition(object: ObjectDefinition, condition: Filter | null | und
   if (!condition) return;
   if (condition.property === propertyId) throw new ValidationError('A field cannot depend on itself.');
   if (!object.properties.some((property) => property.id === condition.property)) throw new ValidationError(`${object.plural} have no property "${condition.property}".`);
+}
+
+/** Checks a score's rules: only a number can be a score, it is not also a formula, and each rule reads a field that exists and is not the score itself. */
+function checkScoring(object: ObjectDefinition, property: { id: string; type: string; formula?: string }, scoring: ScoreRule[] | null | undefined): void {
+  if (!scoring) return;
+  if (property.type !== 'number') throw new ValidationError('Only a number can be a score.');
+  if (property.formula) throw new ValidationError('A field is worked out by a formula or as a score, not both.');
+  for (const rule of scoring) {
+    if (rule.points === 0) throw new ValidationError('Each rule of a score needs some points, more or fewer than none.');
+    checkCondition(object, rule.when, property.id);
+  }
 }
 
 export class SettingsService {
@@ -101,6 +112,7 @@ export class SettingsService {
       checkCondition(definition, input.showWhen, id);
       checkCondition(definition, input.requiredWhen, id);
       if (input.formula) checkFormula(definition, id, input.formula);
+      checkScoring(definition, { id, type: input.type, formula: input.formula?.trim() || undefined }, input.scoring);
       definition.properties.push({
         id,
         label: input.label.trim(),
@@ -112,13 +124,14 @@ export class SettingsService {
         required: input.required,
         unique: input.unique,
         formula: input.formula?.trim() || undefined,
+        scoring: input.scoring,
         showWhen: input.showWhen,
         requiredWhen: input.requiredWhen,
         custom: true,
       });
       if (input.addToViews) for (const view of definition.views) view.columns.push(id);
     });
-    if (input.formula) await this.recompute(ctx, object.id);
+    if (input.formula || input.scoring) await this.recompute(ctx, object.id);
     return object;
   }
 
@@ -137,6 +150,10 @@ export class SettingsService {
         if (input.formula) checkFormula(definition, found.id, input.formula);
         found.formula = input.formula?.trim() || undefined;
       }
+      if (input.scoring !== undefined) {
+        checkScoring(definition, found, input.scoring);
+        found.scoring = input.scoring ?? undefined;
+      }
       if (input.showWhen !== undefined) {
         checkCondition(definition, input.showWhen, found.id);
         found.showWhen = input.showWhen ?? undefined;
@@ -146,7 +163,7 @@ export class SettingsService {
         found.requiredWhen = input.requiredWhen ?? undefined;
       }
     });
-    if (input.formula) await this.recompute(ctx, object.id);
+    if (input.formula || input.scoring) await this.recompute(ctx, object.id);
     return object;
   }
 
@@ -162,9 +179,12 @@ export class SettingsService {
         view.filters = view.filters.filter((filter) => filter.property !== input.propertyId);
         if (view.sort?.property === input.propertyId) view.sort = undefined;
       }
+      // A score stops counting rules that read the field that is gone.
+      for (const property of definition.properties) if (property.scoring) property.scoring = property.scoring.filter((rule) => rule.when.property !== input.propertyId);
       // The values go with the property, in the same transaction.
       await this.records.dropProperty(ctx, definition.id, input.propertyId);
     });
+    if (object.properties.some((property) => property.scoring)) await this.recompute(ctx, object.id);
     return object;
   }
 
@@ -193,7 +213,7 @@ export class SettingsService {
    */
   async recompute(ctx: Context, objectId: string): Promise<number> {
     const row = await this.objects.findById(ctx, objectId);
-    if (!row?.definition.properties.some((property) => property.formula)) return 0;
+    if (!row?.definition.properties.some(isComputed)) return 0;
     let written = 0;
     for (let offset = 0; ; offset += 2_000) {
       const page = await this.records.select(ctx, [sql`records.object_id = ${objectId}`], sql`records.id`, 2_000, offset);

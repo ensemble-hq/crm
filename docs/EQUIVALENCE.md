@@ -91,7 +91,7 @@ HubSpot's Sales Hub (Professional $100 per seat per month, Enterprise $150). Mos
 | Guide reps through a call | Playbooks (Professional: 5) | Checklists on a record, plus the meeting prep brief | Later | Partly: text yes |
 | Share collateral and see who read it | Documents (Starter) | Tracked documents | Later | Yes: files; not view history |
 | Send a video | 1-to-1 video (Professional) | A third-party recorder; the link is logged | Not planned | n/a |
-| Score deals and accounts | Predictive deal score (Starter), lead scoring (Professional: 5 scores) | AI fields: a score with its reasons, on any object, as many as you like | First release | No: scores are recomputed |
+| Score deals and accounts | Predictive deal score (Starter), lead scoring (Professional: 5 scores) | Scores from rules you set, with the reasons shown, on any object, as many as you like (built); AI fields for scores a model judges (not yet) | First release | No: scores are recomputed |
 | See where a deal stands | Deal summaries, deal progression (Professional, Beta) | The record summary and suggested field updates, on every record | First release | n/a |
 | Forecast the quarter | Forecasting (Professional; by team hierarchy Enterprise) | Forecast with categories and rep submissions; the assistant adds its own forecast with reasons | First release | Partly: categories on open deals |
 | Set and track targets | Goals (Starter revenue only; custom Enterprise) | Goals on any number you can report on | First release | Partly |
@@ -125,7 +125,7 @@ HubSpot's Marketing Hub. The price cliff is the story here: Starter is $20 per s
 | Send receipts and notices | Transactional email add-on ($600 a month) | Transactional sends through the API, on the instance's own sending domain | Later | n/a |
 | Group an audience | Segments (Free: 10 active) | Segments; see Core CRM | First release | Yes |
 | Track where each person is in the funnel | Lifecycle stages (Free) | Lifecycle stages, customizable | Mock | Yes |
-| Score leads | Lead scoring (Professional: 5 scores; AI-assisted Enterprise) | AI fields; see Sales | First release | No |
+| Score leads | Lead scoring (Professional: 5 scores; AI-assisted Enterprise) | Scores from rules, with reasons (built); AI fields; see Sales | First release | No |
 | See what a contact did on your site | Tracking code, website activity (Free: 30 days) | Tracking script and page-view history on the timeline | Later | Partly: page-view history where exportable |
 | Know where visits and leads come from | Traffic analytics (Free), tracking URLs (Professional), attribution (Professional and Enterprise) | Source on every contact from UTM parameters in the first release; traffic and attribution reports later | First release (source); Later (reports) | Yes: original source per contact |
 | Run a campaign across channels | Campaigns, Marketing studio (Professional) | A Campaign object that groups emails, forms and pages, with results | Later | Yes: campaign names and membership |

@@ -400,6 +400,21 @@ const leads: ObjectDefinition = {
     { id: 'source', label: 'Source', type: 'select', options: sources, group: 'Qualification', onCreate: true },
     { id: 'owner', label: 'Owner', type: 'user', group: 'Qualification', onCreate: true },
     { id: 'estimatedValue', label: 'Estimated value', type: 'currency', group: 'Qualification' },
+    {
+      id: 'fitScore',
+      label: 'Fit score',
+      type: 'number',
+      group: 'Qualification',
+      // An example to start from: a team changes the rules to its own idea of a good lead.
+      scoring: [
+        { points: 30, when: { property: 'source', operator: 'in', value: ['referral', 'partner'] } },
+        { points: 25, when: { property: 'estimatedValue', operator: 'gt', value: 25_000 } },
+        { points: 20, when: { property: 'jobTitle', operator: 'contains', value: 'Chief' } },
+        { points: 15, when: { property: 'jobTitle', operator: 'contains', value: 'Head of' } },
+        { points: 10, when: { property: 'phone', operator: 'notEmpty' } },
+        { points: -20, when: { property: 'source', operator: 'eq', value: 'import' } },
+      ],
+    },
     { id: 'contact', label: 'Became contact', type: 'reference', referenceObjectId: 'contacts', group: 'After conversion', system: true },
     { id: 'deal', label: 'Became deal', type: 'reference', referenceObjectId: 'deals', group: 'After conversion', system: true },
     { id: 'createdAt', label: 'Created', type: 'date', group: 'Record', system: true },
@@ -408,14 +423,14 @@ const leads: ObjectDefinition = {
     {
       id: 'mine',
       name: 'My open leads',
-      columns: ['name', 'companyName', 'jobTitle', 'status', 'source', 'createdAt'],
+      columns: ['name', 'companyName', 'jobTitle', 'fitScore', 'status', 'source', 'createdAt'],
       filters: [
         { property: 'owner', operator: 'in', value: ['$me'] },
         { property: 'status', operator: 'in', value: ['new', 'working'] },
       ],
       sort: { property: 'createdAt', direction: 'desc' },
     },
-    { id: 'open', name: 'All open leads', columns: ['name', 'companyName', 'status', 'source', 'owner', 'createdAt'], filters: [{ property: 'status', operator: 'in', value: ['new', 'working'] }], sort: { property: 'createdAt', direction: 'desc' } },
+    { id: 'open', name: 'All open leads', columns: ['name', 'companyName', 'fitScore', 'status', 'source', 'owner', 'createdAt'], filters: [{ property: 'status', operator: 'in', value: ['new', 'working'] }], sort: { property: 'createdAt', direction: 'desc' } },
     { id: 'all', name: 'All leads', columns: ['name', 'companyName', 'status', 'source', 'owner', 'createdAt'], filters: [], sort: { property: 'createdAt', direction: 'desc' } },
   ],
   board: { groupBy: 'status', sumProperty: 'estimatedValue', dateProperty: 'createdAt' },

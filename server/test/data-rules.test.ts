@@ -43,6 +43,39 @@ describe('computed fields', () => {
   });
 });
 
+describe('scores', () => {
+  const rules = [
+    { points: 40, when: { property: 'amount', operator: 'gt', value: 30_000 } },
+    { points: 10, when: { property: 'priority', operator: 'eq', value: 'high' } },
+  ];
+
+  it('score existing records when the rules are set, and again when a record or the rules change', async () => {
+    await crm.call(MAYA, 'properties.create', { objectId: 'deals', label: 'Deal score', type: 'number', group: 'About', scoring: rules });
+    expect((await properties(deal)).dealScore).toBe(40);
+    await crm.call(MAYA, 'records.update', { id: deal, properties: { priority: 'high' } });
+    expect((await properties(deal)).dealScore).toBe(50);
+    await crm.call(MAYA, 'properties.update', { objectId: 'deals', propertyId: 'dealScore', scoring: [{ ...rules[0], points: 5 }] });
+    expect((await properties(deal)).dealScore).toBe(5);
+    const top = await crm.call<ListResult>(MAYA, 'records.list', { objectId: 'deals', filters: [{ property: 'dealScore', operator: 'gt', value: 0 }], sort: { property: 'dealScore', direction: 'desc' }, page: 1, pageSize: 5 });
+    expect(top.records.some((record) => record.id === deal)).toBe(true);
+  });
+
+  it('cannot be typed over, and refuse rules that make no sense', async () => {
+    expect((await crm.call<CrmRecord>(MAYA, 'records.update', { id: deal, properties: { dealScore: 999 } })).properties.dealScore).toBe(5);
+    const create = (more: Record<string, unknown>) => crm.call(MAYA, 'properties.create', { objectId: 'deals', label: `Score ${JSON.stringify(more).length}`, group: 'About', type: 'number', ...more });
+    expect(await refusal(create({ type: 'text', scoring: rules }))).toMatch(/Only a number/);
+    expect(await refusal(create({ scoring: rules, formula: 'amount * 2' }))).toMatch(/not both/);
+    expect(await refusal(create({ scoring: [{ points: 5, when: { property: 'nosuch', operator: 'notEmpty' } }] }))).toMatch(/no property "nosuch"/);
+    expect(await refusal(crm.call(MAYA, 'properties.update', { objectId: 'deals', propertyId: 'dealScore', scoring: [{ points: 5, when: { property: 'dealScore', operator: 'gt', value: 1 } }] }))).toMatch(/depend on itself/);
+  });
+
+  it('stop being scores when the rules are taken away', async () => {
+    const object = await crm.call<ObjectDefinition>(MAYA, 'properties.update', { objectId: 'deals', propertyId: 'dealScore', scoring: null });
+    expect(object.properties.find((property) => property.id === 'dealScore')?.scoring).toBeUndefined();
+    expect((await crm.call<CrmRecord>(MAYA, 'records.update', { id: deal, properties: { dealScore: 7 } })).properties.dealScore).toBe(7);
+  });
+});
+
 describe('fields that depend on another', () => {
   it('requires a field only when its condition is met', async () => {
     const lost = { property: 'stage', operator: 'eq', value: 'lost' };

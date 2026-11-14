@@ -1,5 +1,6 @@
 import type { Option, PropertyValue } from '../contracts/metadata';
 import type { CrmRecord } from '../contracts/records';
+import { compute } from '../lib/rules';
 import {
   MOCK_NOW,
   companySizes,
@@ -8,6 +9,7 @@ import {
   countries,
   industries,
   leadStatuses,
+  objects,
   priorities,
   sources,
   users,
@@ -335,6 +337,9 @@ export function dataset(): Dataset {
   // Generated after everything else, so adding them did not reshuffle the existing mock data.
   const leads = generateLeads(random);
   const products = generateProducts();
+  // Fields that are worked out (scores, formulas) are filled in as the server would fill them.
+  const leadObject = objects.find((object) => object.id === 'leads');
+  if (leadObject) for (const lead of leads) Object.assign(lead.properties, compute(leadObject, lead.properties));
   const byId = new Map<string, CrmRecord>();
   for (const item of [...companies, ...contacts, ...deals, ...tasks, ...leads, ...products]) byId.set(item.id, item);
   cached = {
