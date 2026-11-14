@@ -24,6 +24,18 @@ CREATE TABLE "activities" (
 );
 
 --> statement-breakpoint
+CREATE TABLE "assistant_settings" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"provider" text NOT NULL,
+	"model" text NOT NULL,
+	"base_url" text,
+	"api_key_encrypted" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
 CREATE TABLE "booking_pages" (
 	"id" text PRIMARY KEY NOT NULL,
 	"tenant_id" text NOT NULL,
@@ -325,6 +337,8 @@ CREATE INDEX "mariachi_event_outbox_pending_idx" ON "mariachi_event_outbox" USIN
 CREATE INDEX "mariachi_event_outbox_published_idx" ON "mariachi_event_outbox" USING btree ("published_at") WHERE published_at IS NOT NULL;
 --> statement-breakpoint
 CREATE INDEX "activities_record_idx" ON "activities" USING btree ("tenant_id","record_id","occurred_at");
+--> statement-breakpoint
+CREATE INDEX "assistant_settings_tenant_id_idx" ON "assistant_settings" USING btree ("tenant_id");
 --> statement-breakpoint
 CREATE INDEX "booking_pages_tenant_id_idx" ON "booking_pages" USING btree ("tenant_id");
 --> statement-breakpoint

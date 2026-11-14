@@ -16,7 +16,9 @@
     "worker": "cd server && tsx watch src/worker.ts"
   },
   "dependencies": {
+    "@ai-sdk/openai": "link:../../mariachi/packages/ai/node_modules/@ai-sdk/openai",
     "@fontsource-variable/inter": "^5.1.0",
+    "@mariachi/ai": "link:../../mariachi/packages/ai",
     "@mariachi/api-facade": "link:../../mariachi/packages/api-facade",
     "@mariachi/auth": "link:../../mariachi/packages/auth",
     "@mariachi/communication": "link:../../mariachi/packages/communication",
@@ -25,6 +27,7 @@
     "@mariachi/database": "link:../../mariachi/packages/database",
     "@mariachi/database-postgres": "link:../../mariachi/packages/database-postgres",
     "@mariachi/design": "link:../../mariachi/packages/design",
+    "@mariachi/encryption": "link:../../mariachi/packages/encryption",
     "@mariachi/events": "link:../../mariachi/packages/events",
     "@mariachi/lifecycle": "link:../../mariachi/packages/lifecycle",
     "@mariachi/rate-limit": "link:../../mariachi/packages/rate-limit",

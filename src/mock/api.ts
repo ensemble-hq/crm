@@ -624,6 +624,11 @@ export const mockApi: CrmApi = {
       return { record: item, references: references([item]) };
     }),
 
+  // The mock has no model. The scripted assistant in `assistant/mock-engine.ts` stands in for one.
+  getAssistantSettings: () => respond(() => ({ configured: false, provider: null, model: null, baseUrl: null, hasKey: false, providers: [] })),
+  saveAssistantSettings: () => Promise.reject(new Error('Connecting a model needs the server. This is the demo, which runs in your browser.')),
+  assistantTurn: () => Promise.reject(new Error('No model is connected.')),
+
   listRelated: (id: string) => respond(() => related(id)),
 
   listActivity: (recordId: string) => respond(() => activityFor(recordId)),

@@ -18,6 +18,8 @@ const crmSchema = z.object({
   inboundSecret: z.string().min(16).default('dev-inbound-secret-change-me'),
   /** How often the worker sweeps for anything the first path missed. */
   sweepSeconds: z.number().int().min(1).default(15),
+  /** Encrypts secrets the CRM stores, such as the assistant's model key. At least 32 characters; set a real one in production. */
+  secretsKey: z.string().min(32).default('dev-only-secrets-key-change-me-0123456789'),
   /** Apply pending migrations when the server starts, as a hosted instance does. */
   migrateOnStart: z.boolean().default(true),
 });
@@ -33,6 +35,7 @@ registerConfigSection(CRM_CONFIG, {
     emailProvider: optional(read('EMAIL_PROVIDER')),
     inboundSecret: optional(read('EMAIL_INBOUND_SECRET')),
     sweepSeconds: optional(read('EMAIL_SWEEP_SECONDS')) === undefined ? undefined : Number(read('EMAIL_SWEEP_SECONDS')),
+    secretsKey: optional(read('CRM_SECRETS_KEY')),
     migrateOnStart: optional(read('MIGRATE_ON_START')) === undefined ? undefined : read('MIGRATE_ON_START') === 'true',
   }),
 });

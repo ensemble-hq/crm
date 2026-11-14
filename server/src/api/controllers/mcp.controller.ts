@@ -41,7 +41,7 @@ export class McpController extends BaseController {
     private readonly server: { name: string; version: string },
   ) {
     super(communication);
-    this.tools = operations.map(toTool);
+    this.tools = operations.filter((operation) => !operation.internal).map(toTool);
   }
 
   init(): void {

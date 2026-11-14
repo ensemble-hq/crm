@@ -26,7 +26,7 @@ async function main(): Promise<void> {
 
   const events = lifecycle.manage('events', new DefaultEvents({ bus: createEventBus({ adapter: 'redis-streams', url: config.redis.url, prefix: config.serviceName }), source: config.serviceName }, { logger, tracer, metrics }), { priority: 20 });
   const settings = useConfigSection<CrmSettings>(CRM_CONFIG);
-  const { runner, mail, sequences } = createServices({ db: database.db, transaction: database.transaction, source: config.serviceName, email: createEmailProvider(settings, database.db) });
+  const { runner, mail, sequences } = createServices({ db: database.db, transaction: database.transaction, source: config.serviceName, email: createEmailProvider(settings, database.db), secretsKey: settings.secretsKey });
 
   // Live updates: once the work a change sets off is done, open browsers are told what to read again.
   const live = lifecycle.manage('live', createLive(config.redis.url, config.serviceName, { logger, tracer, metrics }), { priority: 25 });

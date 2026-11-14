@@ -8,9 +8,15 @@ importers:
 
   .:
     dependencies:
+      '@ai-sdk/openai':
+        specifier: link:../../mariachi/packages/ai/node_modules/@ai-sdk/openai
+        version: link:../../mariachi/packages/ai/node_modules/@ai-sdk/openai
       '@fontsource-variable/inter':
         specifier: ^5.1.0
         version: 5.3.0
+      '@mariachi/ai':
+        specifier: link:../../mariachi/packages/ai
+        version: link:../../mariachi/packages/ai
       '@mariachi/api-facade':
         specifier: link:../../mariachi/packages/api-facade
         version: link:../../mariachi/packages/api-facade
@@ -35,6 +41,9 @@ importers:
       '@mariachi/design':
         specifier: link:../../mariachi/packages/design
         version: link:../../mariachi/packages/design
+      '@mariachi/encryption':
+        specifier: link:../../mariachi/packages/encryption
+        version: link:../../mariachi/packages/encryption
       '@mariachi/events':
         specifier: link:../../mariachi/packages/events
         version: link:../../mariachi/packages/events

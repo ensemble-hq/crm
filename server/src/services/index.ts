@@ -4,6 +4,8 @@ import type { DrizzleDb } from '@mariachi/database-postgres';
 import { Outbox } from '@mariachi/events/outbox';
 import { z } from 'zod';
 import { type Operation, operations } from '../../../src/contracts/operations';
+import { createEncryption } from '@mariachi/encryption';
+import { AssistantService, AssistantSettingsRepository } from '../assistant/assistant.service';
 import { TENANT_ID } from '../config';
 import { conversationChanged, settingsChanged } from '../events';
 import { ActivityRepository } from './activity/activity.repository';
@@ -42,6 +44,8 @@ export interface ServiceDeps {
   /** The service's name, stamped on the events it records. */
   source: string;
   email: EmailProvider;
+  /** Encrypts secrets the CRM stores. */
+  secretsKey: string;
 }
 
 /** Every service, built once. The API registers them as operations; the worker uses the runner. */
@@ -80,6 +84,9 @@ export function createServices(deps: ServiceDeps) {
   return { people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences, settings, sales, capture };
 }
 
+/** How long a slow operation, such as a turn of the assistant on a model, may run. */
+const SLOW_MS = 240_000;
+
 // biome-ignore lint/suspicious/noExplicitAny: each handler's input is checked against its operation's schema before it runs
 type Handler = (ctx: Context, input: any) => Promise<unknown>;
 
@@ -89,6 +96,9 @@ type Handler = (ctx: Context, input: any) => Promise<unknown>;
  */
 export function registerServices(communication: CommunicationLayer, deps: ServiceDeps): Operation[] {
   const { people, workspace, records, activity, brief, notifications, workflows, importer, inbox, mail, reports, sequences, settings, sales, capture } = createServices(deps);
+
+  // The assistant reaches the CRM the way everything else does: through the operations, as the person asking.
+  const assistant = new AssistantService(new AssistantSettingsRepository(deps.db), createEncryption({ adapter: 'local', keys: { primary: deps.secretsKey } }), operations, (ctx, operation, input) => communication.call(ctx, operation, input));
 
   const handlers: Record<string, Handler> = {
     'workspace.get': (ctx) => workspace.get(ctx),
@@ -145,6 +155,9 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     'properties.delete': (ctx, input) => settings.deleteProperty(ctx, input),
     'views.save': (ctx, input) => settings.saveView(ctx, input),
     'views.delete': (ctx, input) => settings.deleteView(ctx, input),
+    'assistant.settings': (ctx) => assistant.getSettings(ctx),
+    'assistant.saveSettings': (ctx, input) => assistant.saveSettings(ctx, input),
+    'assistant.turn': (ctx, input) => assistant.turn(ctx, input),
     'forms.list': (ctx) => capture.listForms(ctx),
     'forms.get': (ctx, input) => capture.getForm(ctx, input),
     'forms.save': (ctx, input) => capture.saveForm(ctx, input),
@@ -179,6 +192,7 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     const handler = handlers[operation.name] as Handler;
     communication.register(operation.name, {
       schema: { input: operation.input, output: operation.output },
+      ...(operation.slow ? { timeoutMs: SLOW_MS } : {}),
       // Every operation starts by working out who it runs as; nothing below this line can skip it. The
       // few a visitor's browser calls run as nobody, in this instance's one tenant.
       handler: operation.public ? (ctx, input) => handler({ ...ctx, tenantId: TENANT_ID, userId: null }, input) : async (ctx, input) => handler(actingContext(ctx, await people.actor(ctx)), input),

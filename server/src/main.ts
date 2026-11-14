@@ -28,7 +28,7 @@ async function main(): Promise<void> {
   const communication = createCommunication({}, { logger, tracer, metrics });
   container.register(KEYS.Communication, communication);
   const email = createEmailProvider(settings, database.db);
-  const operations = registerServices(communication, { db: database.db, transaction: database.transaction, source: config.serviceName, email });
+  const operations = registerServices(communication, { db: database.db, transaction: database.transaction, source: config.serviceName, email, secretsKey: settings.secretsKey });
 
   const authenticate = createAuthStrategy(settings, { production: config.env === 'production', jwtSecret: config.auth?.jwtSecret, jwtIssuer: config.auth?.jwtIssuer, jwtAudience: config.auth?.jwtAudience });
 
@@ -39,6 +39,8 @@ async function main(): Promise<void> {
     tracer,
     trustProxy: config.server.trustProxy,
     bodyLimitBytes: config.server.bodyLimitBytes,
+    // A turn of the assistant waits on a model, which can take minutes.
+    requestTimeoutMs: 250_000,
     cors: config.server.corsOrigins.length > 0 ? { origins: config.server.corsOrigins } : false,
   })
     .withAuthStrategy('session', authenticate)
@@ -55,7 +57,7 @@ async function main(): Promise<void> {
   // when to read again. The connection is signed in the same way as any request, and only a member gets one.
   if (config.redis) {
     const live = lifecycle.manage('live', createLive(config.redis.url, config.serviceName, { logger, tracer, metrics }), { priority: 40 });
-    const { people } = createServices({ db: database.db, transaction: database.transaction, source: config.serviceName, email });
+    const { people } = createServices({ db: database.db, transaction: database.transaction, source: config.serviceName, email, secretsKey: settings.secretsKey });
     // The server's own setup runs this when it starts listening, which is after the startup hooks were
     // gathered, so the socket layer is started here and stopped by a hook registered outside.
     let sockets: WSAdapter | undefined;

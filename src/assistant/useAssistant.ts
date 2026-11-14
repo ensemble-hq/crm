@@ -1,6 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
 import { useWorkspace } from '../app/workspace';
+import { api, useQuery } from '../api';
 import { type EngineContext, respond } from './mock-engine';
+import { respondFromServer } from './server-engine';
 import type { Attachment, CanvasItem, CanvasItemInput, ChatMessage, PageContext, PlanStep } from './types';
 
 type PlanRun = { steps: Array<() => Promise<void>>; doneText: string };
@@ -30,6 +32,11 @@ export function useAssistant(environment: { page: () => PageContext; navigate: (
   const [canvas, setCanvas] = useState<CanvasItem[]>([]);
   const [working, setWorking] = useState(false);
   const [activity, setActivity] = useState('');
+  // Whether a model is connected. Without one, the scripted demo assistant answers instead.
+  const model = useQuery(() => api.getAssistantSettings(), [workspace.revision]);
+  const onModel = model.data?.configured === true;
+  /** The conversation as the model needs it: who said what, in order. */
+  const transcript = useRef<Array<{ role: 'user' | 'assistant'; text: string }>>([]);
   const busy = useRef(false);
   const sequence = useRef(0);
   const plans = useRef(new Map<string, PlanRun>());
@@ -181,10 +188,18 @@ export function useAssistant(environment: { page: () => PageContext; navigate: (
             return true;
           },
         };
-        await respond({ text: trimmed, attachments }, context);
+        // A file is still handled by the scripted import flow, which works against the real operations.
+        if (!onModel || attachments.length > 0) {
+          await respond({ text: trimmed, attachments }, context);
+          return;
+        }
+        transcript.current.push({ role: 'user', text: trimmed });
+        const said: string[] = [];
+        await respondFromServer(transcript.current, { ...context, say: async (paragraph) => void (said.push(paragraph), await context.say(paragraph)) });
+        transcript.current.push({ role: 'assistant', text: said.join('\n\n') || '(showed something beside the conversation)' });
       });
     },
-    [executePlan, nextId, patchMessage, turn, workspace, write],
+    [executePlan, nextId, onModel, patchMessage, turn, workspace, write],
   );
 
   const runPlan = useCallback(
@@ -201,6 +216,7 @@ export function useAssistant(environment: { page: () => PageContext; navigate: (
     plans.current.clear();
     written.current.clear();
     pendingPlan.current = undefined;
+    transcript.current = [];
     setMessages([]);
     setCanvas([]);
   }, []);

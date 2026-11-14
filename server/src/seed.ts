@@ -82,7 +82,7 @@ async function main(): Promise<void> {
   const db = database.db;
   try {
     await runMigrations(database.adapter, { migrationsFolder: 'drizzle' });
-    if (process.argv.includes('--reset')) await db.execute(sql`truncate activities, records, objects, people, teams, roles, workflows, workflow_runs, notifications, mariachi_event_outbox, conversations, messages, inbound_emails, email_templates, mail_cursors, dev_mail, reports, dashboards, goals, sequences, enrollments, line_items, forms, submissions, booking_pages, meetings`);
+    if (process.argv.includes('--reset')) await db.execute(sql`truncate activities, records, objects, people, teams, roles, workflows, workflow_runs, notifications, mariachi_event_outbox, conversations, messages, inbound_emails, email_templates, mail_cursors, dev_mail, reports, dashboards, goals, sequences, enrollments, line_items, forms, submissions, booking_pages, meetings, assistant_settings`);
     const [existing] = (await db.execute(sql`select count(*)::int as total from objects`)) as unknown as Array<{ total: number }>;
     if ((existing?.total ?? 0) > 0) {
       console.log('The database already has data. Run with --reset to replace it.');

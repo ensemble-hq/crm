@@ -1,4 +1,5 @@
 import { ArrowDown, ArrowUp, ChevronRight, Pencil, Plus, Settings as SettingsIcon, Trash2, Users } from 'lucide-react';
+import { AssistantSettingsCard } from './AssistantSettings';
 import { type CSSProperties, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
@@ -481,6 +482,7 @@ export function Settings() {
             </span>
           </Link>
         </section>
+        <AssistantSettingsCard />
         <div className="m-stack" data-gap="1">
           <h1 style={{ ...figure, fontVariantNumeric: 'normal' }}>Objects and properties</h1>
           <p style={{ color: 'var(--m-color-fg-muted)' }}>What this CRM keeps records of, and the information on each. You can also ask the assistant: “add a renewal date to deals”.</p>

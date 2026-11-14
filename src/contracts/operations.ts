@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { assistantReplySchema, assistantSettingsSchema, assistantTurnSchema, saveAssistantSettingsSchema } from './assistant';
 import { briefSchema } from './brief';
 import { bookingPageSchema, bookingPageSettingsSchema, daySlotsSchema, formDetailSchema, formSchema, formSettingsSchema, meetingSchema, publicFormSchema } from './capture';
 import { conversationDetailSchema, conversationListSchema, conversationQuerySchema, conversationSchema, emailHealthSchema, emailTemplateSchema, inboxCountsSchema, messageSchema, updateConversationSchema } from './inbox';
@@ -35,6 +36,10 @@ export type Operation = {
   large?: boolean;
   /** Open to anyone with the link, with no sign-in: what a public form or booking page calls. Such an operation checks everything it is given and returns nothing private. */
   public?: boolean;
+  /** Part of the assistant's own plumbing: not offered to an outside agent over MCP, nor to the assistant as a tool. */
+  internal?: boolean;
+  /** May take minutes, not seconds: the server and the app wait longer for it. */
+  slow?: boolean;
 };
 
 export const workspaceSchema = z.object({
@@ -724,5 +729,36 @@ export const operations: Operation[] = [
     input: none,
     output: z.object({ meetings: z.array(meetingSchema), references: z.record(referenceSchema) }),
     effect: 'read',
+  },
+  {
+    name: 'assistant.settings',
+    method: 'getAssistantSettings',
+    title: 'Get the assistant\'s model settings',
+    description: 'Returns which model the assistant runs on and which providers can be chosen. The key is never returned.',
+    input: none,
+    output: assistantSettingsSchema,
+    effect: 'read',
+    internal: true,
+  },
+  {
+    name: 'assistant.saveSettings',
+    method: 'saveAssistantSettings',
+    title: 'Connect or change the assistant\'s model',
+    description: 'Sets the provider, model and key or endpoint the assistant uses. A null provider disconnects it.',
+    input: saveAssistantSettingsSchema,
+    output: assistantSettingsSchema,
+    effect: 'write',
+    internal: true,
+  },
+  {
+    name: 'assistant.turn',
+    method: 'assistantTurn',
+    title: 'Ask the assistant',
+    description: 'Runs one turn of a conversation with the assistant on the connected model.',
+    input: assistantTurnSchema,
+    output: assistantReplySchema,
+    effect: 'read',
+    internal: true,
+    slow: true,
   },
 ];
