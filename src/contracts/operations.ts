@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { assistantReplySchema, assistantSettingsSchema, assistantTurnSchema, assistantUsageSchema, saveAssistantSettingsSchema } from './assistant';
 import { auditCheckSchema, auditPageSchema, auditQuerySchema } from './audit';
+import { erasureSchema, personalDataSchema } from './privacy';
 import { briefSchema } from './brief';
 import { bookingPageSchema, bookingPageSettingsSchema, daySlotsSchema, formDetailSchema, formSchema, formSettingsSchema, meetingSchema, publicFormSchema } from './capture';
 import { emailPreferenceSchema, emailSettingsSchema, setEmailPreferenceSchema, unsubscribePageSchema } from './inbox';
@@ -854,6 +855,25 @@ export const operations: Operation[] = [
     output: auditCheckSchema,
     effect: 'read',
     internal: true,
+  },
+  {
+    name: 'privacy.export',
+    method: 'exportPersonalData',
+    title: 'Export everything held about a person',
+    description: 'For a privacy request. Gathers everything held about the person behind a contact or lead: the record, whether they may be emailed and what they agreed to, activity logged about them, email conversations with every message, form submissions, meetings, sequences, and the names of records linked to them. Needs permission to export records.',
+    input: z.string().describe('The id of the contact or lead.'),
+    output: personalDataSchema,
+    effect: 'read',
+    large: true,
+  },
+  {
+    name: 'privacy.erase',
+    method: 'erasePerson',
+    title: 'Erase a person and everything held about them',
+    description: 'For a privacy request. Permanently removes a contact or lead and everything about them: activity, email conversations, form submissions, meetings, sequences and consent records. Deals and tasks linked to them are kept but no longer point at them. Their email address alone is kept on the never-email list so they are not contacted again. This cannot be undone, unlike deleting a record: export first if a copy is owed, and confirm with the person asking. `confirm` must be the person\'s email address (or their name if they have none). Only someone who manages settings may do it.',
+    input: z.object({ recordId: z.string(), confirm: z.string() }),
+    output: erasureSchema,
+    effect: 'destructive',
   },
   {
     name: 'email.preference',

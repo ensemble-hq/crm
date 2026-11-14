@@ -1,8 +1,9 @@
-import { ArrowLeftRight, CheckSquare, type LucideIcon, Mail, MoreHorizontal, Phone, StickyNote, Video } from 'lucide-react';
+import { ArrowLeftRight, CheckSquare, type LucideIcon, Mail, Phone, StickyNote, Video } from 'lucide-react';
 import { type CSSProperties, type FormEvent, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { api, useQuery } from '../api';
 import { Page } from '../app/Page';
+import { PrivacyActions } from './PrivacyActions';
 import { useWorkspace } from '../app/workspace';
 import type { ObjectDefinition, PropertyValue as Value } from '../contracts/metadata';
 import type { Activity, ActivityKind, CrmRecord, Reference, RelatedGroup } from '../contracts/records';
@@ -15,7 +16,7 @@ import { LineItems } from './LineItems';
 import { RecordBrief } from './RecordBrief';
 import { RecordProperties } from './RecordProperties';
 import { objectIcon } from '../ui/icons';
-import { ICON, cardTitle, link, medium, plainList, rowDivider, small, toolbarButton } from '../ui/styles';
+import { ICON, cardTitle, link, medium, plainList, rowDivider, small } from '../ui/styles';
 
 const activityIcons: Record<ActivityKind, LucideIcon> = {
   note: StickyNote,
@@ -257,7 +258,7 @@ function taskAbout(taskObject: ObjectDefinition, object: ObjectDefinition, recor
 /** The record page for any object: its properties by group, what it's related to, and its activity. */
 export function RecordDetail() {
   const { objectId, recordId = '' } = useParams();
-  const { object: findObject, objects, currentUser, revision, touch } = useWorkspace();
+  const { object: findObject, objects, currentUser, revision, touch, access } = useWorkspace();
   const object = findObject(objectId);
   const [addingTask, setAddingTask] = useState(false);
   const [converting, setConverting] = useState(false);
@@ -300,9 +301,18 @@ export function RecordDetail() {
               Convert
             </button>
           ) : null}
-          <button type="button" className="m-button" data-size="sm" data-icon-only aria-label="More actions" style={toolbarButton}>
-            <MoreHorizontal size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />
-          </button>
+          {record && object.properties.some((property) => property.id === 'email') ? (
+            <PrivacyActions
+              object={object}
+              record={record}
+              canExport={access.exportRecords}
+              canErase={access.manageSettings}
+              onErased={() => {
+                touch();
+                navigate(`/${object.id}`);
+              }}
+            />
+          ) : null}
         </>
       }
     >

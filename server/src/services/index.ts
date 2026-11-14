@@ -33,6 +33,7 @@ import { ReportsService } from './reports/reports.service';
 import { LineItemsRepository, SalesService } from './sales/sales.service';
 import { EnrollmentsRepository, SequencesRepository } from './sequences/sequences.repository';
 import { SequencesService } from './sequences/sequences.service';
+import { PrivacyService } from './privacy/privacy.service';
 import { WorkflowRunner } from './workflows/workflow.runner';
 import { WorkflowRunsRepository, WorkflowsRepository } from './workflows/workflows.repository';
 import { WorkflowsService } from './workflows/workflows.service';
@@ -93,8 +94,9 @@ export function createServices(deps: ServiceDeps) {
   const reports = new ReportsService(new ReportsRepository(deps.db), new DashboardsRepository(deps.db), new GoalsRepository(deps.db), records, recordsRepository, people, workspace, deps.email, notifications, deps.appOrigin);
   const sales = new SalesService(new LineItemsRepository(deps.db), records, recordsRepository, events, activityRepository, workspace);
   const capture = new CaptureService(new FormsRepository(deps.db), new SubmissionsRepository(deps.db), new BookingPagesRepository(deps.db), new MeetingsRepository(deps.db), recordsRepository, events, activityRepository, people, workspace, rules);
+  const privacy = new PrivacyService(deps.db, recordsRepository, events, workspace);
   const importer = new ImportService(recordsRepository, events, workspace, people);
-  return { people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences, settings, sales, capture, agents, audit, rules };
+  return { people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences, settings, sales, capture, agents, audit, rules, privacy };
 }
 
 /** How long a slow operation, such as a turn of the assistant on a model, may run. */
@@ -108,7 +110,7 @@ type Handler = (ctx: Context, input: any) => Promise<unknown>;
  * is left out of what the server offers.
  */
 export function registerServices(communication: CommunicationLayer, deps: ServiceDeps): Operation[] {
-  const { people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences, settings, sales, capture, agents, audit, rules } = createServices(deps);
+  const { people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences, settings, sales, capture, agents, audit, rules, privacy } = createServices(deps);
 
   // The assistant reaches the CRM the way everything else does: through the operations, as the person asking.
   const assistant = new AssistantService(new AssistantSettingsRepository(deps.db), createEncryption({ adapter: 'local', keys: { primary: deps.secretsKey } }), operations, (ctx, operation, input) => communication.call(ctx, operation, input), new AssistantTurnsRepository(deps.db), deps.push);
@@ -179,6 +181,8 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     'views.delete': (ctx, input) => settings.deleteView(ctx, input),
     'audit.list': (ctx, input) => audit.list(ctx, input),
     'audit.check': (ctx) => audit.check(ctx),
+    'privacy.export': (ctx, input) => privacy.export(ctx, input),
+    'privacy.erase': (ctx, input) => privacy.erase(ctx, input),
     'agents.list': (ctx) => agents.list(ctx),
     'agents.save': (ctx, input) => agents.save(ctx, input),
     'agents.remove': (ctx, input) => agents.remove(ctx, input),

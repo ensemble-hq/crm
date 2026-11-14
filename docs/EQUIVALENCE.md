@@ -219,7 +219,7 @@ HubSpot spreads this across Data Hub (formerly Operations Hub; Professional $800
 | Sign in securely | Google and Microsoft sign-in, two-factor, passkeys (Free), SSO (Professional), SCIM (Enterprise) | The same, provided by Ensemble's sign-in for every instance | First release (sign-in, two-factor); Later (SSO, SCIM) | n/a |
 | See who did what | Audit log (Starter: logins only; record changes Professional) | A full audit log of record and settings changes, with AI actions marked | First release | No |
 | Help a colleague by seeing what they see | Log in as another user (Enterprise) | View as another user, recorded in the audit log | Later | n/a |
-| Handle privacy requests | Legal basis, consent, permanent delete, data export (Free) | The same four, and the assistant can carry out a request end to end as a plan | First release | Yes |
+| Handle privacy requests | Legal basis, consent, permanent delete, data export (Free) | The same four (built), and the assistant can carry out a request end to end as a plan | First release | Yes |
 | Keep data in a region | Data residency: US, EU, Canada, Australia | The instance runs in the region the customer chooses | First release | n/a |
 | Store sensitive data | Sensitive Data (Enterprise) | Encrypted properties with restricted access | Later | Partly |
 | Try changes safely | Sandbox (Enterprise: 1; extra $750 a month) | Every change, by anyone, gets a preview with a copy of the data. This is the platform, not a feature. | By design | n/a |

@@ -15,7 +15,8 @@ import type { PeopleRepository } from '../people/people.repository';
  * hashed together with the one before it, so a removed or altered entry breaks the chain.
  */
 
-const SECRET = /key|secret|password|token/i;
+// `confirm` is what someone types to erase a person: their email address, which must not outlive them here.
+const SECRET = /key|secret|password|token|^confirm$/i;
 const MAX_DETAIL = 1_500;
 
 /** What was asked for, safe to keep: secrets blanked, long text shortened, large lists counted instead of stored. */

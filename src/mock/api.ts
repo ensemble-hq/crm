@@ -631,6 +631,26 @@ export const mockApi: CrmApi = {
   assistantTurn: () => Promise.reject(new Error('No model is connected.')),
   // The demo keeps no audit log: nothing in it outlives the page.
   listAudit: () => respond(() => ({ entries: [], total: 0 })),
+  // The demo holds little beyond the record itself; the server gathers the rest.
+  exportPersonalData: (recordId) =>
+    respond(() => {
+      const item = get(recordId);
+      const object = definition(item.objectId);
+      const fields = Object.fromEntries(object.properties.filter((property) => item.properties[property.id] != null).map((property) => [property.label, item.properties[property.id]]));
+      const activity = activityFor(recordId).map((entry) => ({ kind: entry.kind, title: entry.title, body: entry.body, at: entry.occurredAt }));
+      return { exportedAt: new Date().toISOString(), record: { id: item.id, kind: object.singular, createdAt: item.createdAt, fields }, emailPreference: null, consents: [], activity, conversations: [], formSubmissions: [], meetings: [], sequences: [], linkedRecords: [] };
+    }),
+  erasePerson: (input) =>
+    respond(() => {
+      const item = get(input.recordId);
+      const expected = typeof item.properties.email === 'string' && item.properties.email ? item.properties.email : String(item.properties[definition(item.objectId).primaryProperty] ?? '');
+      if (input.confirm.trim().toLowerCase() !== expected.toLowerCase()) throw new Error('To erase this person, confirm with their email address exactly.');
+      const data = dataset();
+      data.byId.delete(item.id);
+      const list = data.byObject.get(item.objectId);
+      if (list) list.splice(list.indexOf(item), 1);
+      return { removed: { record: 1, activity: 0, conversations: 0, messages: 0, formSubmissions: 0, meetings: 0, sequences: 0, consents: 0, other: 0 }, unlinked: 0, blocked: false };
+    }),
   checkAudit: () => respond(() => ({ intact: true, entries: 0, problem: null })),
   getAssistantUsage: () => respond(() => ({ from: MOCK_TODAY, turns: 0, inputTokens: 0, outputTokens: 0, failed: 0, byPerson: [], recent: [] })),
 
