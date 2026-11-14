@@ -109,6 +109,8 @@ export const objectDefinitionSchema = z.object({
       dateProperty: z.string().optional(),
     })
     .optional(),
+  /** Present when records belong on a calendar: the date property that places them. */
+  calendar: z.object({ dateProperty: z.string() }).optional(),
   /** Present when records get finished (tasks): the `select` property that says so, and its two values. */
   completion: z.object({ property: z.string(), open: z.string(), done: z.string() }).optional(),
   /** Added in this workspace, not part of the template. */

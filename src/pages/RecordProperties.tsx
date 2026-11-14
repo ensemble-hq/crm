@@ -8,7 +8,7 @@ import { PropertyValue } from '../ui/PropertyValue';
 import { ICON, rowDivider, small } from '../ui/styles';
 
 /** Types that save the moment a choice is made, with no separate confirm. */
-const INSTANT = new Set<PropertyDefinition['type']>(['select', 'user', 'boolean']);
+const INSTANT = new Set<PropertyDefinition['type']>(['select', 'user', 'boolean', 'reference']);
 
 function groupProperties(object: ObjectDefinition): Array<{ group: string; properties: PropertyDefinition[] }> {
   const groups: Array<{ group: string; properties: PropertyDefinition[] }> = [];
@@ -23,8 +23,8 @@ function groupProperties(object: ObjectDefinition): Array<{ group: string; prope
 
 /**
  * One property on a record page. Click the value to change it: choices save at once, typed values
- * save on Enter or when you leave the field, Escape cancels. Links to other records and automatic
- * fields are read-only here.
+ * save on Enter or when you leave the field, Escape cancels. A link to another record is changed by
+ * searching for the new one. Automatic fields are read-only.
  */
 function PropertyRow({
   property,
@@ -42,7 +42,7 @@ function PropertyRow({
   const [draft, setDraft] = useState<Value>(value);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
-  const editable = !property.system && property.type !== 'reference';
+  const editable = !property.system;
   const inputId = `edit-${record.id}-${property.id}`;
   const wrapper = useRef<HTMLDivElement>(null);
 
@@ -71,7 +71,8 @@ function PropertyRow({
   }
 
   function start() {
-    setDraft(value);
+    // A link opens straight on the search box; choosing a record, or leaving the field, ends the edit.
+    setDraft(property.type === 'reference' ? null : value);
     setError(undefined);
     setEditing(true);
   }
@@ -92,7 +93,17 @@ function PropertyRow({
     </span>
   );
 
-  if (editable && !editing) {
+  if (editable && !editing && property.type === 'reference') {
+    // The value is itself a link to the other record, so the pencil is a separate button beside it.
+    control = (
+      <span className="m-cluster" data-gap="1" style={{ flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
+        <PropertyValue property={property} value={value} references={references} />
+        <button type="button" onClick={start} aria-label={`Change ${property.label}`} title="Change" style={{ all: 'unset', cursor: 'pointer', display: 'inline-flex', color: 'var(--m-color-fg-subtle)' }}>
+          <Pencil size={ICON.inline} strokeWidth={ICON.strokeWidth} aria-hidden />
+        </button>
+      </span>
+    );
+  } else if (editable && !editing) {
     control = (
       <button
         type="button"
@@ -142,7 +153,7 @@ function PropertyRow({
           if (!INSTANT.has(property.type) && !event.currentTarget.contains(event.relatedTarget)) void save(draft);
           else if (INSTANT.has(property.type) && !event.currentTarget.contains(event.relatedTarget)) setEditing(false);
         }}
-        style={{ inlineSize: property.type === 'boolean' ? 'auto' : 200, maxInlineSize: '100%' }}
+        style={{ inlineSize: property.type === 'boolean' ? 'auto' : property.type === 'reference' ? 220 : 200, maxInlineSize: '100%' }}
         ref={wrapper}
       >
         <PropertyInput
@@ -154,6 +165,11 @@ function PropertyRow({
             if (INSTANT.has(property.type)) void save(next);
           }}
         />
+        {property.type === 'reference' && value !== null ? (
+          <button type="button" className="m-button" data-variant="ghost" data-size="sm" onClick={() => void save(null)} style={{ marginBlockStart: 'var(--m-space-1)' }}>
+            Remove the link
+          </button>
+        ) : null}
       </div>
     );
   }

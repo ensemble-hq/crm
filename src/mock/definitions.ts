@@ -291,6 +291,7 @@ const deals: ObjectDefinition = {
     },
   ],
   board: { groupBy: 'stage', sumProperty: 'amount', dateProperty: 'closeDate' },
+  calendar: { dateProperty: 'closeDate' },
 };
 
 export const taskTypes: Option[] = [
@@ -363,6 +364,7 @@ const tasks: ObjectDefinition = {
     },
   ],
   completion: { property: 'status', open: 'open', done: 'done' },
+  calendar: { dateProperty: 'dueDate' },
 };
 
 export const objects: ObjectDefinition[] = [contacts, companies, deals, tasks];

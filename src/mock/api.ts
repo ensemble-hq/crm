@@ -6,6 +6,8 @@ import type {
   CrmRecord,
   ImportRequest,
   ImportResult,
+  MergeRecords,
+  Notification,
   ListQuery,
   Reference,
   RelatedGroup,
@@ -437,6 +439,62 @@ function insert(objectId: string, properties: Record<string, PropertyValue>): Cr
   return item;
 }
 
+let notifications: Notification[] | undefined;
+
+/** A few notifications to start with, about the signed-in user's own deals. */
+function allNotifications(): Notification[] {
+  if (notifications) return notifications;
+  const mine = (dataset().byObject.get('deals') ?? []).filter((deal) => deal.properties.owner === CURRENT_USER_ID).slice(0, 4);
+  const now = Date.parse(MOCK_NOW);
+  const messages = ['Jonas mentioned you in a note: “Can you join the pricing call?”', 'A task on this deal is overdue.', 'Priya assigned this deal to you.', 'The contact replied to your email.'];
+  notifications = mine.map((deal, index) => ({ id: `ntf_${index + 1}`, message: messages[index] ?? 'Something changed.', recordId: deal.id, createdAt: new Date(now - (index * 5 + 1) * 3_600_000).toISOString(), read: index > 1 }));
+  return notifications;
+}
+
+function pushNotification(message: string, recordId: string | null): void {
+  sequence += 1;
+  allNotifications().unshift({ id: `ntf_new_${sequence}`, message, recordId, createdAt: new Date().toISOString(), read: false });
+}
+
+/** Folds `mergeId` into `keepId`: values, links from other records, and activity all move across. */
+function mergeRecords(input: MergeRecords): CrmRecord {
+  const keep = get(input.keepId);
+  const merged = get(input.mergeId);
+  if (keep.objectId !== merged.objectId) throw new Error('Only two records of the same kind can be merged.');
+  if (keep.id === merged.id) throw new Error('Choose two different records.');
+  const object = definition(keep.objectId);
+  const data = dataset();
+  // Read the other record's activity while it still exists.
+  const moved = activityFor(merged.id)
+    .filter((item) => !item.id.endsWith('_created'))
+    .map((item) => ({ ...item, recordId: keep.id }));
+  // Take the other record out first, so a unique value moving across doesn't clash with itself.
+  data.byId.delete(merged.id);
+  data.byObject.set(object.id, (data.byObject.get(object.id) ?? []).filter((item) => item.id !== merged.id));
+  try {
+    validate(object, input.properties, keep.id, false);
+  } catch (error) {
+    data.byId.set(merged.id, merged);
+    data.byObject.get(object.id)?.unshift(merged);
+    throw error;
+  }
+  Object.assign(keep.properties, input.properties);
+  keep.updatedAt = new Date().toISOString();
+  // Everything that pointed at the merged record now points at the kept one.
+  for (const other of objects) {
+    const pointing = other.properties.filter((item) => item.type === 'reference' && item.referenceObjectId === object.id);
+    if (pointing.length === 0) continue;
+    for (const item of data.byObject.get(other.id) ?? []) {
+      for (const reference of pointing) if (item.properties[reference.id] === merged.id) item.properties[reference.id] = keep.id;
+    }
+  }
+  sequence += 1;
+  const note: Activity = { id: `act_new_${sequence}`, recordId: keep.id, kind: 'change', title: `Merged with ${String(merged.properties[object.primaryProperty] ?? 'another record')}`, actorId: CURRENT_USER_ID, occurredAt: new Date().toISOString() };
+  createdActivity.set(keep.id, [note, ...(createdActivity.get(keep.id) ?? []), ...moved]);
+  createdActivity.delete(merged.id);
+  return keep;
+}
+
 const workflowDeps: WorkflowDeps = {
   respond,
   definition,
@@ -449,6 +507,10 @@ const workflowDeps: WorkflowDeps = {
   },
   logEmail,
   enroll: enrollFromWorkflow,
+  notify: (userId, message, recordId) => {
+    // Only the signed-in user has a bell in the mock; other people's notifications have nowhere to show.
+    if (userId === CURRENT_USER_ID) pushNotification(message, recordId);
+  },
 };
 
 /** A contact from a public page (a form, a booking): the one with that email is updated, otherwise one is created. */
@@ -661,6 +723,24 @@ export const mockApi: CrmApi = {
     }),
 
   importRecords: (input) => respond(() => importRecords(input)),
+
+  mergeRecords: (input) => respond(() => mergeRecords(input)),
+
+  listNotifications: () =>
+    respond(() => {
+      const list = allNotifications();
+      const result: Record<string, Reference> = {};
+      for (const item of list) {
+        const record = item.recordId ? dataset().byId.get(item.recordId) : undefined;
+        if (record && item.recordId) result[item.recordId] = { objectId: record.objectId, label: label(item.recordId) };
+      }
+      return { notifications: list, references: result };
+    }),
+
+  markNotificationsRead: (id) =>
+    respond(() => {
+      for (const item of allNotifications()) if (!id || item.id === id) item.read = true;
+    }),
 
   createActivity: (input) =>
     respond(() => {

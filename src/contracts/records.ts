@@ -133,6 +133,25 @@ export const importResultSchema = z.object({
 });
 export type ImportResult = z.infer<typeof importResultSchema>;
 
+/** Folds one record into another: the kept record takes the chosen values, everything that pointed at the other now points at it, and the other is removed. */
+export const mergeRecordsSchema = z.object({
+  keepId: z.string(),
+  mergeId: z.string(),
+  /** The values the kept record ends up with, for the properties where the two differed. */
+  properties: z.record(propertyValueSchema),
+});
+export type MergeRecords = z.infer<typeof mergeRecordsSchema>;
+
+export const notificationSchema = z.object({
+  id: z.string(),
+  message: z.string(),
+  /** The record it is about, when there is one. */
+  recordId: z.string().nullable(),
+  createdAt: z.string(),
+  read: z.boolean(),
+});
+export type Notification = z.infer<typeof notificationSchema>;
+
 export type Workspace = { name: string; objects: ObjectDefinition[]; users: User[]; currentUserId: string };
 
 export interface CrmApi extends InboxApi, ReportsApi, SequencesApi, WorkflowsApi, CaptureApi {
@@ -147,6 +166,11 @@ export interface CrmApi extends InboxApi, ReportsApi, SequencesApi, WorkflowsApi
   updateRecord(input: UpdateRecord): Promise<CrmRecord>;
   deleteRecords(ids: string[]): Promise<{ deleted: number }>;
   importRecords(input: ImportRequest): Promise<ImportResult>;
+  mergeRecords(input: MergeRecords): Promise<CrmRecord>;
+  /** The signed-in user's notifications, newest first, with names for the records they are about. */
+  listNotifications(): Promise<{ notifications: Notification[]; references: Record<string, Reference> }>;
+  /** Marks one notification read, or all of them when no id is given. */
+  markNotificationsRead(id?: string): Promise<void>;
   createActivity(input: CreateActivity): Promise<Activity>;
   /** Metadata changes. Each returns the object as it now stands. */
   createObject(input: CreateObject): Promise<ObjectDefinition>;

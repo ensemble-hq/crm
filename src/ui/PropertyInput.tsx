@@ -1,5 +1,6 @@
 import { useWorkspace } from '../app/workspace';
 import type { PropertyDefinition, PropertyValue } from '../contracts/metadata';
+import { RecordPicker } from './RecordPicker';
 
 const INPUT_TYPES: Partial<Record<PropertyDefinition['type'], string>> = {
   email: 'email',
@@ -38,6 +39,10 @@ export function PropertyInput({
         ))}
       </select>
     );
+  }
+
+  if (property.type === 'reference' && property.referenceObjectId) {
+    return <RecordPicker id={id} objectId={property.referenceObjectId} value={typeof value === 'string' ? value : null} onChange={onChange} />;
   }
 
   if (property.type === 'boolean') {

@@ -70,6 +70,8 @@ export type WorkflowDeps = {
   createTask: (properties: Record<string, PropertyValue>) => void;
   logEmail: (recordId: string, subject: string, body: string) => void;
   enroll: (sequenceId: string, contactId: string) => string;
+  /** Puts a notification in a user's bell. */
+  notify: (userId: string, message: string, recordId: string) => void;
 };
 
 /** Past runs, so the history is not empty on first load. */
@@ -173,6 +175,7 @@ function perform(workflow: Stored, action: Action, record: CrmRecord, deps: Work
       return deps.enroll(action.sequenceId, contactId);
     }
     case 'notify':
+      if (typeof record.properties.owner === 'string') deps.notify(record.properties.owner, action.message, record.id);
       return `${describeDone(action, record, deps)}: “${action.message}”`;
     case 'webhook':
       return `Would post to ${action.url} (nothing leaves this browser in the mock)`;

@@ -1,4 +1,4 @@
-import { BarChart3, Bell, Bookmark, CalendarDays, FileText, House, Inbox, type LucideIcon, Monitor, Moon, PanelLeft, PanelLeftOpen, Search, Send, Settings, Sparkles, Sun, Workflow } from 'lucide-react';
+import { BarChart3, Bookmark, CalendarDays, FileText, House, Inbox, type LucideIcon, Monitor, Moon, PanelLeft, PanelLeftOpen, Search, Send, Settings, Sparkles, Sun, Workflow } from 'lucide-react';
 import { type CSSProperties, useEffect, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { api, useQuery } from '../api';
@@ -6,6 +6,8 @@ import { AssistantBar } from '../assistant/AssistantBar';
 import { AssistantProvider } from '../assistant/AssistantProvider';
 import { objectIcon } from '../ui/icons';
 import { ICON, initials } from '../ui/styles';
+import { CommandPalette } from './CommandPalette';
+import { Notifications } from './Notifications';
 import { type ColorMode, useColorMode } from './colorMode';
 import { useWorkspace } from './workspace';
 
@@ -55,7 +57,7 @@ const MODES: Record<ColorMode, { icon: LucideIcon; label: string }> = {
   dark: { icon: Moon, label: 'Dark mode. Switch to follow your system.' },
 };
 
-function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+function Sidebar({ collapsed, onToggle, onSearch }: { collapsed: boolean; onToggle: () => void; onSearch: () => void }) {
   const workspace = useWorkspace();
   const { mode, cycle } = useColorMode();
   const ModeIcon = MODES[mode].icon;
@@ -153,6 +155,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
           data-icon-only={collapsed ? '' : undefined}
           aria-label="Search"
           title={collapsed ? 'Search' : undefined}
+          onClick={onSearch}
           style={
             {
               justifyContent: collapsed ? 'center' : 'flex-start',
@@ -205,9 +208,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
             <button type="button" className="m-button" data-variant="ghost" data-size="sm" data-icon-only aria-label={MODES[mode].label} title={MODES[mode].label} onClick={cycle} style={{ color: 'var(--m-color-fg-muted)' }}>
               <ModeIcon size={ICON.nav} strokeWidth={ICON.strokeWidth} aria-hidden />
             </button>
-            <button type="button" className="m-button" data-variant="ghost" data-size="sm" data-icon-only aria-label="Notifications" title="Notifications" style={{ color: 'var(--m-color-fg-muted)' }}>
-              <Bell size={ICON.nav} strokeWidth={ICON.strokeWidth} aria-hidden />
-            </button>
+<Notifications offset={collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_WIDTH} />
           </span>
         </div>
       </div>
@@ -234,6 +235,20 @@ export function Shell() {
       // Not saved; the sidebar still stays as set until the page reloads.
     }
   }, [collapsed]);
+
+  const [searching, setSearching] = useState(false);
+
+  // Cmd/Ctrl+K opens search from anywhere.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setSearching(true);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // Cmd/Ctrl+B toggles the sidebar, as in most editors.
   useEffect(() => {
@@ -262,7 +277,7 @@ export function Shell() {
         } as CSSProperties
       }
     >
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} />
+      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} onSearch={() => setSearching(true)} />
       <div style={{ padding: 'var(--m-space-2) var(--m-space-2) var(--m-space-2) 0', minInlineSize: 0, minBlockSize: '100vh', display: 'flex' }}>
         <div
           className="m-stack"
@@ -282,6 +297,7 @@ export function Shell() {
     </div>
       {/* Outside the split: its layout rules size its first and last child, and the bar must not be either. */}
       <AssistantBar offset={width} />
+      <CommandPalette open={searching} onClose={() => setSearching(false)} />
     </AssistantProvider>
   );
 }

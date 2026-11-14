@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Columns3, Download, Filter as FilterIcon, LayoutList, List, Pencil, Plus, Search, Send, SlidersHorizontal, Trash2, Upload, UserPlus, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, CalendarDays, ChevronLeft, Combine, ChevronRight, Columns3, Download, Filter as FilterIcon, LayoutList, List, Pencil, Plus, Search, Send, SlidersHorizontal, Trash2, Upload, UserPlus, X } from 'lucide-react';
 import { type CSSProperties, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, useQuery } from '../api';
@@ -15,7 +15,9 @@ import { objectIcon } from '../ui/icons';
 import { ICON, figure, small, toolbarButton } from '../ui/styles';
 import { CreateRecordDialog } from './CreateRecordDialog';
 import { FilterDialog } from './FilterDialog';
+import { MergeDialog } from './MergeDialog';
 import { RecordBoard } from './RecordBoard';
+import { RecordCalendar } from './RecordCalendar';
 
 const PAGE_SIZE = 50;
 const NUMERIC = new Set<PropertyDefinition['type']>(['number', 'currency']);
@@ -113,7 +115,7 @@ function ColumnsDialog({ object, columns, onClose, onSave }: { object: ObjectDef
 
 /** Change one field on every selected record. "Assign owner" is this with the owner field chosen. */
 function BulkEditDialog({ object, ids, initialProperty, onClose, onDone }: { object: ObjectDefinition; ids: string[]; initialProperty?: string; onClose: () => void; onDone: () => void }) {
-  const editable = object.properties.filter((property) => !property.system && property.type !== 'reference' && property.type !== 'multiselect' && property.id !== object.primaryProperty && !property.unique);
+  const editable = object.properties.filter((property) => !property.system && property.type !== 'multiselect' && property.id !== object.primaryProperty && !property.unique);
   const [propertyId, setPropertyId] = useState(initialProperty && editable.some((item) => item.id === initialProperty) ? initialProperty : (editable[0]?.id ?? ''));
   const [value, setValue] = useState<Value>(null);
   const [busy, setBusy] = useState(false);
@@ -243,7 +245,7 @@ function RecordTable({
 }) {
   const { revision, touch } = useWorkspace();
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulk, setBulk] = useState<{ kind: 'edit'; property?: string } | { kind: 'delete' } | { kind: 'enroll' }>();
+  const [bulk, setBulk] = useState<{ kind: 'edit'; property?: string } | { kind: 'delete' } | { kind: 'enroll' } | { kind: 'merge' }>();
   const [busy, setBusy] = useState(false);
   const [bulkError, setBulkError] = useState<string>();
   const sortKey = sort ? `${sort.property}:${sort.direction}` : '';
@@ -332,6 +334,11 @@ function RecordTable({
                     {object.id === 'contacts' ? (
                       <button type="button" className="m-button" data-size="sm" style={toolbarButton} onClick={() => setBulk({ kind: 'enroll' })}>
                         <Send size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Enrol in sequence
+                      </button>
+                    ) : null}
+                    {ids.length === 2 ? (
+                      <button type="button" className="m-button" data-size="sm" style={toolbarButton} onClick={() => setBulk({ kind: 'merge' })}>
+                        <Combine size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Merge
                       </button>
                     ) : null}
                     <button type="button" className="m-button" data-size="sm" style={toolbarButton} onClick={() => setBulk({ kind: 'delete' })}>
@@ -438,6 +445,17 @@ function RecordTable({
           {total === undefined ? 'Loading…' : total === 0 ? '0 results' : `${first.toLocaleString('en-US')}–${last.toLocaleString('en-US')} of ${total.toLocaleString('en-US')}`}
         </span>
       </div>
+      {bulk?.kind === 'merge' && ids[0] && ids[1] ? (
+        <MergeDialog
+          object={object}
+          ids={[ids[0], ids[1]]}
+          onClose={() => setBulk(undefined)}
+          onDone={(message) => {
+            onNotice(message);
+            finishBulk();
+          }}
+        />
+      ) : null}
       {bulk?.kind === 'enroll' ? (
         <EnrollDialog
           ids={ids}
@@ -526,7 +544,8 @@ export function RecordList() {
 
   const search = params.get('q') ?? '';
   const page = Math.max(1, Number(params.get('page')) || 1);
-  const layout = object.board && params.get('layout') === 'board' ? 'board' : 'table';
+  const wanted = params.get('layout');
+  const layout = object.board && wanted === 'board' ? 'board' : object.calendar && wanted === 'calendar' ? 'calendar' : 'table';
   const changed = filterParam !== null || columnParam !== null || sortParam !== null;
 
   function update(changes: Record<string, string | undefined>) {
@@ -609,14 +628,31 @@ export function RecordList() {
             <ViewTabs object={object} view={view} onSelect={(viewId) => update({ view: viewId, page: undefined, sort: undefined, f: undefined, cols: undefined })} />
             <div className="m-cluster" data-gap="2">
               <SearchBox value={search} label={`Search ${object.plural.toLowerCase()}`} onChange={(value) => update({ q: value, page: undefined })} />
-              {object.board ? (
+              {object.board || object.calendar ? (
                 <div className="m-cluster" data-gap="1" role="group" aria-label="Layout">
-                  <button type="button" className="m-button" data-size="sm" data-icon-only aria-label="Table" aria-pressed={layout === 'table'} style={layout === 'table' ? toolbarButton : undefined} data-variant={layout === 'table' ? undefined : 'ghost'} onClick={() => update({ layout: undefined })}>
-                    <List size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />
-                  </button>
-                  <button type="button" className="m-button" data-size="sm" data-icon-only aria-label="Board" aria-pressed={layout === 'board'} style={layout === 'board' ? toolbarButton : undefined} data-variant={layout === 'board' ? undefined : 'ghost'} onClick={() => update({ layout: 'board', page: undefined })}>
-                    <Columns3 size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />
-                  </button>
+                  {[
+                    { id: 'table', label: 'Table', icon: List, shown: true },
+                    { id: 'board', label: 'Board', icon: Columns3, shown: !!object.board },
+                    { id: 'calendar', label: 'Calendar', icon: CalendarDays, shown: !!object.calendar },
+                  ]
+                    .filter((item) => item.shown)
+                    .map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className="m-button"
+                        data-size="sm"
+                        data-icon-only
+                        aria-label={item.label}
+                        title={item.label}
+                        aria-pressed={layout === item.id}
+                        style={layout === item.id ? toolbarButton : undefined}
+                        data-variant={layout === item.id ? undefined : 'ghost'}
+                        onClick={() => update({ layout: item.id === 'table' ? undefined : item.id, page: undefined })}
+                      >
+                        <item.icon size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />
+                      </button>
+                    ))}
                 </div>
               ) : null}
             </div>
@@ -660,15 +696,17 @@ export function RecordList() {
                 <button type="button" className="m-button" data-variant="ghost" data-size="sm" onClick={() => setDialog({ kind: 'columns' })}>
                   <SlidersHorizontal size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Columns
                 </button>
-              ) : (
+              ) : layout === 'board' ? (
                 <span style={{ ...small, display: 'inline-flex', alignItems: 'center', gap: 'var(--m-space-1)' }}>
                   <LayoutList size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Drag a card to change its stage
                 </span>
-              )}
+              ) : null}
             </div>
           </div>
           {layout === 'board' ? (
             <RecordBoard object={object} filters={filters} search={search} />
+          ) : layout === 'calendar' ? (
+            <RecordCalendar object={object} filters={filters} search={search} />
           ) : (
             <RecordTable
               object={object}
