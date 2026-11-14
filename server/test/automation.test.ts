@@ -5,7 +5,7 @@ import type { EnrollResult, Sequence, SequenceDetail } from '../../src/contracts
 import type { Workflow, WorkflowDetail } from '../../src/contracts/workflows';
 import { afterWorkingDays } from '../src/services/sequences/sequences.service';
 import { latestSlot } from '../src/services/workflows/timing';
-import { type Crm, JONAS, MAYA, PRIYA, refusal, startCrm } from './harness';
+import { AIKO, type Crm, JONAS, MAYA, PRIYA, refusal, startCrm } from './harness';
 
 let crm: Crm;
 const contact = (name: string, email: string, more: Record<string, unknown> = {}) => crm.call<CrmRecord>(MAYA, 'records.create', { objectId: 'contacts', properties: { name, email, owner: MAYA, ...more } });
@@ -103,6 +103,33 @@ describe('sequences', () => {
   });
 });
 
+describe('reports by email', () => {
+  const mailTo = (address: string) => crm.rows<{ body: string; from_email: string }>(sql`select payload->>'text' as body, payload->>'fromEmail' as from_email from dev_mail where direction = 'out' and payload->>'toEmail' = ${address} and payload->>'subject' = 'Deals by stage'`);
+
+  it('emails each person the report as their own role sees it, once each time it is due', async () => {
+    await crm.seed('deals', { name: 'Hers', amount: 10_000, stage: 'proposal', owner: AIKO });
+    await crm.seed('deals', { name: 'His', amount: 5_000, stage: 'proposal', owner: JONAS });
+    const settings = { name: 'Deals by stage', objectId: 'deals', measure: { kind: 'sum', property: 'amount' }, groupBy: 'stage', filters: [{ property: 'name', operator: 'in', value: ['Hers', 'His'] }], chart: 'bars' };
+    const hour = new Date().getUTCHours();
+    expect(await refusal(crm.call(MAYA, 'reports.save', { ...settings, delivery: { every: 'week', hour, to: [MAYA] } }))).toMatch(/day of the week/);
+    expect(await refusal(crm.call(MAYA, 'reports.save', { ...settings, delivery: { every: 'day', hour, to: ['usr_nobody'] } }))).toMatch(/members of this CRM/);
+    const saved = await crm.call<{ id: string; delivery?: { by?: string } }>(MAYA, 'reports.save', { ...settings, delivery: { every: 'day', hour, to: [MAYA, JONAS] } });
+    expect(saved.delivery?.by).toBe(MAYA);
+    const reports = crm.services.reports;
+    expect(await reports.deliverDue(crm.system())).toBe(0);
+    const tomorrow = new Date(Date.now() + 86_400_000);
+    expect(await reports.deliverDue(crm.system(), tomorrow)).toBe(2);
+    expect(await reports.deliverDue(crm.system(), tomorrow)).toBe(0);
+    const [admin, rep] = await Promise.all([mailTo('maya@northwind.example'), mailTo('jonas@northwind.example')]);
+    expect(admin).toHaveLength(1);
+    expect(admin[0]?.body).toContain('Total amount: $15,000, from 2 deals.');
+    expect(admin[0]?.body).toContain(`/reports/${saved.id}`);
+    // A rep does not see another team's deals in the app, so their email does not add them up either.
+    expect(rep[0]?.body).toContain('Total amount: $5,000, from 1 deal.');
+    expect(rep[0]?.from_email).toBe('maya@northwind.example');
+  });
+});
+
 describe('workflows', () => {
   let routing: Workflow;
   const handle = (event: Parameters<Crm['services']['runner']['handle']>[1], eventId: string) => crm.services.runner.handle({ ...crm.system(), userId: MAYA }, event, eventId);
@@ -176,11 +203,11 @@ describe('workflows', () => {
   it('works out when a schedule was last due', () => {
     // 14 November 2026 is a Saturday.
     const now = new Date('2026-11-14T08:30:00Z');
-    expect(latestSlot({ kind: 'schedule', every: 'day', hour: 9 }, now)).toBe('2026-11-13T09:00:00.000Z');
-    expect(latestSlot({ kind: 'schedule', every: 'day', hour: 8 }, now)).toBe('2026-11-14T08:00:00.000Z');
-    expect(latestSlot({ kind: 'schedule', every: 'week', hour: 9, weekday: 1 }, now)).toBe('2026-11-09T09:00:00.000Z');
-    expect(latestSlot({ kind: 'schedule', every: 'week', hour: 9, weekday: 6 }, now)).toBe('2026-11-07T09:00:00.000Z');
-    expect(latestSlot({ kind: 'schedule', every: 'week', hour: 8, weekday: 6 }, now)).toBe('2026-11-14T08:00:00.000Z');
+    expect(latestSlot({ every: 'day', hour: 9 }, now)).toBe('2026-11-13T09:00:00.000Z');
+    expect(latestSlot({ every: 'day', hour: 8 }, now)).toBe('2026-11-14T08:00:00.000Z');
+    expect(latestSlot({ every: 'week', hour: 9, weekday: 1 }, now)).toBe('2026-11-09T09:00:00.000Z');
+    expect(latestSlot({ every: 'week', hour: 9, weekday: 6 }, now)).toBe('2026-11-07T09:00:00.000Z');
+    expect(latestSlot({ every: 'week', hour: 8, weekday: 6 }, now)).toBe('2026-11-14T08:00:00.000Z');
   });
 
   it('runs when another system calls its address, and only for an address made here', async () => {

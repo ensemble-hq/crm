@@ -6,7 +6,7 @@ import { Page } from '../app/Page';
 import { useWorkspace } from '../app/workspace';
 import { draftReport } from '../assistant/mock-engine';
 import type { Filter, ObjectDefinition } from '../contracts/metadata';
-import type { ChartType, Dashboard, Measure, ReportDefinition, ReportSettings } from '../contracts/reports';
+import type { ChartType, Dashboard, Delivery, Measure, ReportDefinition, ReportSettings } from '../contracts/reports';
 import { Modal } from '../ui/Modal';
 import { ReportChart, measureLabel } from '../ui/ReportChart';
 import { describeFilter } from '../ui/filters';
@@ -153,6 +153,50 @@ const NUMERIC_TYPES = new Set(['number', 'currency']);
 const DATE_TYPES = new Set(['date', 'datetime']);
 /** Properties with one value per record make poor groups. */
 const UNGROUPABLE = new Set(['email', 'phone', 'url', 'number', 'currency']);
+
+const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+/** Whether a report is also emailed on a schedule, when, and to whom. */
+function DeliveryEditor({ value, me, people, onChange }: { value: Delivery | undefined; me: string; people: Array<{ id: string; name: string }>; onChange: (value: Delivery | undefined) => void }) {
+  return (
+    <fieldset className="m-stack" data-gap="2" style={{ border: 0, padding: 0, margin: 0 }}>
+      <legend className="m-field-label">Email it</legend>
+      <label className="m-field" data-layout="inline">
+        <input className="m-checkbox" type="checkbox" checked={value !== undefined} onChange={(event) => onChange(event.target.checked ? { every: 'week', weekday: 1, hour: 9, to: [me] } : undefined)} /> Send this report by email on a schedule
+      </label>
+      {value ? (
+        <>
+          <div className="m-cluster" data-gap="2" style={{ flexWrap: 'nowrap' }}>
+            <select className="m-select" aria-label="How often" value={value.every === 'week' ? String(value.weekday ?? 1) : 'day'} onChange={(event) => onChange(event.target.value === 'day' ? { every: 'day', hour: value.hour, to: value.to } : { every: 'week', weekday: Number(event.target.value), hour: value.hour, to: value.to })}>
+              <option value="day">Every day</option>
+              {WEEKDAYS.map((day, index) => (
+                <option key={day} value={index + 1}>
+                  Every {day}
+                </option>
+              ))}
+            </select>
+            <select className="m-select" aria-label="At what time" value={value.hour} onChange={(event) => onChange({ ...value, hour: Number(event.target.value) })} style={{ inlineSize: 130, flexShrink: 0 }}>
+              {Array.from({ length: 24 }, (_, hour) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: the hours of a day never reorder
+                <option key={hour} value={hour}>
+                  {String(hour).padStart(2, '0')}:00 UTC
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="m-stack" data-gap="1">
+            {people.map((person) => (
+              <label key={person.id} className="m-field" data-layout="inline">
+                <input className="m-checkbox" type="checkbox" checked={value.to.includes(person.id)} onChange={(event) => onChange({ ...value, to: event.target.checked ? [...value.to, person.id] : value.to.filter((id) => id !== person.id) })} /> {person.name}
+              </label>
+            ))}
+          </div>
+          <p className="m-field-hint">{value.to.length === 0 ? 'Choose at least one person.' : 'Each person is sent the numbers their own role lets them see. The email comes from you.'}</p>
+        </>
+      ) : null}
+    </fieldset>
+  );
+}
 
 function startingSettings(object: ObjectDefinition | undefined): ReportSettings {
   const groupBy = object?.properties.find((property) => property.type === 'select')?.id;
@@ -390,6 +434,7 @@ export function ReportBuilder() {
                 </button>
               </div>
             </fieldset>
+            {import.meta.env.VITE_API_URL ? <DeliveryEditor value={settings.delivery} me={workspace.currentUser.id} people={workspace.users.filter((user) => user.kind !== 'agent')} onChange={(delivery) => set({ delivery })} /> : null}
             {isNew ? (
               <label className="m-field" data-layout="inline">
                 <input className="m-checkbox" type="checkbox" checked={pin} onChange={(event) => setPin(event.target.checked)} /> Put it on the dashboard

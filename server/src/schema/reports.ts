@@ -6,6 +6,8 @@ export const reportsTable = defineTable('reports', {
   id: column.text().primaryKey(),
   tenantId: column.text().notNull(),
   settings: column.json().$type<ReportSettings>().notNull(),
+  /** For a report that is emailed: the last moment it was due that has been dealt with. */
+  lastSlot: column.text(),
   createdAt: column.timestamp().notNull().defaultNow(),
   updatedAt: column.timestamp().notNull().defaultNow(),
 });

@@ -332,6 +332,7 @@ CREATE TABLE "reports" (
 	"id" text PRIMARY KEY NOT NULL,
 	"tenant_id" text NOT NULL,
 	"settings" jsonb NOT NULL,
+	"last_slot" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );

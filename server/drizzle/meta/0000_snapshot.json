@@ -1,6 +1,6 @@
 {
-  "id": "accfc134-a04c-4748-8865-4b717161efaa",
-  "prevId": "6ce6e9a1-edb3-4440-85b1-ab8dc5cce84b",
+  "id": "3ca44b78-582b-424a-8758-0db0bf595a77",
+  "prevId": "11869869-4de0-4ca5-912e-ac98cf398059",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2535,6 +2535,12 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true
+        },
+        "last_slot": {
+          "name": "last_slot",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",

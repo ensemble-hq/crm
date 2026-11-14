@@ -90,7 +90,7 @@ export function createServices(deps: ServiceDeps) {
   inbox.changed = async (ctx, conversationId) => void (await outbox.add(ctx, conversationChanged, { conversationId }));
   inbox.templateUsedBy = (ctx, templateId) => sequences.usingTemplate(ctx, templateId);
   const runner = new WorkflowRunner(workflowsRepository, runsRepository, recordsRepository, events, workspace, people, notifications, templates, mail, sequences, deps.secretsKey);
-  const reports = new ReportsService(new ReportsRepository(deps.db), new DashboardsRepository(deps.db), new GoalsRepository(deps.db), records, recordsRepository, people, workspace);
+  const reports = new ReportsService(new ReportsRepository(deps.db), new DashboardsRepository(deps.db), new GoalsRepository(deps.db), records, recordsRepository, people, workspace, deps.email, notifications, deps.appOrigin);
   const sales = new SalesService(new LineItemsRepository(deps.db), records, recordsRepository, events, activityRepository, workspace);
   const capture = new CaptureService(new FormsRepository(deps.db), new SubmissionsRepository(deps.db), new BookingPagesRepository(deps.db), new MeetingsRepository(deps.db), recordsRepository, events, activityRepository, people, workspace, rules);
   const importer = new ImportService(recordsRepository, events, workspace, people);

@@ -429,7 +429,7 @@ export const operations: Operation[] = [
     name: 'reports.save',
     method: 'saveReport',
     title: 'Save a report',
-    description: 'Saves a report so it stays up to date, or replaces one when `id` is given. Add its id to a dashboard with dashboards.save to show it there.',
+    description: 'Saves a report so it stays up to date, or replaces one when `id` is given. Add its id to a dashboard with dashboards.save to show it there. Give `delivery` (every day or week, an hour in UTC, and the ids of the members it goes to) to also have it emailed on that schedule; each person is sent the numbers their own role lets them see.',
     input: reportSettingsSchema.extend({ id: z.string().optional() }),
     output: reportDefinitionSchema,
     effect: 'write',

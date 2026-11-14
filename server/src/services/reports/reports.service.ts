@@ -2,13 +2,16 @@ import { type Context, NotFoundError, ValidationError } from '@mariachi/core';
 import { type SQL, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import type { PropertyDefinition } from '../../../../src/contracts/metadata';
-import type { Dashboard, ReportDefinition, ReportResult, ReportRow, ReportSettings } from '../../../../src/contracts/reports';
+import type { Dashboard, Delivery, ReportDefinition, ReportResult, ReportRow, ReportSettings } from '../../../../src/contracts/reports';
 import type { Forecast } from '../../../../src/contracts/sales';
-import { actorOf, assertAllowed } from '../people/access';
+import type { EmailProvider } from '../../email/provider';
+import type { NotificationsService } from '../notifications/notifications.service';
+import { actingContext, actorOf, assertAllowed } from '../people/access';
 import type { PeopleService } from '../people/people.service';
 import { propertyJson, propertyText } from '../records/records.query';
 import type { RecordsRepository } from '../records/records.repository';
 import type { RecordsService } from '../records/records.service';
+import { latestSlot } from '../workflows/timing';
 import type { WorkspaceService } from '../workspace/workspace.service';
 import type { DashboardsRepository, GoalsRepository, ReportsRepository } from './reports.repository';
 
@@ -37,6 +40,9 @@ export class ReportsService {
     private readonly recordRows: RecordsRepository,
     private readonly people: PeopleService,
     private readonly workspace: WorkspaceService,
+    private readonly email: EmailProvider,
+    private readonly notifications: NotificationsService,
+    private readonly appOrigin: string,
   ) {}
 
   async list(ctx: Context): Promise<ReportDefinition[]> {
@@ -129,12 +135,79 @@ export class ReportsService {
     const { id, ...settings } = input;
     if (settings.name.trim() === '') throw new ValidationError('Give the report a name.');
     await this.workspace.definition(ctx, settings.objectId);
+    let lastSlot: string | null = null;
+    if (settings.delivery) {
+      const delivery = settings.delivery;
+      if (delivery.every === 'week' && delivery.weekday === undefined) throw new ValidationError('Choose which day of the week the report is sent on.');
+      const people = (await this.people.users(ctx)).filter((user) => user.kind !== 'agent');
+      const unknown = delivery.to.find((userId) => !people.some((user) => user.id === userId));
+      if (unknown) throw new ValidationError('A report can only be emailed to people who are members of this CRM.');
+      // It comes from whoever set it up, and starts from the next time it is due.
+      settings.delivery = { ...delivery, to: [...new Set(delivery.to)], by: actorOf(ctx).signedInId };
+      lastSlot = latestSlot(delivery, new Date());
+    }
     if (id) {
       if (!(await this.reports.findById(ctx, id))) throw new NotFoundError('report', id);
-      return { id, ...(await this.reports.update(ctx, id, { settings })).settings };
+      return { id, ...(await this.reports.update(ctx, id, { settings, lastSlot })).settings };
     }
-    const created = await this.reports.create(ctx, { id: `rep_${randomUUID().replace(/-/g, '').slice(0, 12)}`, settings });
+    const created = await this.reports.create(ctx, { id: `rep_${randomUUID().replace(/-/g, '').slice(0, 12)}`, settings, lastSlot });
     return { id: created.id, ...created.settings };
+  }
+
+  /**
+   * Emails every report that has come due since it was last sent. Called on a timer. Each person
+   * is sent the report as their own role lets them see it, so the email never shows anyone more
+   * than the app would. A report missed while the worker was down is sent late, once. Returns how
+   * many emails went.
+   */
+  async deliverDue(ctx: Context, now = new Date()): Promise<number> {
+    let sent = 0;
+    for (const row of await this.reports.findMany(ctx, {}, { limit: 500 })) {
+      const delivery = row.settings.delivery;
+      if (!delivery) continue;
+      const slot = latestSlot(delivery, now);
+      if (row.lastSlot !== null && row.lastSlot >= slot) continue;
+      const people = (await this.people.users(ctx)).filter((user) => user.kind !== 'agent');
+      const from = people.find((user) => user.id === delivery.by) ?? people.find((user) => delivery.to.includes(user.id));
+      for (const userId of delivery.to) {
+        const person = people.find((user) => user.id === userId);
+        // Someone who has left is passed over.
+        if (!person || !from) continue;
+        try {
+          const asThem = { ...ctx, userId };
+          const acting = actingContext(asThem, await this.people.actor(asThem));
+          const text = await this.asText(acting, row.id, row.settings, delivery);
+          // The key names the report, the moment and the person, so trying again cannot send it twice.
+          const key = `report:${row.id}:${slot}:${userId}`;
+          await this.email.send({ fromName: from.name, fromEmail: from.email, toEmail: person.email, subject: row.settings.name, text, messageId: `<${key}@crm>` }, { idempotencyKey: key });
+          sent += 1;
+        } catch (error) {
+          // One person's email failing does not hold up the others; whoever set it up is told.
+          if (delivery.by) await this.notifications.send(ctx, delivery.by, `The report "${row.settings.name}" could not be emailed to ${person.name}: ${error instanceof Error ? error.message : 'the email service refused it'}`, null);
+        }
+      }
+      await this.reports.reached(ctx, row.id, slot);
+    }
+    return sent;
+  }
+
+  /** A report as the plain text of an email. */
+  private async asText(ctx: Context, id: string, settings: ReportSettings, delivery: Delivery): Promise<string> {
+    const result = await this.run(ctx, settings);
+    const object = await this.workspace.definition(ctx, settings.objectId);
+    const measure = settings.measure;
+    const measured = measure.kind === 'count' ? undefined : object.properties.find((property) => property.id === measure.property);
+    const show = (value: number) => (measured?.type === 'currency' ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value) : new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(value));
+    const what = settings.measure.kind === 'count' ? 'Count' : `${settings.measure.kind === 'sum' ? 'Total' : 'Average'} ${measured?.label.toLowerCase() ?? ''}`.trim();
+    const noun = (result.records === 1 ? object.singular : object.plural).toLowerCase();
+    const lines = [settings.name, '', `${what}: ${show(result.total)}, from ${new Intl.NumberFormat('en-US').format(result.records)} ${noun}.`];
+    if (result.rows.length > 0) {
+      const width = Math.max(...result.rows.map((row) => row.label.length));
+      lines.push('', ...result.rows.map((row) => `${row.label.padEnd(width)}  ${show(row.value)}${settings.measure.kind === 'count' ? '' : `  (${row.count})`}`));
+    }
+    const day = delivery.every === 'week' ? ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][(delivery.weekday ?? 1) - 1] : 'day';
+    lines.push('', `Open it: ${this.appOrigin}/reports/${id}`, '', `You are sent this every ${day} at ${String(delivery.hour).padStart(2, '0')}:00 UTC, with the numbers your role lets you see. It can be changed or stopped on the report.`);
+    return lines.join('\n');
   }
 
   async remove(ctx: Context, id: string): Promise<void> {

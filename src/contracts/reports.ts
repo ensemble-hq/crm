@@ -17,6 +17,18 @@ export type Measure = z.infer<typeof measureSchema>;
 export const chartTypeSchema = z.enum(['bars', 'columns', 'line', 'number', 'table']);
 export type ChartType = z.infer<typeof chartTypeSchema>;
 
+/** Sending a report by email on a schedule: every day, or every week on one weekday (1 Monday to 7 Sunday), at an hour of the day in UTC. */
+export const deliverySchema = z.object({
+  every: z.enum(['day', 'week']),
+  hour: z.number().int().min(0).max(23),
+  weekday: z.number().int().min(1).max(7).optional(),
+  /** The people it goes to, by id. Each is sent the numbers their own role lets them see. */
+  to: z.array(z.string()).min(1).max(50),
+  /** Who set it up; the email comes from them. Filled in by the server. */
+  by: z.string().optional(),
+});
+export type Delivery = z.infer<typeof deliverySchema>;
+
 export const reportSettingsSchema = z.object({
   name: z.string().min(1),
   objectId: z.string(),
@@ -27,6 +39,8 @@ export const reportSettingsSchema = z.object({
   bucket: z.enum(['month', 'quarter']).optional(),
   filters: z.array(filterSchema),
   chart: chartTypeSchema,
+  /** When present, the report is also emailed on this schedule. */
+  delivery: deliverySchema.optional(),
 });
 export type ReportSettings = z.infer<typeof reportSettingsSchema>;
 

@@ -1,10 +1,9 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import type { Trigger } from '../../../../src/contracts/workflows';
 
 const DAY = 86_400_000;
 
 /** The most recent moment a schedule was due, at or before `now`. Hours and weekdays are in UTC. */
-export function latestSlot(trigger: Extract<Trigger, { kind: 'schedule' }>, now: Date): string {
+export function latestSlot(trigger: { every: 'day' | 'week'; hour: number; weekday?: number }, now: Date): string {
   let slot = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), trigger.hour);
   if (slot > now.getTime()) slot -= DAY;
   if (trigger.every === 'week') {

@@ -211,7 +211,7 @@ HubSpot spreads this across Data Hub (formerly Operations Hub; Professional $800
 | Combine CRM data with outside data | Data studio, formerly datasets (Professional, Beta) | The report builder joins objects; outside data comes in through an import or integration. Each instance has its own database, so direct SQL access is possible. | Later; By design | No |
 | Feed a data warehouse | Snowflake, BigQuery, S3 (Enterprise) | Direct database access and scheduled exports | Later | n/a |
 | Build dashboards and reports | Dashboards (Free: 10), custom reports (Professional: 100) | Dashboards and a report builder, unlimited; ask for a chart and pin it | First release | No: the importer lists every report and dashboard so they can be rebuilt, and the assistant rebuilds the common ones |
-| Send reports on a schedule | Scheduled email and Slack delivery | Scheduled delivery by email and Slack | First release | No |
+| Send reports on a schedule | Scheduled email and Slack delivery | Scheduled delivery by email (built) and Slack (a plugin, not yet) | First release | No |
 | Add and remove people | Users, seat types | Users with no seat types and no per-seat price | First release | Yes: users and ownership |
 | Control who can see and change what | Permissions (Free), permission sets (Starter templates; custom Enterprise) | Roles with record access by own, team or all | First release | Partly: roles are mapped, and custom sets are reviewed |
 | Organize people into teams | Teams (Professional: 10), hierarchy (Enterprise) | Teams and nested teams | First release | Yes |

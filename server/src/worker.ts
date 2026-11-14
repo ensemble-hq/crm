@@ -26,7 +26,7 @@ async function main(): Promise<void> {
 
   const events = lifecycle.manage('events', new DefaultEvents({ bus: createEventBus({ adapter: 'redis-streams', url: config.redis.url, prefix: config.serviceName }), source: config.serviceName }, { logger, tracer, metrics }), { priority: 20 });
   const settings = useConfigSection<CrmSettings>(CRM_CONFIG);
-  const { runner, mail, sequences, settings: shape } = createServices({ db: database.db, transaction: database.transaction, source: config.serviceName, email: createEmailProvider(settings, database.db), secretsKey: settings.secretsKey, appOrigin: settings.appOrigin });
+  const { runner, mail, sequences, reports, settings: shape } = createServices({ db: database.db, transaction: database.transaction, source: config.serviceName, email: createEmailProvider(settings, database.db), secretsKey: settings.secretsKey, appOrigin: settings.appOrigin });
 
   // Live updates: once the work a change sets off is done, open browsers are told what to read again.
   const live = lifecycle.manage('live', createLive(config.redis.url, config.serviceName, { logger, tracer, metrics }), { priority: 25 });
@@ -91,6 +91,8 @@ async function main(): Promise<void> {
       const done = await mail.sweep(ctx);
       if (done.filed + done.sent + done.released + done.found > 0) logger.info(done, 'Email sweep picked up work the first path missed');
       if (steps + done.filed + done.sent + done.found > 0) await inboxChanged(ctx);
+      const reported = await reports.deliverDue(ctx);
+      if (reported > 0) logger.info({ reported }, 'Scheduled reports emailed');
       // Workflows on a schedule that have come due. What they change is announced by its own events.
       const scheduled = await runner.scheduled(ctx);
       if (scheduled > 0) {
