@@ -55,6 +55,12 @@ export const accessSchema = z.object({
 });
 export type Access = z.infer<typeof accessSchema>;
 
+export const inviteMemberSchema = z.object({ name: z.string(), email: z.string(), roleId: z.string(), teamId: z.string().nullable() });
+export const updateMemberSchema = z.object({ id: z.string(), roleId: z.string().optional(), teamId: z.string().nullable().optional() });
+export const deactivateMemberSchema = z.object({ id: z.string(), reassignTo: z.string() });
+export const saveTeamSchema = z.object({ id: z.string().optional(), name: z.string() });
+export const saveRoleSchema = roleSettingsSchema.extend({ id: z.string().optional() });
+
 export interface TeamApi {
   getDirectory(): Promise<Directory>;
   inviteMember(input: { name: string; email: string; roleId: string; teamId: string | null }): Promise<Member>;

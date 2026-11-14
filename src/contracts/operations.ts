@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { briefSchema } from './brief';
 import { objectDefinitionSchema, userSchema } from './metadata';
 import { activitySchema, createActivitySchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi } from './records';
-import { accessSchema } from './team';
+import { accessSchema, deactivateMemberSchema, directorySchema, inviteMemberSchema, memberSchema, roleSchema, saveRoleSchema, saveTeamSchema, teamSchema, updateMemberSchema } from './team';
 
 /**
  * Every operation of the CRM, defined once. The server runs each as a procedure; the HTTP API the
@@ -139,5 +139,95 @@ export const operations: Operation[] = [
     input: recordId,
     output: briefSchema.nullable(),
     effect: 'read',
+  },
+  {
+    name: 'people.directory',
+    method: 'getDirectory',
+    title: 'List people, teams and roles',
+    description: 'Returns everyone in the CRM with their role, team and status, plus the teams and the roles with what each role allows.',
+    input: none,
+    output: directorySchema,
+    effect: 'read',
+  },
+  {
+    name: 'people.invite',
+    method: 'inviteMember',
+    title: 'Invite a person',
+    description: 'Adds a person to the CRM with a role and, optionally, a team. They show as invited until they first sign in. Needs permission to manage people.',
+    input: inviteMemberSchema,
+    output: memberSchema,
+    effect: 'write',
+  },
+  {
+    name: 'people.update',
+    method: 'updateMember',
+    title: "Change a person's role or team",
+    description: "Changes a person's role, their team, or both. Set teamId to null for no team. The CRM always keeps at least one admin.",
+    input: updateMemberSchema,
+    output: memberSchema,
+    effect: 'write',
+  },
+  {
+    name: 'people.deactivate',
+    method: 'deactivateMember',
+    title: 'Deactivate a person',
+    description: 'Takes away a person\'s access and hands every record they own to another person. Their past activity keeps their name. Returns how many records were handed over.',
+    input: deactivateMemberSchema,
+    output: z.object({ reassigned: z.number().int() }),
+    effect: 'destructive',
+  },
+  {
+    name: 'people.reactivate',
+    method: 'reactivateMember',
+    title: 'Reactivate a person',
+    description: 'Gives a deactivated person their access back. Records handed to someone else stay where they are.',
+    input: z.string().describe('The person\'s id.'),
+    output: memberSchema,
+    effect: 'write',
+  },
+  {
+    name: 'teams.save',
+    method: 'saveTeam',
+    title: 'Create or rename a team',
+    description: 'Creates a team, or renames one when `id` is given.',
+    input: saveTeamSchema,
+    output: teamSchema,
+    effect: 'write',
+  },
+  {
+    name: 'teams.delete',
+    method: 'deleteTeam',
+    title: 'Delete a team',
+    description: 'Deletes a team that has no active people in it.',
+    input: z.string().describe('The team\'s id.'),
+    output: z.void(),
+    effect: 'destructive',
+  },
+  {
+    name: 'roles.save',
+    method: 'saveRole',
+    title: 'Create or change a role',
+    description: 'Creates a role, or replaces one when `id` is given. A role sets how far its people can view, edit and delete records (none, own, team or all) and whether they can manage settings, manage people and export. The Admin role cannot be changed.',
+    input: saveRoleSchema,
+    output: roleSchema,
+    effect: 'write',
+  },
+  {
+    name: 'roles.delete',
+    method: 'deleteRole',
+    title: 'Delete a role',
+    description: 'Deletes a role that nobody has. The roles that come with the CRM cannot be deleted.',
+    input: z.string().describe('The role\'s id.'),
+    output: z.void(),
+    effect: 'destructive',
+  },
+  {
+    name: 'people.viewAs',
+    method: 'viewAs',
+    title: 'View the CRM as someone else',
+    description: 'From now on, every operation you run sees and can change exactly what that person can, until you pass null to go back to yourself. Admins only. Useful for checking what a role allows.',
+    input: z.string().nullable().describe('The person to view as, or null to stop.'),
+    output: z.void(),
+    effect: 'write',
   },
 ];

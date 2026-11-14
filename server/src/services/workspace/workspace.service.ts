@@ -1,13 +1,15 @@
-import { AuthError, type Context, NotFoundError } from '@mariachi/core';
-import type { ObjectDefinition, User } from '../../../../src/contracts/metadata';
+import { type Context, NotFoundError } from '@mariachi/core';
+import type { ObjectDefinition } from '../../../../src/contracts/metadata';
 import type { Workspace } from '../../../../src/contracts/records';
-import type { ObjectsRepository, PeopleRepository } from './workspace.repository';
+import { accessOf, actorOf } from '../people/access';
+import type { PeopleService } from '../people/people.service';
+import type { ObjectsRepository } from './workspace.repository';
 
 /** The shape of the CRM: its objects and its people. Every other service asks here what a record may hold. */
 export class WorkspaceService {
   constructor(
     private readonly objects: ObjectsRepository,
-    private readonly people: PeopleRepository,
+    private readonly people: PeopleService,
   ) {}
 
   async definitions(ctx: Context): Promise<ObjectDefinition[]> {
@@ -21,22 +23,9 @@ export class WorkspaceService {
     return row.definition;
   }
 
-  async users(ctx: Context): Promise<User[]> {
-    const rows = await this.people.findMany(ctx, { active: true }, { sort: { field: 'name', direction: 'asc' }, limit: 500 });
-    return rows.map((row) => ({ id: row.id, name: row.name, email: row.email }));
-  }
-
   async get(ctx: Context): Promise<Workspace> {
-    const [objects, users] = await Promise.all([this.definitions(ctx), this.users(ctx)]);
-    const me = users.find((user) => user.id === ctx.userId);
-    if (!me) throw new AuthError('auth/unknown-person', 'You are signed in, but you are not a member of this CRM.');
-    return {
-      name: 'Northwind',
-      objects,
-      users,
-      currentUserId: me.id,
-      // Roles and record-level access arrive with the people module; until then every member is an administrator.
-      access: { roleName: 'Administrator', view: 'all', edit: 'all', delete: 'all', manageSettings: true, managePeople: true, exportRecords: true, viewedBy: null },
-    };
+    const actor = actorOf(ctx);
+    const [objects, users] = await Promise.all([this.definitions(ctx), this.people.users(ctx)]);
+    return { name: 'Northwind', objects, users, currentUserId: actor.userId, access: accessOf(actor) };
   }
 }

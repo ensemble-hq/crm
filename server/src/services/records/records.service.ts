@@ -3,6 +3,7 @@ import { type SQL, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import type { ObjectDefinition, PropertyValue } from '../../../../src/contracts/metadata';
 import type { CreateRecord, CrmRecord, ListQuery, ListResult, RecordDetail, Reference, RelatedGroup, SummaryQuery, SummaryRow, UpdateRecord } from '../../../../src/contracts/records';
+import { actorOf, assertCan, visibility } from '../people/access';
 import type { WorkspaceService } from '../workspace/workspace.service';
 import { condition, order, property, propertyText, search, tokens } from './records.query';
 import type { RecordsRepository } from './records.repository';
@@ -20,11 +21,17 @@ export class RecordsService {
     private readonly workspace: WorkspaceService,
   ) {}
 
+  /** What the acting person may see comes first; filters and search only narrow it. */
+  private visible(ctx: Context): SQL[] {
+    const condition = visibility(actorOf(ctx));
+    return condition ? [condition] : [];
+  }
+
   /** The conditions a query amounts to: its object, its view's filters, its own filters and its search. */
   private where(ctx: Context, object: ObjectDefinition, query: { viewId?: string; filters?: ListQuery['filters']; search?: string }): SQL[] {
     const view = query.viewId ? object.views.find((item) => item.id === query.viewId) : undefined;
     const resolve = tokens(ctx.userId);
-    const where: SQL[] = [sql`records.object_id = ${object.id}`];
+    const where: SQL[] = [sql`records.object_id = ${object.id}`, ...this.visible(ctx)];
     for (const filter of [...(view?.filters ?? []), ...(query.filters ?? [])]) where.push(condition(object, filter, resolve));
     const needle = query.search?.trim();
     if (needle) where.push(search(object, needle));
@@ -69,7 +76,8 @@ export class RecordsService {
   }
 
   async find(ctx: Context, id: string): Promise<CrmRecord> {
-    const record = await this.records.one(ctx, id);
+    // A record the person may not see is reported the same way as one that does not exist.
+    const record = await this.records.one(ctx, id, ...this.visible(ctx));
     if (!record) throw new NotFoundError('record', id);
     return record;
   }
@@ -88,14 +96,14 @@ export class RecordsService {
     for (const definition of own?.properties ?? []) {
       if (definition.type !== 'reference' || !definition.referenceObjectId) continue;
       const target = record.properties[definition.id];
-      const linked = typeof target === 'string' ? await this.records.one(ctx, target) : undefined;
+      const linked = typeof target === 'string' ? await this.records.one(ctx, target, ...this.visible(ctx)) : undefined;
       groups.push({ objectId: definition.referenceObjectId, total: linked ? 1 : 0, records: linked ? [linked] : [] });
     }
     // Records of other objects that point at this one.
     for (const object of objects) {
       const pointing = object.properties.filter((candidate) => candidate.type === 'reference' && candidate.referenceObjectId === record.objectId);
       if (pointing.length === 0 || groups.some((group) => group.objectId === object.id)) continue;
-      const where = [sql`records.object_id = ${object.id}`, sql`(${sql.join(pointing.map((reference) => sql`${propertyText(reference.id)} = ${id}`), sql` or `)})`];
+      const where = [sql`records.object_id = ${object.id}`, ...this.visible(ctx), sql`(${sql.join(pointing.map((reference) => sql`${propertyText(reference.id)} = ${id}`), sql` or `)})`];
       const [records, total] = await Promise.all([this.records.select(ctx, where, sql`records.created_at desc, records.id`, RELATED_LIMIT, 0), this.records.total(ctx, where)]);
       groups.push({ objectId: object.id, total, records });
     }
@@ -131,11 +139,22 @@ export class RecordsService {
 
   async update(ctx: Context, input: UpdateRecord): Promise<CrmRecord> {
     const record = await this.find(ctx, input.id);
-    await this.validate(ctx, await this.workspace.definition(ctx, record.objectId), input.properties, record.id);
+    const object = await this.workspace.definition(ctx, record.objectId);
+    assertCan(actorOf(ctx), 'edit', record, object.singular.toLowerCase());
+    await this.validate(ctx, object, input.properties, record.id);
     return (await this.records.patch(ctx, record.id, input.properties)) ?? record;
   }
 
+  reassign(ctx: Context, fromId: string, toId: string): Promise<number> {
+    return this.records.reassign(ctx, fromId, toId);
+  }
+
   async remove(ctx: Context, ids: string[]): Promise<{ deleted: number }> {
-    return { deleted: await this.records.remove(ctx, ids) };
+    const actor = actorOf(ctx);
+    const objects = await this.workspace.definitions(ctx);
+    const records = await this.records.byIds(ctx, ids, ...this.visible(ctx));
+    // All or nothing: one record the person may not delete stops the whole request.
+    for (const record of records) assertCan(actor, 'delete', record, objects.find((object) => object.id === record.objectId)?.singular.toLowerCase() ?? 'record');
+    return { deleted: records.length === 0 ? 0 : await this.records.remove(ctx, records.map((record) => record.id)) };
   }
 }

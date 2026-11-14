@@ -7,3 +7,5 @@ export const activitiesTable = compiled.activitiesTable;
 export const objectsTable = compiled.objectsTable;
 export const peopleTable = compiled.peopleTable;
 export const recordsTable = compiled.recordsTable;
+export const rolesTable = compiled.rolesTable;
+export const teamsTable = compiled.teamsTable;

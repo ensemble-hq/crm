@@ -7,7 +7,10 @@ import { ActivityService } from './activity/activity.service';
 import { BriefService } from './brief/brief.service';
 import { RecordsRepository } from './records/records.repository';
 import { RecordsService } from './records/records.service';
-import { ObjectsRepository, PeopleRepository } from './workspace/workspace.repository';
+import { actingContext } from './people/access';
+import { PeopleRepository, RolesRepository, TeamsRepository } from './people/people.repository';
+import { PeopleService } from './people/people.service';
+import { ObjectsRepository } from './workspace/workspace.repository';
 import { WorkspaceService } from './workspace/workspace.service';
 
 export interface ServiceDeps {
@@ -19,12 +22,13 @@ type Handler = (ctx: Context, input: any) => Promise<unknown>;
 
 /**
  * Builds the services and registers one procedure per operation in the shared list. An operation
- * with no handler here stops the server from starting, so the list can never promise something the
- * server cannot do.
+ * that has no handler yet is left out of what the server offers.
  */
 export function registerServices(communication: CommunicationLayer, deps: ServiceDeps): Operation[] {
-  const workspace = new WorkspaceService(new ObjectsRepository(deps.db), new PeopleRepository(deps.db));
-  const records = new RecordsService(new RecordsRepository(deps.db), workspace);
+  const recordsRepository = new RecordsRepository(deps.db);
+  const people = new PeopleService(new PeopleRepository(deps.db), new TeamsRepository(deps.db), new RolesRepository(deps.db), (ctx, fromId, toId) => recordsRepository.reassign(ctx, fromId, toId));
+  const workspace = new WorkspaceService(new ObjectsRepository(deps.db), people);
+  const records = new RecordsService(recordsRepository, workspace);
   const activity = new ActivityService(new ActivityRepository(deps.db), records);
   const brief = new BriefService(records, activity, workspace);
 
@@ -40,13 +44,27 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     'activity.list': (ctx, input) => activity.list(ctx, input),
     'activity.create': (ctx, input) => activity.create(ctx, input),
     'brief.get': (ctx, input) => brief.get(ctx, input),
+    'people.directory': (ctx) => people.directory(ctx),
+    'people.invite': (ctx, input) => people.invite(ctx, input),
+    'people.update': (ctx, input) => people.update(ctx, input),
+    'people.deactivate': (ctx, input) => people.deactivate(ctx, input),
+    'people.reactivate': (ctx, input) => people.reactivate(ctx, input),
+    'teams.save': (ctx, input) => people.saveTeam(ctx, input),
+    'teams.delete': (ctx, input) => people.deleteTeam(ctx, input),
+    'roles.save': (ctx, input) => people.saveRole(ctx, input),
+    'roles.delete': (ctx, input) => people.deleteRole(ctx, input),
+    'people.viewAs': (ctx, input) => people.viewAs(ctx, input),
   };
 
   // The list in the contract covers the whole CRM; the server serves the ones it has built so far.
   const served = operations.filter((operation) => handlers[operation.name]);
   for (const operation of served) {
     const handler = handlers[operation.name] as Handler;
-    communication.register(operation.name, { schema: { input: operation.input, output: operation.output }, handler });
+    communication.register(operation.name, {
+      schema: { input: operation.input, output: operation.output },
+      // Every operation starts by working out who it runs as; nothing below this line can skip it.
+      handler: async (ctx, input) => handler(actingContext(ctx, await people.actor(ctx)), input),
+    });
   }
   return served;
 }

@@ -4,19 +4,19 @@ import { CURRENT_USER_ID, users } from './definitions';
 
 /** People, teams, roles and who is signed in, for the mock. `can*` and `visible` are what the rest of the mock asks before reading or writing. */
 
-const roles: Role[] = [
+export const roles: Role[] = [
   { id: 'role_admin', name: 'Admin', description: 'Sees and changes everything, and runs the workspace.', view: 'all', edit: 'all', delete: 'all', manageSettings: true, managePeople: true, exportRecords: true, builtIn: true },
   { id: 'role_manager', name: 'Manager', description: 'Sees everything; changes and deletes their team\'s records.', view: 'all', edit: 'team', delete: 'team', manageSettings: true, managePeople: false, exportRecords: true, builtIn: true },
   { id: 'role_rep', name: 'Sales rep', description: 'Sees their team\'s records and changes their own.', view: 'team', edit: 'own', delete: 'none', manageSettings: false, managePeople: false, exportRecords: false, builtIn: true },
   { id: 'role_viewer', name: 'Read only', description: 'Sees everything and changes nothing.', view: 'all', edit: 'none', delete: 'none', manageSettings: false, managePeople: false, exportRecords: false, builtIn: true },
 ];
 
-const teams: Team[] = [
+export const teams: Team[] = [
   { id: 'team_new', name: 'New business' },
   { id: 'team_accounts', name: 'Account management' },
 ];
 
-const PLACEMENT: Record<string, { roleId: string; teamId: string }> = {
+export const PLACEMENT: Record<string, { roleId: string; teamId: string }> = {
   usr_maya: { roleId: 'role_admin', teamId: 'team_new' },
   usr_priya: { roleId: 'role_manager', teamId: 'team_new' },
   usr_jonas: { roleId: 'role_rep', teamId: 'team_new' },

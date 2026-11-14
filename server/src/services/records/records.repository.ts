@@ -40,15 +40,15 @@ export class RecordsRepository extends DrizzleRepository<RecordRow> {
     return row?.total ?? 0;
   }
 
-  async byIds(ctx: Context, ids: string[]): Promise<CrmRecord[]> {
+  async byIds(ctx: Context, ids: string[], ...where: SQL[]): Promise<CrmRecord[]> {
     if (ids.length === 0) return [];
     const list = sql.join(ids.map((id) => sql`${id}`), sql`, `);
-    const rows = await this.rows<Raw>(sql`select ${COLUMNS} from records where ${this.scope(ctx, sql`records.id in (${list})`)}`);
+    const rows = await this.rows<Raw>(sql`select ${COLUMNS} from records where ${this.scope(ctx, sql`records.id in (${list})`, ...where)}`);
     return rows.map(toRecord);
   }
 
-  async one(ctx: Context, id: string): Promise<CrmRecord | undefined> {
-    return (await this.byIds(ctx, [id]))[0];
+  async one(ctx: Context, id: string, ...where: SQL[]): Promise<CrmRecord | undefined> {
+    return (await this.byIds(ctx, [id], ...where))[0];
   }
 
   /** Count, and the sum of a number property, for each value of a property. */
@@ -67,6 +67,14 @@ export class RecordsRepository extends DrizzleRepository<RecordRow> {
   async patch(ctx: Context, id: string, changes: Record<string, PropertyValue>): Promise<CrmRecord | undefined> {
     await this.db.execute(sql`update records set properties = records.properties || ${JSON.stringify(changes)}::jsonb, updated_at = now() where ${this.scope(ctx, sql`records.id = ${id}`)}`);
     return this.one(ctx, id);
+  }
+
+  /** Hands every record one person owns to another. */
+  async reassign(ctx: Context, fromId: string, toId: string): Promise<number> {
+    const rows = await this.rows<{ id: string }>(
+      sql`update records set properties = jsonb_set(records.properties, '{owner}', to_jsonb(${toId}::text)), updated_at = now() where ${this.scope(ctx, sql`records.properties->>'owner' = ${fromId}`)} returning records.id`,
+    );
+    return rows.length;
   }
 
   async remove(ctx: Context, ids: string[]): Promise<number> {

@@ -3,6 +3,7 @@ import { createPostgresDatabase, runMigrations } from '@mariachi/database-postgr
 import { sql } from 'drizzle-orm';
 import { objects, users } from '../../src/mock/definitions';
 import { dataset, mulberry32 } from '../../src/mock/generate';
+import { PLACEMENT, roles, teams } from '../../src/mock/team';
 import { TENANT_ID } from './config';
 
 /**
@@ -33,7 +34,7 @@ async function main(): Promise<void> {
   const db = database.db;
   try {
     await runMigrations(database.adapter, { migrationsFolder: 'drizzle' });
-    if (process.argv.includes('--reset')) await db.execute(sql`truncate activities, records, objects, people`);
+    if (process.argv.includes('--reset')) await db.execute(sql`truncate activities, records, objects, people, teams, roles`);
     const [existing] = (await db.execute(sql`select count(*)::int as total from objects`)) as unknown as Array<{ total: number }>;
     if ((existing?.total ?? 0) > 0) {
       console.log('The database already has data. Run with --reset to replace it.');
@@ -43,7 +44,15 @@ async function main(): Promise<void> {
     for (const [position, definition] of objects.entries()) {
       await db.execute(sql`insert into objects (id, tenant_id, position, definition) values (${definition.id}, ${TENANT_ID}, ${position}, ${JSON.stringify(definition)}::jsonb)`);
     }
-    for (const user of users) await db.execute(sql`insert into people (id, tenant_id, name, email) values (${user.id}, ${TENANT_ID}, ${user.name}, ${user.email})`);
+    for (const [position, { id, builtIn, ...settings }] of roles.entries()) {
+      await db.execute(sql`insert into roles (id, tenant_id, settings, built_in, position) values (${id}, ${TENANT_ID}, ${JSON.stringify(settings)}::jsonb, ${builtIn}, ${position})`);
+    }
+    for (const team of teams) await db.execute(sql`insert into teams (id, tenant_id, name) values (${team.id}, ${TENANT_ID}, ${team.name})`);
+    for (const [index, user] of users.entries()) {
+      const placement = PLACEMENT[user.id];
+      // Staggered so the directory lists people in the order they joined.
+      await db.execute(sql`insert into people (id, tenant_id, name, email, role_id, team_id, created_at) values (${user.id}, ${TENANT_ID}, ${user.name}, ${user.email}, ${placement?.roleId ?? 'role_rep'}, ${placement?.teamId ?? null}, now() - make_interval(mins => ${users.length - index}))`);
+    }
 
     const records = [...dataset().byId.values()];
     for (let start = 0; start < records.length; start += BATCH) {
