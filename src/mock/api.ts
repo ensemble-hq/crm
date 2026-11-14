@@ -20,6 +20,7 @@ import { createCaptureApi } from './capture';
 import { createInboxApi } from './inbox';
 import { createReportsApi } from './reports';
 import { createSalesApi } from './sales';
+import { createBriefApi } from './brief';
 import { createSequencesApi, enrollFromWorkflow } from './sequences';
 import { activeUsers, assertAllowed, assertCan, createTeamApi, currentAccess, session, visible } from './team';
 import { type WorkflowDeps, createWorkflowsApi, fire } from './workflows';
@@ -568,6 +569,7 @@ export const mockApi: CrmApi = {
   ...createWorkflowsApi(workflowDeps),
   ...createCaptureApi({ respond, upsertContact, logActivity }),
   ...createTeamApi(respond, reassignRecords),
+  ...createBriefApi({ respond, get, definition, related, activity: activityFor }),
   ...createSalesApi({
     respond,
     get,

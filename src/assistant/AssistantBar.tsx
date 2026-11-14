@@ -23,6 +23,11 @@ export function AssistantBar({ offset }: { /** Width of the sidebar, so the bar 
   const input = useRef<HTMLInputElement>(null);
   const object = workspace.object(assistant.page.objectId);
 
+  // A page can ask the assistant something itself (a suggested next step on a record); the answer shows here.
+  useEffect(() => {
+    if (assistant.working) setOpen(true);
+  }, [assistant.working]);
+
   // Cmd/Ctrl+J puts the cursor in the bar from anywhere; Escape closes the panel.
   useEffect(() => {
     function onKey(event: KeyboardEvent) {

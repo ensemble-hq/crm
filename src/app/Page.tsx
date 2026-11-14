@@ -1,7 +1,8 @@
 import { ChevronLeft, type LucideIcon } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ICON, toolbarButton } from '../ui/styles';
+import { AREAS } from './areas';
 
 export type Crumb = { label: string; to?: string };
 
@@ -23,6 +24,9 @@ export function Page({
   children: ReactNode;
 }) {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  // On the front page of a tool that shares an area, the area's other tools are one tab away.
+  const area = AREAS.find((item) => item.tabs.some((tab) => tab.to === pathname));
   const parent = crumbs.length > 1 ? crumbs[crumbs.length - 2] : undefined;
   return (
     <>
@@ -55,6 +59,17 @@ export function Page({
           {actions}
         </div>
       </div>
+      {area ? (
+        <nav className="m-tabs" aria-label={area.label} style={{ paddingInline: 'var(--m-space-3)' }}>
+          <div className="m-tab-list">
+            {area.tabs.map((tab) => (
+              <Link key={tab.to} className="m-tab" to={tab.to} aria-selected={tab.to === pathname} aria-current={tab.to === pathname ? 'page' : undefined} style={{ textDecoration: 'none' }}>
+                {tab.label}
+              </Link>
+            ))}
+          </div>
+        </nav>
+      ) : null}
       <main
         className="m-container"
         style={

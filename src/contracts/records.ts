@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { BriefApi } from './brief';
 import type { CaptureApi } from './capture';
 import type { InboxApi } from './inbox';
 import type { ReportsApi } from './reports';
@@ -164,7 +165,7 @@ export type Workspace = {
   access: Access;
 };
 
-export interface CrmApi extends InboxApi, ReportsApi, SequencesApi, WorkflowsApi, CaptureApi, TeamApi, SalesApi {
+export interface CrmApi extends InboxApi, ReportsApi, SequencesApi, WorkflowsApi, CaptureApi, TeamApi, SalesApi, BriefApi {
   getWorkspace(): Promise<Workspace>;
   listRecords(query: ListQuery): Promise<ListResult>;
   summarize(query: SummaryQuery): Promise<SummaryRow[]>;

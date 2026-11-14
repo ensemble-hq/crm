@@ -1,5 +1,6 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { type CSSProperties, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api, useQuery } from '../api';
 import { useWorkspace } from '../app/workspace';
 import type { CrmRecord } from '../contracts/records';
@@ -63,9 +64,14 @@ export function LineItems({ deal, onSaved }: { deal: CrmRecord; onSaved: () => v
         <h2 style={cardTitle}>
           Line items <span style={{ ...small, fontVariantNumeric: 'tabular-nums' }}>{rows.length > 0 ? currency(Math.round(sum)) : ''}</span>
         </h2>
-        <button type="button" className="m-button" data-size="sm" onClick={() => setAdding(true)}>
-          <Plus size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Product
-        </button>
+        <span className="m-cluster" data-gap="3">
+          <Link to="/products" style={{ ...small, textDecoration: 'none' }}>
+            Product library
+          </Link>
+          <button type="button" className="m-button" data-size="sm" onClick={() => setAdding(true)}>
+            <Plus size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Product
+          </button>
+        </span>
       </div>
       {rows.length > 0 ? (
         <div className="m-table-wrap" style={{ '--m-table-wrap-shadow': 'none', '--m-table-wrap-radius': '0' } as CSSProperties}>

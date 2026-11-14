@@ -1,9 +1,10 @@
-import { BarChart3, Pencil, Pin, PinOff, Plus, Trash2, X } from 'lucide-react';
-import { type CSSProperties, useState } from 'react';
+import { BarChart3, Pencil, Pin, PinOff, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { type CSSProperties, type FormEvent, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, useQuery } from '../api';
 import { Page } from '../app/Page';
 import { useWorkspace } from '../app/workspace';
+import { draftReport } from '../assistant/mock-engine';
 import type { Filter, ObjectDefinition } from '../contracts/metadata';
 import type { ChartType, Dashboard, Measure, ReportDefinition, ReportSettings } from '../contracts/reports';
 import { Modal } from '../ui/Modal';
@@ -172,6 +173,8 @@ export function ReportBuilder() {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [ask, setAsk] = useState('');
+  const [missed, setMissed] = useState(false);
 
   // The form starts from the saved report, or from a sensible first report on the first object.
   const settings = draft ?? existing ?? (isNew ? startingSettings(workspace.objects[0]) : undefined);
@@ -246,6 +249,14 @@ export function ReportBuilder() {
 
   const setFilters = (filters: Filter[]) => set({ filters });
 
+  /** Fills the builder in from a sentence. The controls below then show what it understood. */
+  function draftFromSentence(event: FormEvent) {
+    event.preventDefault();
+    const drafted = draftReport(ask, workspace.objects);
+    setMissed(!drafted);
+    if (drafted) setDraft(drafted);
+  }
+
   return (
     <Page
       icon={BarChart3}
@@ -264,6 +275,22 @@ export function ReportBuilder() {
         </>
       }
     >
+      <form className="m-stack" data-gap="1" onSubmit={draftFromSentence} style={{ marginBlockEnd: 'var(--m-space-4)' }}>
+        <label className="m-sr-only" htmlFor="report-ask">
+          Describe the report
+        </label>
+        <div className="m-cluster" data-gap="2" style={{ flexWrap: 'nowrap' }}>
+          <input className="m-input" id="report-ask" value={ask} placeholder="Describe the report: total amount of won deals by owner" onChange={(event) => setAsk(event.target.value)} style={{ flex: 1 }} />
+          <button type="submit" className="m-button" disabled={ask.trim() === ''}>
+            <Sparkles size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Draft it
+          </button>
+        </div>
+        {missed ? (
+          <p className="m-field-hint" role="status">
+            I couldn't tell what to split by. Say what to count and "by" what, such as "contacts by lifecycle stage" or "deals by month".
+          </p>
+        ) : null}
+      </form>
       <div className="m-split" style={{ '--m-layout-split-side': '340px', '--m-layout-split-gap': 'var(--m-space-5)', alignItems: 'flex-start' } as CSSProperties}>
         <section className="m-card" aria-label="Report settings">
           <div className="m-card-body m-stack" data-gap="3">

@@ -1,4 +1,4 @@
-import { BarChart3, Target, Bookmark, CalendarDays, Eye, FileText, House, Inbox, type LucideIcon, Monitor, Moon, PanelLeft, PanelLeftOpen, Search, Send, Settings, Sparkles, Sun, Workflow } from 'lucide-react';
+import { Bookmark, Eye, House, Inbox, type LucideIcon, Monitor, Moon, PanelLeft, PanelLeftOpen, Search, Settings, Sparkles, Sun } from 'lucide-react';
 import { type CSSProperties, useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api, useQuery } from '../api';
@@ -7,6 +7,7 @@ import { AssistantProvider } from '../assistant/AssistantProvider';
 import { objectIcon } from '../ui/icons';
 import { ICON, initials } from '../ui/styles';
 import { CommandPalette } from './CommandPalette';
+import { AREAS } from './areas';
 import { Notifications } from './Notifications';
 import { type ColorMode, useColorMode } from './colorMode';
 import { useWorkspace } from './workspace';
@@ -64,29 +65,28 @@ function Sidebar({ collapsed, onToggle, onSearch }: { collapsed: boolean; onTogg
   const location = useLocation();
   const here = `${location.pathname}${location.search}`;
 
-  // Objects come from the workspace's definitions, so a custom object appears here by itself.
-  // Tasks sit with the inbox, as the day's work, and show how many of yours are due.
+  // The sidebar is kept short on purpose: the day's work, the records, and two areas that gather the
+  // tools. Tasks are worked from Today, which carries the count of what is due; set-up lists such as
+  // products are reached by search. Objects come from the workspace's definitions, so a custom
+  // object appears here by itself.
   const taskObject = workspace.objects.find((object) => object.completion);
   const due = useQuery(() => (taskObject ? api.listRecords({ objectId: taskObject.id, viewId: taskObject.views[0]?.id, page: 1, pageSize: 1 }) : Promise.resolve(undefined)), [taskObject?.id, workspace.revision]);
   const unread = useQuery(() => api.inboxCounts(), [workspace.revision]);
   const primary: NavItem[] = [
     { to: '/assistant', label: 'Assistant', icon: Sparkles },
-    { to: '/', label: 'Today', icon: House },
+    { to: '/', label: 'Today', icon: House, count: due.data?.total },
     { to: '/inbox', label: 'Inbox', icon: Inbox, count: unread.data?.mineUnread },
-    ...(taskObject ? [{ to: `/${taskObject.id}`, label: taskObject.plural, icon: objectIcon(taskObject.icon), count: due.data?.total }] : []),
-    ...workspace.objects.filter((object) => object !== taskObject).map((object) => ({ to: `/${object.id}`, label: object.plural, icon: objectIcon(object.icon) })),
-    { to: '/sequences', label: 'Sequences', icon: Send },
-    { to: '/workflows', label: 'Workflows', icon: Workflow },
-    { to: '/forms', label: 'Forms', icon: FileText },
-    { to: '/meetings', label: 'Meetings', icon: CalendarDays },
-    { to: '/forecast', label: 'Forecast', icon: Target },
-    { to: '/reports', label: 'Reports', icon: BarChart3 },
   ];
+  const records: NavItem[] = workspace.objects.filter((object) => object !== taskObject && object.navigation !== 'search').map((object) => ({ to: `/${object.id}`, label: object.plural, icon: objectIcon(object.icon) }));
+  const areas = AREAS.map((area) => ({ item: { to: area.tabs[0]?.to ?? '/', label: area.label, icon: area.icon }, paths: area.tabs.map((tab) => tab.to) }));
 
   const onPinned = pinned.some((item) => item.to === here);
+  const isUnder = (to: string) => location.pathname === to || location.pathname.startsWith(`${to}/`);
   const isCurrent = (to: string) => {
     if (onPinned) return false;
-    return to === '/' ? location.pathname === '/' : location.pathname === to || location.pathname.startsWith(`${to}/`);
+    // Tasks are part of Today, so their pages keep Today lit.
+    if (to === '/') return location.pathname === '/' || (taskObject !== undefined && isUnder(`/${taskObject.id}`));
+    return isUnder(to);
   };
 
   return (
@@ -179,6 +179,21 @@ function Sidebar({ collapsed, onToggle, onSearch }: { collapsed: boolean; onTogg
           <ul>
             {primary.map((item) => (
               <SidebarLink key={item.to} item={item} current={isCurrent(item.to)} collapsed={collapsed} />
+            ))}
+          </ul>
+        </div>
+        <div className="m-sidebar-section">
+          {collapsed ? null : <h2 className="m-sidebar-heading">Records</h2>}
+          <ul>
+            {records.map((item) => (
+              <SidebarLink key={item.to} item={item} current={isCurrent(item.to)} collapsed={collapsed} />
+            ))}
+          </ul>
+        </div>
+        <div className="m-sidebar-section">
+          <ul>
+            {areas.map((area) => (
+              <SidebarLink key={area.item.to} item={area.item} current={!onPinned && area.paths.some(isUnder)} collapsed={collapsed} />
             ))}
           </ul>
         </div>

@@ -435,6 +435,7 @@ const products: ObjectDefinition = {
   singular: 'Product',
   plural: 'Products',
   icon: 'package',
+  navigation: 'search',
   primaryProperty: 'name',
   secondaryProperty: 'sku',
   properties: [

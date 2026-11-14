@@ -18,6 +18,7 @@ const PAGES: Array<{ label: string; to: string }> = [
   { label: 'Workflows', to: '/workflows' },
   { label: 'Forms', to: '/forms' },
   { label: 'Meetings', to: '/meetings' },
+  { label: 'Forecast', to: '/forecast' },
   { label: 'Reports', to: '/reports' },
   { label: 'Import', to: '/import' },
   { label: 'Settings', to: '/settings' },

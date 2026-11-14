@@ -571,15 +571,18 @@ async function remind(ctx: EngineContext, what: string): Promise<void> {
   await ctx.say(`Done. "${name}" is on your task list${due ? `, due ${formatDate(due)}` : ''}${about}.`);
 }
 
-/** "Chart won deals by source": works out a report from the sentence, draws it, and offers to keep it. */
-async function buildReport(ctx: EngineContext, text: string): Promise<boolean> {
+/**
+ * A report from a sentence such as "won deals by source" or "total amount of deals by month".
+ * Scripted: it reads the object, what to split by, and a few words for the measure and filters.
+ */
+export function draftReport(input: string, objects: ObjectDefinition[], pageObjectId?: string): ReportSettings | undefined {
+  const text = input.trim().toLowerCase();
   const object =
-    ctx.objects.find((item) => text.includes(item.plural.toLowerCase()) || new RegExp(`\\b${item.singular.toLowerCase()}\\b`).test(text)) ??
-    ctx.objects.find((item) => item.id === ctx.page.objectId) ??
-    ctx.objects.find((item) => item.id === 'deals');
+    objects.find((item) => text.includes(item.plural.toLowerCase()) || new RegExp(`\\b${item.singular.toLowerCase()}\\b`).test(text)) ??
+    objects.find((item) => item.id === pageObjectId) ??
+    objects.find((item) => item.id === 'deals');
   const by = /\bby ([a-z ]+?)(?: (?:this|last|for|in|over|from)\b.*)?[.?]?$/.exec(text)?.[1]?.trim();
-  if (!object || !by) return false;
-
+  if (!object || !by) return undefined;
   const dateProperty = object.properties.find((property) => property.id === 'closeDate') ?? object.properties.find((property) => property.id === 'createdAt');
   const bucket = by === 'month' || by === 'quarter' ? by : undefined;
   const group = bucket
@@ -588,7 +591,7 @@ async function buildReport(ctx: EngineContext, text: string): Promise<boolean> {
         const label = property.label.toLowerCase();
         return label === by || property.id.toLowerCase() === by.replace(/ /g, '') || label.includes(by) || by.includes(label) || (by === 'rep' && property.id === 'owner') || (by === 'person' && property.id === 'owner');
       });
-  if (!group) return false;
+  if (!group) return undefined;
 
   const amount = object.properties.find((property) => property.type === 'currency');
   const measure: ReportSettings['measure'] = amount && /average|avg/.test(text) ? { kind: 'average', property: amount.id } : amount && /value|amount|revenue|worth|total|\$/.test(text) ? { kind: 'sum', property: amount.id } : { kind: 'count' };
@@ -599,7 +602,18 @@ async function buildReport(ctx: EngineContext, text: string): Promise<boolean> {
   const stageWord = Array.isArray(stageFilter?.value) ? { won: 'Won', lost: 'Lost' }[stageFilter.value[0] ?? ''] : undefined;
   const subject = `${stageWord ? `${stageWord} ` : filters.some((filter) => filter.property === 'owner' && filter.operator === 'in') ? 'My ' : ''}${object.plural.toLowerCase()}`;
   const what = measure.kind === 'count' ? `${subject.slice(0, 1).toUpperCase()}${subject.slice(1)}` : `${measure.kind === 'sum' ? 'Total' : 'Average'} ${amount?.label.toLowerCase()} of ${subject}`;
-  const settings: ReportSettings = { name: `${what} by ${bucket ?? group.label.toLowerCase()}`, objectId: object.id, measure, groupBy: group.id, bucket, filters, chart: bucket ? 'columns' : 'bars' };
+  return { name: `${what} by ${bucket ?? group.label.toLowerCase()}`, objectId: object.id, measure, groupBy: group.id, bucket, filters, chart: bucket ? 'columns' : 'bars' };
+}
+
+/** "Chart won deals by source": works out a report from the sentence, draws it, and offers to keep it. */
+async function buildReport(ctx: EngineContext, text: string): Promise<boolean> {
+  const settings = draftReport(text, ctx.objects, ctx.page.objectId);
+  const object = ctx.objects.find((item) => item.id === settings?.objectId);
+  if (!settings || !object) return false;
+  const measure = settings.measure;
+  const amount = object.properties.find((property) => property.type === 'currency');
+  const group = object.properties.find((property) => property.id === settings.groupBy);
+  const bucket = settings.bucket;
 
   const result = await ctx.tool('run_report', `Working out ${settings.name.toLowerCase()}`, () => api.runReport(settings), (found) => `${plural(found.records, object.singular.toLowerCase())} in ${plural(found.rows.length, 'group')}`);
   const money = measure.kind !== 'count' && amount;
@@ -607,7 +621,7 @@ async function buildReport(ctx: EngineContext, text: string): Promise<boolean> {
   ctx.show({
     kind: 'chart',
     title: settings.name,
-    subtitle: `${plural(result.records, object.singular.toLowerCase())}${filters.length > 0 ? ` · ${filters.map((filter) => describeFilter(filter, object, ctx.users)).join('; ')}` : ''}`,
+    subtitle: `${plural(result.records, object.singular.toLowerCase())}${settings.filters.length > 0 ? ` · ${settings.filters.map((filter) => describeFilter(filter, object, ctx.users)).join('; ')}` : ''}`,
     bars: result.rows.map((row) => ({ label: row.label, value: row.value, display: show(row.value), note: measure.kind === 'count' ? undefined : plural(row.count, object.singular.toLowerCase()) })),
   });
   const top = [...result.rows].sort((a, b) => b.value - a.value)[0];

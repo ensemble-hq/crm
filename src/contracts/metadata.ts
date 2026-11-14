@@ -109,6 +109,8 @@ export const objectDefinitionSchema = z.object({
       dateProperty: z.string().optional(),
     })
     .optional(),
+  /** Where the object is reached from. `search` keeps set-up lists (products) out of the sidebar; they are found by search. */
+  navigation: z.enum(['sidebar', 'search']).optional(),
   /** Records of this object carry line items from the product library (deals). */
   lineItems: z.boolean().optional(),
   /** Records of this object can be converted into a contact, a company and a deal (leads). */

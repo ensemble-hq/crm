@@ -11,6 +11,7 @@ import { PropertyValue, formatDate, formatDateTime } from '../ui/PropertyValue';
 import { ConvertLeadDialog } from './ConvertLeadDialog';
 import { CreateRecordDialog } from './CreateRecordDialog';
 import { LineItems } from './LineItems';
+import { RecordBrief } from './RecordBrief';
 import { RecordProperties } from './RecordProperties';
 import { objectIcon } from '../ui/icons';
 import { ICON, cardTitle, link, medium, plainList, rowDivider, small, toolbarButton } from '../ui/styles';
@@ -375,6 +376,7 @@ export function RecordDetail() {
               </div>
             </aside>
             <div className="m-stack" data-gap="4" style={{ minInlineSize: 0 }}>
+              <RecordBrief recordId={record.id} onPlan={taskObject && taskObject.id !== object.id ? () => setAddingTask(true) : undefined} />
               {object.lineItems ? (
                 <LineItems
                   deal={record}
