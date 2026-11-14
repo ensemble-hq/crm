@@ -1,4 +1,4 @@
-import { type Context, NotFoundError, ValidationError } from '@mariachi/core';
+import { ConflictError, type Context, NotFoundError, ValidationError } from '@mariachi/core';
 import { randomUUID } from 'node:crypto';
 import type { Conversation, ConversationDetail, ConversationList, ConversationQuery, EmailHealth, EmailTemplate, InboxCounts, Message, UpdateConversation } from '../../../../src/contracts/inbox';
 import type { Reference } from '../../../../src/contracts/records';
@@ -48,6 +48,9 @@ export class InboxService {
     private readonly workspace: WorkspaceService,
     private readonly transaction: <T>(ctx: Context, fn: () => Promise<T>) => Promise<T>,
   ) {}
+
+  /** Says which sequence uses a template, if one does. */
+  templateUsedBy?: (ctx: Context, templateId: string) => Promise<string | undefined>;
 
   /** Names for the contacts, companies and deals conversations point at. */
   private async references(ctx: Context, rows: ConversationRow[]): Promise<Record<string, Reference>> {
@@ -133,6 +136,8 @@ export class InboxService {
 
   async deleteTemplate(ctx: Context, templateId: string): Promise<void> {
     assertAllowed(actorOf(ctx), 'manageSettings', 'delete templates');
+    const used = await this.templateUsedBy?.(ctx, templateId);
+    if (used) throw new ConflictError(`"${used}" uses this template. Change that step first.`);
     await this.templates.deleteWhere(ctx, { id: templateId });
   }
 }

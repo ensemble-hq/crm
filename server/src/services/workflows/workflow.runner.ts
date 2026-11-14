@@ -12,6 +12,7 @@ import type { PeopleService } from '../people/people.service';
 import type { RecordEvents } from '../records/records.events';
 import { condition, tokens } from '../records/records.query';
 import type { RecordsRepository } from '../records/records.repository';
+import type { SequencesService } from '../sequences/sequences.service';
 import type { WorkspaceService } from '../workspace/workspace.service';
 import type { WorkflowRunsRepository, WorkflowsRepository } from './workflows.repository';
 
@@ -44,6 +45,7 @@ export class WorkflowRunner {
     private readonly notifications: NotificationsService,
     private readonly templates: EmailTemplatesRepository,
     private readonly mail: MailService,
+    private readonly sequences: SequencesService,
   ) {}
 
   /** Runs every workflow that is on and fits what happened. Returns how many ran. Safe to call twice for the same event. */
@@ -170,8 +172,12 @@ export class WorkflowRunner {
         await this.mail.compose(ctx, { contact, sender, subject: fill(template.subject || template.name), body: fill(template.body), dealId: record.objectId === 'deals' ? record.id : null });
         return `Sent "${template.name}" to ${String(contact.properties.name ?? 'the contact')}`;
       }
-      case 'enroll':
-        throw new ActionFailed('Sequences are not available on the server yet.');
+      case 'enroll': {
+        const contactId = record.objectId === 'contacts' ? record.id : typeof record.properties.contact === 'string' ? record.properties.contact : null;
+        const contact = contactId ? await this.records.one(ctx, contactId) : undefined;
+        if (!contact) throw new ActionFailed('There is no contact to enrol on this record.');
+        return this.sequences.enrollFromWorkflow(ctx, action.sequenceId, contact, owner);
+      }
     }
   }
 }

@@ -6,6 +6,7 @@ import { activitySchema, createActivitySchema, importRequestSchema, importResult
 import { workflowDetailSchema, workflowSchema, workflowSettingsSchema } from './workflows';
 import { dashboardSchema, reportDefinitionSchema, reportResultSchema, reportSettingsSchema } from './reports';
 import { forecastSchema } from './sales';
+import { enrollResultSchema, saveSequenceSchema, sequenceDetailSchema, sequenceSchema } from './sequences';
 import { accessSchema, deactivateMemberSchema, directorySchema, inviteMemberSchema, memberSchema, roleSchema, saveRoleSchema, saveTeamSchema, teamSchema, updateMemberSchema } from './team';
 
 /**
@@ -462,6 +463,60 @@ export const operations: Operation[] = [
     title: 'Set a person\'s quarterly goal',
     description: 'Sets what a person is expected to close in a quarter. Needs permission to manage people.',
     input: z.object({ userId: z.string(), amount: z.number() }),
+    output: z.void(),
+    effect: 'write',
+  },
+  {
+    name: 'sequences.list',
+    method: 'listSequences',
+    title: 'List sequences',
+    description: 'Returns every sequence with its steps, whether it is running or paused, and how many contacts are in it, replied, finished or were stopped.',
+    input: none,
+    output: z.array(sequenceSchema),
+    effect: 'read',
+  },
+  {
+    name: 'sequences.get',
+    method: 'getSequence',
+    title: 'Get a sequence and who is in it',
+    description: 'Returns one sequence with its 40 most recent enrolments: which contact, how many steps they have been through, and when the next step runs.',
+    input: z.string().describe('The sequence\'s id.'),
+    output: sequenceDetailSchema,
+    effect: 'read',
+  },
+  {
+    name: 'sequences.save',
+    method: 'saveSequence',
+    title: 'Create or change a sequence',
+    description: 'Creates a sequence, or replaces one when `id` is given. Each step is an email (from a saved template), a call or a task, with a wait in working days after the step before. Pausing keeps the contacts but does nothing until it is set running again.',
+    input: saveSequenceSchema,
+    output: sequenceSchema,
+    effect: 'write',
+  },
+  {
+    name: 'sequences.delete',
+    method: 'deleteSequence',
+    title: 'Delete a sequence',
+    description: 'Deletes a sequence and takes every contact out of it. Emails already sent stay in the inbox.',
+    input: z.string().describe('The sequence\'s id.'),
+    output: z.void(),
+    effect: 'destructive',
+  },
+  {
+    name: 'sequences.enroll',
+    method: 'enrollContacts',
+    title: 'Enrol contacts in a sequence',
+    description: 'Puts contacts into a sequence. Its emails will be sent to them, from you, on the sequence\'s schedule, starting with the first step: ask the person before calling it. A contact with no email address, or already in the sequence, is left out with the reason. A contact who replies leaves the sequence by themselves.',
+    input: z.object({ sequenceId: z.string(), contactIds: z.array(z.string()).min(1).max(500) }),
+    output: enrollResultSchema,
+    effect: 'send',
+  },
+  {
+    name: 'sequences.stopEnrollment',
+    method: 'stopEnrollment',
+    title: 'Take a contact out of a sequence',
+    description: 'Stops a sequence for one contact, by the enrolment\'s id. Nothing more is sent to them from it.',
+    input: z.string().describe('The enrolment\'s id.'),
     output: z.void(),
     effect: 'write',
   },

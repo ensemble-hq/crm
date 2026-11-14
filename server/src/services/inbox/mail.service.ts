@@ -48,6 +48,9 @@ export class MailService {
     private readonly transaction: <T>(ctx: Context, fn: () => Promise<T>) => Promise<T>,
   ) {}
 
+  /** Told, inside the filing transaction, that a contact has written in. Sequences use it to stop. */
+  onReply?: (ctx: Context, contactId: string) => Promise<void>;
+
   /** Stores an arrival. Only when this returns may the provider be told "received". */
   async receive(ctx: Context, provider: string, providerMessageId: string, payload: InboundPayload): Promise<'stored' | 'duplicate'> {
     return this.transaction(ctx, async () => {
@@ -84,6 +87,7 @@ export class MailService {
         if (added) {
           await this.conversations.refresh(ctx, conversationId, { unread: true, reopen: true });
           await this.activities.create(ctx, { id: id('act'), recordId: contact.id, kind: 'email', title: `Email received: ${mail.subject}`, body: mail.text.slice(0, 500), actorId: 'system' });
+          await this.onReply?.(ctx, contact.id);
         }
         await this.inbound.update(ctx, arrival.id, { status: 'processed', conversationId, processedAt: new Date(), lastError: null });
       });
@@ -134,7 +138,7 @@ export class MailService {
   }
 
   /** Starts a new conversation with a contact by sending them an email: what a workflow's "send an email" does. */
-  async compose(ctx: Context, input: { contact: CrmRecord; sender: { id: string; name: string; email: string }; subject: string; body: string; dealId?: string | null }): Promise<string> {
+  async compose(ctx: Context, input: { contact: CrmRecord; sender: { id: string; name: string; email: string }; subject: string; body: string; dealId?: string | null }): Promise<{ messageId: string; conversationId: string }> {
     const toEmail = typeof input.contact.properties.email === 'string' ? input.contact.properties.email : '';
     if (!toEmail) throw new Error(`${String(input.contact.properties.name ?? 'The contact')} has no email address.`);
     return this.transaction(ctx, async () => {
@@ -142,7 +146,7 @@ export class MailService {
       const conversation = await this.conversations.create(ctx, { id: id('conv'), subject: input.subject, status: 'open', assigneeId: input.sender.id, contactId: input.contact.id, companyId: company, dealId: input.dealId ?? null, unread: false, preview: '', messageCount: 0 });
       const messageId = await this.queue(ctx, { conversationId: conversation.id, sender: input.sender, toEmail, subject: input.subject, body: input.body });
       await this.activities.create(ctx, { id: id('act'), recordId: input.contact.id, kind: 'email', title: `Email sent: ${input.subject}`, body: input.body, actorId: input.sender.id });
-      return messageId;
+      return { messageId, conversationId: conversation.id };
     });
   }
 

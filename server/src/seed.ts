@@ -6,6 +6,7 @@ import { objects, users } from '../../src/mock/definitions';
 import { dataset, mulberry32 } from '../../src/mock/generate';
 import { emailTemplates, inbox } from '../../src/mock/inbox';
 import { dashboards, reports } from '../../src/mock/reports';
+import { allEnrollments, sequences } from '../../src/mock/sequences';
 import { PLACEMENT, roles, teams } from '../../src/mock/team';
 import { TENANT_ID } from './config';
 
@@ -80,7 +81,7 @@ async function main(): Promise<void> {
   const db = database.db;
   try {
     await runMigrations(database.adapter, { migrationsFolder: 'drizzle' });
-    if (process.argv.includes('--reset')) await db.execute(sql`truncate activities, records, objects, people, teams, roles, workflows, workflow_runs, notifications, mariachi_event_outbox, conversations, messages, inbound_emails, email_templates, mail_cursors, dev_mail, reports, dashboards, goals`);
+    if (process.argv.includes('--reset')) await db.execute(sql`truncate activities, records, objects, people, teams, roles, workflows, workflow_runs, notifications, mariachi_event_outbox, conversations, messages, inbound_emails, email_templates, mail_cursors, dev_mail, reports, dashboards, goals, sequences, enrollments`);
     const [existing] = (await db.execute(sql`select count(*)::int as total from objects`)) as unknown as Array<{ total: number }>;
     if ((existing?.total ?? 0) > 0) {
       console.log('The database already has data. Run with --reset to replace it.');
@@ -155,6 +156,14 @@ async function main(): Promise<void> {
       insert into messages (id, tenant_id, conversation_id, direction, from_name, from_email, subject, body, status, message_id_header, sent_at)
       select row.id, ${TENANT_ID}, row."conversationId", row.direction, row."fromName", row."fromEmail", row.subject, row.body, row.status, row.header, row."sentAt"
       from jsonb_to_recordset(${JSON.stringify(allMessages)}::jsonb) as row(id text, "conversationId" text, direction text, "fromName" text, "fromEmail" text, subject text, body text, status text, header text, "sentAt" timestamptz)`);
+
+    for (const [index, sequence] of sequences.entries()) {
+      await db.execute(sql`insert into sequences (id, tenant_id, name, status, steps, created_at) values (${sequence.id}, ${TENANT_ID}, ${sequence.name}, ${sequence.status}, ${JSON.stringify(sequence.steps)}::jsonb, now() - make_interval(mins => ${sequences.length - index}))`);
+    }
+    await db.execute(sql`
+      insert into enrollments (id, tenant_id, sequence_id, contact_id, status, steps_done, enrolled_at, next_run_at)
+      select row.id, ${TENANT_ID}, row."sequenceId", row."contactId", row.status, row."stepsDone", row."enrolledAt", row."nextRunAt"
+      from jsonb_to_recordset(${JSON.stringify(allEnrollments())}::jsonb) as row(id text, "sequenceId" text, "contactId" text, status text, "stepsDone" int, "enrolledAt" timestamptz, "nextRunAt" timestamptz)`);
 
     console.log(`Seeded ${objects.length} objects, ${users.length} people, ${records.length} records and ${activities.length} activities.`);
   } finally {

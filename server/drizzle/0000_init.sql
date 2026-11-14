@@ -199,6 +199,34 @@ CREATE TABLE "roles" (
 );
 
 --> statement-breakpoint
+CREATE TABLE "enrollments" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"sequence_id" text NOT NULL,
+	"contact_id" text NOT NULL,
+	"status" text DEFAULT 'active' NOT NULL,
+	"steps_done" integer DEFAULT 0 NOT NULL,
+	"sender_id" text,
+	"conversation_id" text,
+	"problem" text,
+	"enrolled_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"next_run_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
+CREATE TABLE "sequences" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"name" text NOT NULL,
+	"status" text DEFAULT 'active' NOT NULL,
+	"steps" jsonb NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
 CREATE TABLE "teams" (
 	"id" text PRIMARY KEY NOT NULL,
 	"tenant_id" text NOT NULL,
@@ -271,6 +299,14 @@ CREATE INDEX "goals_tenant_id_idx" ON "goals" USING btree ("tenant_id");
 CREATE INDEX "reports_tenant_id_idx" ON "reports" USING btree ("tenant_id");
 --> statement-breakpoint
 CREATE INDEX "roles_tenant_id_idx" ON "roles" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX "enrollments_due_idx" ON "enrollments" USING btree ("tenant_id","status","next_run_at");
+--> statement-breakpoint
+CREATE INDEX "enrollments_sequence_idx" ON "enrollments" USING btree ("tenant_id","sequence_id","enrolled_at");
+--> statement-breakpoint
+CREATE INDEX "enrollments_contact_idx" ON "enrollments" USING btree ("tenant_id","contact_id","status");
+--> statement-breakpoint
+CREATE INDEX "sequences_tenant_id_idx" ON "sequences" USING btree ("tenant_id");
 --> statement-breakpoint
 CREATE INDEX "teams_tenant_id_idx" ON "teams" USING btree ("tenant_id");
 --> statement-breakpoint

@@ -13,7 +13,7 @@ const RECENT = 40;
 
 type Stored = { id: string; name: string; status: 'active' | 'paused'; steps: SequenceStep[] };
 
-const sequences: Stored[] = [
+export const sequences: Stored[] = [
   {
     id: 'seq_new_lead',
     name: 'New lead follow-up',
@@ -65,7 +65,7 @@ function nextRun(sequence: Stored, stepsDone: number, from: number): string | nu
   return step ? new Date(from + Math.max(step.waitDays, 0) * DAY).toISOString() : null;
 }
 
-function allEnrollments(): Enrollment[] {
+export function allEnrollments(): Enrollment[] {
   if (enrollments) return enrollments;
   const random = mulberry32(9_2026);
   const contacts = dataset().byObject.get('contacts') ?? [];

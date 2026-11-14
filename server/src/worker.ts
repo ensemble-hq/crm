@@ -25,7 +25,7 @@ async function main(): Promise<void> {
 
   const events = lifecycle.manage('events', new DefaultEvents({ bus: createEventBus({ adapter: 'redis-streams', url: config.redis.url, prefix: config.serviceName }), source: config.serviceName }, { logger, tracer, metrics }), { priority: 20 });
   const settings = useConfigSection<CrmSettings>(CRM_CONFIG);
-  const { runner, mail } = createServices({ db: database.db, transaction: database.transaction, source: config.serviceName, email: createEmailProvider(settings, database.db) });
+  const { runner, mail, sequences } = createServices({ db: database.db, transaction: database.transaction, source: config.serviceName, email: createEmailProvider(settings, database.db) });
 
   // Changes a workflow made are announced too, for whoever else listens, but never set off workflows.
   events.subscribe(
@@ -54,7 +54,11 @@ async function main(): Promise<void> {
     if (sweeping) return;
     sweeping = true;
     try {
-      const done = await mail.sweep({ traceId: `sweep-${Date.now()}`, userId: null, tenantId: TENANT_ID, scopes: [], identityType: 'service', logger });
+      const ctx = { traceId: `sweep-${Date.now()}`, userId: null, tenantId: TENANT_ID, scopes: [], identityType: 'service', logger };
+      // Sequence steps first, so an email a step queues is sent in this same pass if the event path is slow.
+      const steps = await sequences.runDue(ctx);
+      if (steps > 0) logger.info({ steps }, 'Sequence steps carried out');
+      const done = await mail.sweep(ctx);
       if (done.filed + done.sent + done.released + done.found > 0) logger.info(done, 'Email sweep picked up work the first path missed');
     } catch (error) {
       logger.error({ error }, 'The email sweep failed; it will run again');
