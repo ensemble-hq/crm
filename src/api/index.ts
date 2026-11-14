@@ -1,9 +1,15 @@
 import { type DependencyList, useCallback, useEffect, useRef, useState } from 'react';
 import type { CrmApi } from '../contracts/records';
 import { mockApi } from '../mock/api';
+import { createHttpApi } from './http';
 
-/** The one place the app chooses its data source. Swap `mockApi` for the HTTP client here. */
-export const api: CrmApi = mockApi;
+/**
+ * The one place the app chooses its data source. With `VITE_API_URL` set, the operations the server
+ * serves go to it; anything it does not serve yet still comes from the mock, so the app keeps
+ * working while the backend is built out one group of operations at a time.
+ */
+const server = import.meta.env.VITE_API_URL as string | undefined;
+export const api: CrmApi = server ? { ...mockApi, ...createHttpApi(server) } : mockApi;
 
 export type Query<T> = { data: T | undefined; loading: boolean; error: Error | undefined; reload: () => void };
 

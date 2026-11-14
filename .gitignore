@@ -4,3 +4,6 @@ dist
 .env.local
 *.log
 .DS_Store
+
+# Server settings for this machine
+server/.env

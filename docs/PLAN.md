@@ -259,6 +259,33 @@ What it does:
 ### First to ship
 The assistant (page, bar and voice), record summaries, email drafting, AI fields, meeting notes into the CRM, the daily briefing, AI import mapping and the MCP server. Background agents come after.
 
+## Backend
+
+One instance per customer: an API server, a worker and the web app, with Postgres and Redis on the customer's VM. Built on Mariachi's packages.
+
+- **The contract is the seam.** The pages call `CrmApi` only. The server implements it one group of methods at a time, and the mock stays as the test double and the demo mode.
+- **Records** are rows with fixed columns (id, object, owner, timestamps) and a JSONB column of properties. Objects and properties are data, so adding a field or an object needs no migration. Properties that are filtered and sorted often get indexes.
+- **Permissions** (own, team, everything) are one filter applied where records are read and written, so no endpoint can leave it out.
+- **Automation runs on events.** Every write records an event in the same transaction. The worker runs workflows, sequences, notifications and indexing from those events, so imports and bulk edits set off workflows too.
+- **The assistant** runs on the server with the `CrmApi` methods as its tools, as the signed-in user, proposing before it writes.
+- **One list of operations, three ways in.** Every operation of the CRM is defined once: a name, a description in plain words, a zod input, a zod output, the access it needs, and the code. The HTTP API the web app calls, the MCP server and the built-in assistant's tools are all generated from that list. Nothing can be done on screen that an agent cannot do, because both go through the same operation.
+- **The whole CRM is reachable over MCP.** An outside agent connects to the instance's MCP endpoint and can run everything: records, views, pipeline, tasks, inbox, sequences, workflows, forms, booking, reports, forecast, import, people and settings. It acts as a person or as a named agent with a role, so the same permissions apply, and every change it makes is marked in the audit log. Operations that destroy or send (delete, merge, bulk edit, send email) are marked as such so a client can ask before running them.
+- **Search** starts on Postgres full-text search.
+
+Decided:
+
+- **Sign-in comes from Ensemble by default, behind an interface.** The server asks an auth provider "who is this request from?" and nothing else. Ensemble's provider is the default; another provider is a different adapter, with no change to the rest.
+- **Email is sent through Ensemble's email service by default, behind the same kind of interface,** so a customer can use their own provider.
+- **Redis on every VM** for jobs, events and live updates.
+- **Mariachi's libraries** are used wherever one fits.
+- **MCP is part of the core,** not a plugin: it ships switched on in every instance.
+
+Built so far (in `server/`): the tables for objects, people, records and activity; filters, search and sorting over JSONB; eleven operations (workspace, records, activity, the record brief) served over HTTP at `/api/ops/<name>` and as MCP tools at `/api/mcp`, both generated from `src/contracts/operations.ts`; sign-in behind an interface with `dev` and `jwt` providers; a seed of the demo company. The web app's live mode sends those operations to the server and everything else to the mock. Not yet: roles and record-level access (every member is an administrator), events and the worker, and the rest of the operations.
+
+To run it: `pnpm db:up`, `pnpm db:seed` (once), `pnpm api`, then `pnpm dev:live` and open http://localhost:5185. Plain `pnpm dev` still runs on the mock alone. Mariachi must be checked out beside this repo and built, because its packages are linked, not installed.
+
+Order: records end to end (contacts first; the other objects follow because they are metadata), auth and people, activity and tasks and the record brief, events with workflows and sequences, import, inbox and email, reports and forecast, the assistant on a real model.
+
 ## Open decisions
 
 - **Who pays for AI tokens:** Ensemble credits, or the customer's own key.

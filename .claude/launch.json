@@ -4,8 +4,26 @@
     {
       "name": "crm",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["dev"],
+      "runtimeArgs": [
+        "dev"
+      ],
       "port": 5183
+    },
+    {
+      "name": "crm-api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "server"
+      ],
+      "port": 5184
+    },
+    {
+      "name": "crm-live",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "dev:live"
+      ],
+      "port": 5185
     }
   ]
 }
