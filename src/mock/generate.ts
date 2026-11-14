@@ -18,7 +18,7 @@ import {
  * the volume a real workspace has. Same seed, same data, on every load.
  */
 
-export const VOLUME = { companies: 6_000, contacts: 50_000, deals: 2_400, tasks: 4_000 } as const;
+export const VOLUME = { companies: 6_000, contacts: 50_000, deals: 2_400, tasks: 4_000, leads: 900 } as const;
 
 const DAY = 86_400_000;
 const NOW = Date.parse(MOCK_NOW);
@@ -186,6 +186,8 @@ function generateContacts(random: () => number, companies: CrmRecord[]): CrmReco
 const STAGE_IDS = ['qualified', 'discovery', 'proposal', 'negotiation', 'contract', 'won', 'lost'];
 const STAGE_WEIGHTS = [14, 11, 8, 5, 3, 27, 32];
 const STAGE_PROBABILITY = [10, 25, 50, 70, 90, 100, 0];
+/** How sure a rep usually is at each open stage; closed deals have no forecast category. */
+const STAGE_FORECAST: Array<string | null> = ['pipeline', 'pipeline', 'best', 'best', 'commit', null, null];
 
 function generateDeals(random: () => number, companies: CrmRecord[], contactsByCompany: Map<string, CrmRecord[]>): CrmRecord[] {
   const result: CrmRecord[] = [];
@@ -206,6 +208,8 @@ function generateDeals(random: () => number, companies: CrmRecord[], contactsByC
         stage: STAGE_IDS[stageIndex] as string,
         closeDate: isoDate(closeAt),
         probability: STAGE_PROBABILITY[stageIndex] as number,
+        // A third of negotiations are already committed, and a few early deals are left out of the forecast.
+        forecast: stageIndex === 3 && random() < 0.35 ? 'commit' : stageIndex < 2 && random() < 0.06 ? 'omitted' : (STAGE_FORECAST[stageIndex] ?? null),
         owner: owner(random, 0.02),
         company: company.id,
         contact: people.length > 0 ? pick(random, people).id : null,
@@ -259,6 +263,58 @@ function generateTasks(random: () => number, deals: CrmRecord[]): CrmRecord[] {
   return result;
 }
 
+const PRODUCTS: Array<[string, string, number, string, string]> = [
+  ['Platform, Starter', 'PLT-START', 4_800, 'annual', 'platform'],
+  ['Platform, Team', 'PLT-TEAM', 14_400, 'annual', 'platform'],
+  ['Platform, Business', 'PLT-BUS', 36_000, 'annual', 'platform'],
+  ['Platform, Enterprise', 'PLT-ENT', 96_000, 'annual', 'platform'],
+  ['Additional seat', 'SEAT', 480, 'annual', 'platform'],
+  ['Reporting add-on', 'ADD-RPT', 3_600, 'annual', 'add-on'],
+  ['Single sign-on', 'ADD-SSO', 6_000, 'annual', 'add-on'],
+  ['Audit log retention', 'ADD-AUD', 2_400, 'annual', 'add-on'],
+  ['Sandbox environment', 'ADD-SBX', 4_200, 'annual', 'add-on'],
+  ['API access, high volume', 'ADD-API', 7_200, 'annual', 'add-on'],
+  ['Onboarding package', 'SVC-ONB', 5_000, 'once', 'services'],
+  ['Data migration', 'SVC-MIG', 8_500, 'once', 'services'],
+  ['Custom integration', 'SVC-INT', 12_000, 'once', 'services'],
+  ['Training day', 'SVC-TRN', 2_500, 'once', 'services'],
+  ['Premium support', 'SUP-PREM', 900, 'monthly', 'support'],
+  ['Dedicated success manager', 'SUP-CSM', 2_000, 'monthly', 'support'],
+  ['Legacy plan (retired)', 'PLT-LEG', 9_600, 'annual', 'platform'],
+];
+
+function generateProducts(): CrmRecord[] {
+  return PRODUCTS.map(([name, sku, price, billing, category], index) => record('products', `prd_${pad(index + 1, 3)}`, NOW - (400 + index * 9) * DAY, { name, sku, price, billing, category, active: !name.includes('retired') }));
+}
+
+/** Leads are people not yet qualified: a name and a company as plain text, with no records behind them. */
+function generateLeads(random: () => number): CrmRecord[] {
+  const result: CrmRecord[] = [];
+  for (let index = 0; index < VOLUME.leads; index += 1) {
+    const first = pick(random, FIRST_NAMES);
+    const last = pick(random, LAST_NAMES);
+    const company = `${pick(random, COMPANY_FIRST)}${pick(random, COMPANY_SECOND)} ${pick(random, COMPANY_KIND)}`;
+    const status = ['new', 'working', 'qualified', 'unqualified'][weighted(random, [22, 26, 22, 30])] as string;
+    const open = status === 'new' || status === 'working';
+    result.push(
+      record('leads', `lead_${pad(index + 1, 5)}`, NOW - Math.floor((open ? random() * 30 : 20 + random() * 300) + 1) * DAY, {
+        name: `${first} ${last}`,
+        email: `${first}.${last}@${company.replace(/\s+/g, '').toLowerCase()}.example`.toLowerCase(),
+        phone: random() < 0.6 ? `+1 (${200 + Math.floor(random() * 700)}) 555-${pad(Math.floor(random() * 10_000), 4)}` : null,
+        jobTitle: pick(random, JOB_TITLES),
+        companyName: company,
+        status,
+        source: pickOption(random, sources),
+        owner: owner(random, status === 'new' ? 0.3 : 0.04),
+        estimatedValue: random() < 0.7 ? Math.round((2_000 + random() ** 2 * 80_000) / 500) * 500 : null,
+        contact: null,
+        deal: null,
+      }),
+    );
+  }
+  return result;
+}
+
 let cached: Dataset | undefined;
 
 export function dataset(): Dataset {
@@ -276,14 +332,19 @@ export function dataset(): Dataset {
   }
   const deals = generateDeals(random, companies, contactsByCompany);
   const tasks = generateTasks(random, deals);
+  // Generated after everything else, so adding them did not reshuffle the existing mock data.
+  const leads = generateLeads(random);
+  const products = generateProducts();
   const byId = new Map<string, CrmRecord>();
-  for (const item of [...companies, ...contacts, ...deals, ...tasks]) byId.set(item.id, item);
+  for (const item of [...companies, ...contacts, ...deals, ...tasks, ...leads, ...products]) byId.set(item.id, item);
   cached = {
     byObject: new Map([
       ['companies', companies],
       ['contacts', contacts],
       ['deals', deals],
       ['tasks', tasks],
+      ['leads', leads],
+      ['products', products],
     ]),
     byId,
   };

@@ -1,4 +1,4 @@
-import { BarChart3, Bookmark, CalendarDays, Eye, FileText, House, Inbox, type LucideIcon, Monitor, Moon, PanelLeft, PanelLeftOpen, Search, Send, Settings, Sparkles, Sun, Workflow } from 'lucide-react';
+import { BarChart3, Target, Bookmark, CalendarDays, Eye, FileText, House, Inbox, type LucideIcon, Monitor, Moon, PanelLeft, PanelLeftOpen, Search, Send, Settings, Sparkles, Sun, Workflow } from 'lucide-react';
 import { type CSSProperties, useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api, useQuery } from '../api';
@@ -79,6 +79,7 @@ function Sidebar({ collapsed, onToggle, onSearch }: { collapsed: boolean; onTogg
     { to: '/workflows', label: 'Workflows', icon: Workflow },
     { to: '/forms', label: 'Forms', icon: FileText },
     { to: '/meetings', label: 'Meetings', icon: CalendarDays },
+    { to: '/forecast', label: 'Forecast', icon: Target },
     { to: '/reports', label: 'Reports', icon: BarChart3 },
   ];
 

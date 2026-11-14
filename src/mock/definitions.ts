@@ -89,6 +89,13 @@ export const dealStages: Option[] = [
 
 export const OPEN_STAGES = ['qualified', 'discovery', 'proposal', 'negotiation', 'contract'];
 
+export const forecastCategories: Option[] = [
+  { id: 'pipeline', label: 'Pipeline' },
+  { id: 'best', label: 'Best case', tone: 'info' },
+  { id: 'commit', label: 'Commit', tone: 'success' },
+  { id: 'omitted', label: 'Left out', tone: 'danger' },
+];
+
 export const priorities: Option[] = [
   { id: 'low', label: 'Low' },
   { id: 'medium', label: 'Medium', tone: 'info' },
@@ -239,6 +246,7 @@ const deals: ObjectDefinition = {
     { id: 'stage', label: 'Stage', type: 'select', options: dealStages, group: 'About', onCreate: true, required: true },
     { id: 'closeDate', label: 'Close date', type: 'date', group: 'About', onCreate: true },
     { id: 'probability', label: 'Probability (%)', type: 'number', group: 'About' },
+    { id: 'forecast', label: 'Forecast category', type: 'select', options: forecastCategories, group: 'About' },
     { id: 'owner', label: 'Owner', type: 'user', group: 'About', onCreate: true },
     { id: 'company', label: 'Company', type: 'reference', referenceObjectId: 'companies', group: 'Associations' },
     { id: 'contact', label: 'Primary contact', type: 'reference', referenceObjectId: 'contacts', group: 'Associations' },
@@ -292,6 +300,7 @@ const deals: ObjectDefinition = {
   ],
   board: { groupBy: 'stage', sumProperty: 'amount', dateProperty: 'closeDate' },
   calendar: { dateProperty: 'closeDate' },
+  lineItems: true,
 };
 
 export const taskTypes: Option[] = [
@@ -367,4 +376,80 @@ const tasks: ObjectDefinition = {
   calendar: { dateProperty: 'dueDate' },
 };
 
-export const objects: ObjectDefinition[] = [contacts, companies, deals, tasks];
+export const leadStatusOptions: Option[] = [
+  { id: 'new', label: 'New', tone: 'info' },
+  { id: 'working', label: 'Working', tone: 'warning' },
+  { id: 'qualified', label: 'Qualified', tone: 'success' },
+  { id: 'unqualified', label: 'Unqualified', tone: 'danger' },
+];
+
+const leads: ObjectDefinition = {
+  id: 'leads',
+  singular: 'Lead',
+  plural: 'Leads',
+  icon: 'star',
+  primaryProperty: 'name',
+  secondaryProperty: 'companyName',
+  properties: [
+    { id: 'name', label: 'Name', type: 'text', group: 'About', onCreate: true },
+    { id: 'email', label: 'Email', type: 'email', group: 'About', onCreate: true },
+    { id: 'phone', label: 'Phone', type: 'phone', group: 'About', onCreate: true },
+    { id: 'jobTitle', label: 'Job title', type: 'text', group: 'About', onCreate: true },
+    { id: 'companyName', label: 'Company', type: 'text', group: 'About', onCreate: true },
+    { id: 'status', label: 'Status', type: 'select', options: leadStatusOptions, group: 'Qualification', onCreate: true, required: true },
+    { id: 'source', label: 'Source', type: 'select', options: sources, group: 'Qualification', onCreate: true },
+    { id: 'owner', label: 'Owner', type: 'user', group: 'Qualification', onCreate: true },
+    { id: 'estimatedValue', label: 'Estimated value', type: 'currency', group: 'Qualification' },
+    { id: 'contact', label: 'Became contact', type: 'reference', referenceObjectId: 'contacts', group: 'After conversion', system: true },
+    { id: 'deal', label: 'Became deal', type: 'reference', referenceObjectId: 'deals', group: 'After conversion', system: true },
+    { id: 'createdAt', label: 'Created', type: 'date', group: 'Record', system: true },
+  ],
+  views: [
+    {
+      id: 'mine',
+      name: 'My open leads',
+      columns: ['name', 'companyName', 'jobTitle', 'status', 'source', 'createdAt'],
+      filters: [
+        { property: 'owner', operator: 'in', value: ['$me'] },
+        { property: 'status', operator: 'in', value: ['new', 'working'] },
+      ],
+      sort: { property: 'createdAt', direction: 'desc' },
+    },
+    { id: 'open', name: 'All open leads', columns: ['name', 'companyName', 'status', 'source', 'owner', 'createdAt'], filters: [{ property: 'status', operator: 'in', value: ['new', 'working'] }], sort: { property: 'createdAt', direction: 'desc' } },
+    { id: 'all', name: 'All leads', columns: ['name', 'companyName', 'status', 'source', 'owner', 'createdAt'], filters: [], sort: { property: 'createdAt', direction: 'desc' } },
+  ],
+  board: { groupBy: 'status', sumProperty: 'estimatedValue', dateProperty: 'createdAt' },
+  convertible: true,
+};
+
+export const productCategories: Option[] = ['Platform', 'Add-on', 'Services', 'Support'].map((label) => ({ id: label.toLowerCase(), label }));
+
+export const billingOptions: Option[] = [
+  { id: 'once', label: 'One-time' },
+  { id: 'monthly', label: 'Monthly', tone: 'info' },
+  { id: 'annual', label: 'Annual', tone: 'success' },
+];
+
+const products: ObjectDefinition = {
+  id: 'products',
+  singular: 'Product',
+  plural: 'Products',
+  icon: 'package',
+  primaryProperty: 'name',
+  secondaryProperty: 'sku',
+  properties: [
+    { id: 'name', label: 'Name', type: 'text', group: 'About', onCreate: true },
+    { id: 'sku', label: 'SKU', type: 'text', group: 'About', onCreate: true, unique: true },
+    { id: 'price', label: 'Price', type: 'currency', group: 'About', onCreate: true, required: true },
+    { id: 'billing', label: 'Billed', type: 'select', options: billingOptions, group: 'About', onCreate: true },
+    { id: 'category', label: 'Category', type: 'select', options: productCategories, group: 'About', onCreate: true },
+    { id: 'active', label: 'For sale', type: 'boolean', group: 'About' },
+    { id: 'createdAt', label: 'Created', type: 'date', group: 'Record', system: true },
+  ],
+  views: [
+    { id: 'active', name: 'For sale', columns: ['name', 'sku', 'category', 'billing', 'price'], filters: [{ property: 'active', operator: 'eq', value: true }], sort: { property: 'name', direction: 'asc' } },
+    { id: 'all', name: 'All products', columns: ['name', 'sku', 'category', 'billing', 'price', 'active'], filters: [], sort: { property: 'name', direction: 'asc' } },
+  ],
+};
+
+export const objects: ObjectDefinition[] = [leads, contacts, companies, deals, products, tasks];

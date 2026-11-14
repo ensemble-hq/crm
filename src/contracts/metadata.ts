@@ -109,6 +109,10 @@ export const objectDefinitionSchema = z.object({
       dateProperty: z.string().optional(),
     })
     .optional(),
+  /** Records of this object carry line items from the product library (deals). */
+  lineItems: z.boolean().optional(),
+  /** Records of this object can be converted into a contact, a company and a deal (leads). */
+  convertible: z.boolean().optional(),
   /** Present when records belong on a calendar: the date property that places them. */
   calendar: z.object({ dateProperty: z.string() }).optional(),
   /** Present when records get finished (tasks): the `select` property that says so, and its two values. */

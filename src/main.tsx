@@ -9,6 +9,7 @@ import { WorkspaceProvider } from './app/WorkspaceProvider';
 import { AssistantPage } from './pages/Assistant';
 import { ComingSoon } from './pages/ComingSoon';
 import { Dashboard } from './pages/Dashboard';
+import { Forecast } from './pages/Forecast';
 import { FormBuilder, Forms, PublicForm } from './pages/Forms';
 import { ImportPage } from './pages/Import';
 import { Inbox } from './pages/Inbox';
@@ -39,6 +40,7 @@ createRoot(root).render(
             <Route path="inbox" element={<Inbox />} />
             <Route path="inbox/:conversationId" element={<Inbox />} />
             <Route path="import" element={<ImportPage />} />
+            <Route path="forecast" element={<Forecast />} />
             <Route path="reports" element={<Reports />} />
             <Route path="reports/:reportId" element={<ReportBuilder />} />
             <Route path="sequences" element={<Sequences />} />

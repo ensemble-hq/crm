@@ -16,6 +16,7 @@ On screen so far, all on mock data:
 - Meetings: booking pages (who, how long, which days and hours, round robin) with a public page to pick a day and time
 - Across every screen: global search on Cmd/Ctrl+K, a working notifications bell, links between records changed by searching, merging two duplicates, and a calendar layout for deals and tasks
 - People and permissions: invite, change role and team, deactivate with reassignment; teams; roles that set how far someone can see, change and delete (own, team, everything); enforced by the mock on every read and write, with "view as" for admins
+- Selling: a product library; line items on a deal with quantity, price and discount, which can set the deal's amount; leads as their own object with a board, converted into a contact, company and deal in one step; a quarterly forecast against per-person goals (won, commit, best case, pipeline) that respects who can see which deals
 - Tasks: an object like any other, with one-click completion, created from any record or by asking the assistant
 - Contacts, companies and deals: lists with saved views, a filter builder, column choice, search, sorting, bulk edit and delete; a stage board; record pages with fields edited in place
 - Field rules: required and unique, checked on every save

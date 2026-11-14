@@ -1,6 +1,6 @@
 import { ArrowLeftRight, CheckSquare, type LucideIcon, Mail, MoreHorizontal, Phone, StickyNote, Video } from 'lucide-react';
 import { type CSSProperties, type FormEvent, useState } from 'react';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { api, useQuery } from '../api';
 import { Page } from '../app/Page';
 import { useWorkspace } from '../app/workspace';
@@ -8,7 +8,9 @@ import type { ObjectDefinition, PropertyValue as Value } from '../contracts/meta
 import type { Activity, ActivityKind, CrmRecord, Reference, RelatedGroup } from '../contracts/records';
 import { CompleteButton, isComplete } from '../ui/CompleteButton';
 import { PropertyValue, formatDate, formatDateTime } from '../ui/PropertyValue';
+import { ConvertLeadDialog } from './ConvertLeadDialog';
 import { CreateRecordDialog } from './CreateRecordDialog';
+import { LineItems } from './LineItems';
 import { RecordProperties } from './RecordProperties';
 import { objectIcon } from '../ui/icons';
 import { ICON, cardTitle, link, medium, plainList, rowDivider, small, toolbarButton } from '../ui/styles';
@@ -256,6 +258,8 @@ export function RecordDetail() {
   const { object: findObject, objects, currentUser, revision, touch } = useWorkspace();
   const object = findObject(objectId);
   const [addingTask, setAddingTask] = useState(false);
+  const [converting, setConverting] = useState(false);
+  const navigate = useNavigate();
   // The object whose records get finished: tasks.
   const taskObject = objects.find((item) => item.completion);
   const detail = useQuery(() => api.getRecord(recordId), [recordId, revision]);
@@ -289,9 +293,11 @@ export function RecordDetail() {
       wide
       actions={
         <>
-          <button type="button" className="m-button" data-size="sm" style={toolbarButton}>
-            Edit
-          </button>
+          {object.convertible && record && typeof record.properties.contact !== 'string' ? (
+            <button type="button" className="m-button" data-variant="primary" data-size="sm" onClick={() => setConverting(true)}>
+              Convert
+            </button>
+          ) : null}
           <button type="button" className="m-button" data-size="sm" data-icon-only aria-label="More actions" style={toolbarButton}>
             <MoreHorizontal size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />
           </button>
@@ -310,6 +316,17 @@ export function RecordDetail() {
         <div style={{ display: 'grid', placeItems: 'center', minBlockSize: 320 }}>
           <span className="m-spinner" role="status" aria-label={`Loading ${object.singular.toLowerCase()}`} />
         </div>
+      ) : null}
+      {record && converting ? (
+        <ConvertLeadDialog
+          lead={record}
+          onClose={() => setConverting(false)}
+          onConverted={(result) => {
+            setConverting(false);
+            touch();
+            navigate(result.dealId ? `/deals/${result.dealId}` : `/contacts/${result.contactId}`);
+          }}
+        />
       ) : null}
       {record && addingTask && taskObject ? (
         <CreateRecordDialog
@@ -357,7 +374,18 @@ export function RecordDetail() {
                 <Related groups={related.data ?? []} />
               </div>
             </aside>
-            <Timeline recordId={record.id} onAddTask={taskObject && taskObject.id !== object.id ? () => setAddingTask(true) : undefined} />
+            <div className="m-stack" data-gap="4" style={{ minInlineSize: 0 }}>
+              {object.lineItems ? (
+                <LineItems
+                  deal={record}
+                  onSaved={() => {
+                    detail.reload();
+                    touch();
+                  }}
+                />
+              ) : null}
+              <Timeline recordId={record.id} onAddTask={taskObject && taskObject.id !== object.id ? () => setAddingTask(true) : undefined} />
+            </div>
           </div>
         </div>
       ) : null}

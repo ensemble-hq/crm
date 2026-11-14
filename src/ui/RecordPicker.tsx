@@ -7,13 +7,15 @@ import { ICON, small } from './styles';
 /**
  * Choose a record of one object by searching for it: the control for a property that links to
  * another record (a deal's company, a task's contact). Shows the current choice with a way to
- * clear it; typing searches by name, email, website or phone.
+ * clear it; typing searches by name, email, website or phone. With `browse`, for short lists such as products,
+ * the choices show before anything is typed.
  */
-export function RecordPicker({ id, objectId, value, onChange }: { id: string; objectId: string; value: string | null; onChange: (recordId: string | null) => void }) {
+export function RecordPicker({ id, objectId, value, onChange, browse = false }: { id: string; objectId: string; value: string | null; onChange: (recordId: string | null) => void; browse?: boolean }) {
   const { object: findObject } = useWorkspace();
   const object = findObject(objectId);
   const [text, setText] = useState('');
   const [query, setQuery] = useState('');
+  const minimum = browse ? 0 : 2;
   const current = useQuery(() => (value ? api.getRecord(value) : Promise.resolve(undefined)), [value]);
 
   // Wait for a pause in typing before searching.
@@ -22,7 +24,7 @@ export function RecordPicker({ id, objectId, value, onChange }: { id: string; ob
     return () => clearTimeout(timer);
   }, [text]);
 
-  const results = useQuery(() => (query.length >= 2 ? api.listRecords({ objectId, search: query, page: 1, pageSize: 6 }) : Promise.resolve(undefined)), [objectId, query]);
+  const results = useQuery(() => (query.length >= minimum ? api.listRecords({ objectId, search: query, page: 1, pageSize: browse ? 25 : 6 }) : Promise.resolve(undefined)), [objectId, query, minimum]);
   if (!object) return null;
   const nameOf = (properties: Record<string, unknown>) => String(properties[object.primaryProperty] ?? 'Untitled');
 
@@ -45,8 +47,8 @@ export function RecordPicker({ id, objectId, value, onChange }: { id: string; ob
         </span>
         <input className="m-input" data-size="sm" id={id} type="search" autoComplete="off" placeholder={`Search ${object.plural.toLowerCase()}`} value={text} onChange={(event) => setText(event.target.value)} style={{ paddingInlineStart: 'calc(var(--m-space-2) * 2 + 14px)', inlineSize: '100%' }} />
       </span>
-      {query.length >= 2 ? (
-        <div className="m-menu" role="listbox" aria-label={`${object.plural} matching “${query}”`} style={{ border: 'var(--m-border-width-thin) solid var(--m-color-border-muted)', borderRadius: 'var(--m-radius-md)' }}>
+      {query.length >= minimum ? (
+        <div className="m-menu" role="listbox" aria-label={query ? `${object.plural} matching “${query}”` : object.plural} style={{ maxBlockSize: 260, overflowY: 'auto', border: 'var(--m-border-width-thin) solid var(--m-color-border-muted)', borderRadius: 'var(--m-radius-md)' }}>
           {results.data?.records.map((record) => {
             const secondary = object.secondaryProperty ? record.properties[object.secondaryProperty] : undefined;
             return (

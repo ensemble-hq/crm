@@ -19,6 +19,7 @@ import { dataset } from './generate';
 import { createCaptureApi } from './capture';
 import { createInboxApi } from './inbox';
 import { createReportsApi } from './reports';
+import { createSalesApi } from './sales';
 import { createSequencesApi, enrollFromWorkflow } from './sequences';
 import { activeUsers, assertAllowed, assertCan, createTeamApi, currentAccess, session, visible } from './team';
 import { type WorkflowDeps, createWorkflowsApi, fire } from './workflows';
@@ -306,7 +307,7 @@ function validate(object: ObjectDefinition, values: Record<string, PropertyValue
 let sequence = 0;
 
 /** URL segments the app uses itself, so no object may take them. */
-const RESERVED = new Set(['assistant', 'inbox', 'tasks', 'import', 'sequences', 'workflows', 'reports', 'forms', 'meetings', 'settings', 'f', 'book']);
+const RESERVED = new Set(['assistant', 'inbox', 'tasks', 'import', 'sequences', 'workflows', 'reports', 'forecast', 'forms', 'meetings', 'settings', 'f', 'book']);
 
 /** "Renewal date" becomes `renewalDate` (joiner '') or `renewal-date` (joiner '-'). */
 function slug(text: string, joiner: '' | '-'): string {
@@ -567,6 +568,27 @@ export const mockApi: CrmApi = {
   ...createWorkflowsApi(workflowDeps),
   ...createCaptureApi({ respond, upsertContact, logActivity }),
   ...createTeamApi(respond, reassignRecords),
+  ...createSalesApi({
+    respond,
+    get,
+    assertCanEdit: (record) => assertCan('edit', record, definition(record.objectId).singular.toLowerCase()),
+    select: (query) => select(query),
+    setProperties: (record, properties) => {
+      Object.assign(record.properties, properties);
+      record.updatedAt = new Date().toISOString();
+    },
+    upsertContact,
+    companyNamed: (name, ownerId) => {
+      const existing = (dataset().byObject.get('companies') ?? []).find((item) => String(item.properties.name ?? '').toLowerCase() === name.toLowerCase());
+      return existing ?? insert('companies', { name, owner: ownerId, type: 'prospect' });
+    },
+    createDeal: (properties) => {
+      const deal = insert('deals', properties);
+      fire({ kind: 'created', record: deal }, workflowDeps);
+      return deal;
+    },
+    logActivity,
+  }),
   getWorkspace: () => respond(() => ({ name: 'Northwind', objects, users: activeUsers(), currentUserId: session.userId, access: currentAccess() })),
 
   listRecords: (query: ListQuery) =>
