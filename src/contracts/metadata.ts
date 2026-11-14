@@ -128,6 +128,8 @@ export const userSchema = z.object({
   id: z.string(),
   name: z.string(),
   email: z.string(),
+  /** Set for an agent: software that works in the CRM under its own name. Absent for a person. */
+  kind: z.literal('agent').optional(),
 });
 export type User = z.infer<typeof userSchema>;
 

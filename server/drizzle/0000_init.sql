@@ -1,3 +1,22 @@
+CREATE TABLE "api_keys" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"tenant_id" text NOT NULL,
+	"user_id" text,
+	"name" text NOT NULL,
+	"hashed_key" text NOT NULL,
+	"prefix" text NOT NULL,
+	"scopes" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"active" boolean DEFAULT true NOT NULL,
+	"last_used_at" timestamp with time zone,
+	"expires_at" timestamp with time zone,
+	"rotated_from_id" uuid,
+	"revoked_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "api_keys_hashed_key_unique" UNIQUE("hashed_key")
+);
+
+--> statement-breakpoint
 CREATE TABLE "mariachi_event_outbox" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"type" text NOT NULL,
@@ -216,6 +235,8 @@ CREATE TABLE "people" (
 	"tenant_id" text NOT NULL,
 	"name" text NOT NULL,
 	"email" text NOT NULL,
+	"kind" text DEFAULT 'person' NOT NULL,
+	"reach" text,
 	"role_id" text NOT NULL,
 	"team_id" text,
 	"status" text DEFAULT 'active' NOT NULL,
@@ -350,6 +371,8 @@ CREATE TABLE "workflows" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 
+--> statement-breakpoint
+CREATE INDEX "api_keys_tenant_id_idx" ON "api_keys" USING btree ("tenant_id");
 --> statement-breakpoint
 CREATE INDEX "mariachi_event_outbox_pending_idx" ON "mariachi_event_outbox" USING btree ("available_at") WHERE published_at IS NULL;
 --> statement-breakpoint

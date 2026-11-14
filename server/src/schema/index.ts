@@ -14,3 +14,5 @@ export * from './teams';
 export * from './workflows';
 // Events are written in the same transaction as the change they describe, then relayed by the worker.
 export { eventOutboxTable } from '@mariachi/events/outbox';
+// Agents sign in with keys. Only a key's hash is stored.
+export { apiKeysTable } from '@mariachi/auth/schema';

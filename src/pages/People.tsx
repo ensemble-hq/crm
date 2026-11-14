@@ -6,6 +6,7 @@ import { Page } from '../app/Page';
 import { useWorkspace } from '../app/workspace';
 import type { Directory, Member, Role, RoleSettings, Scope, Team } from '../contracts/team';
 import { Modal } from '../ui/Modal';
+import { AgentsTab } from './Agents';
 import { ICON, figure, initials, medium, plainList, rowDivider, small } from '../ui/styles';
 
 const SCOPE_LABELS: Record<Scope, string> = { none: 'Nothing', own: 'Their own', team: "Their team's", all: 'Everything' };
@@ -13,6 +14,7 @@ const TABS = [
   { id: 'people', label: 'People' },
   { id: 'teams', label: 'Teams' },
   { id: 'roles', label: 'Roles' },
+  { id: 'agents', label: 'Agents' },
 ] as const;
 type Tab = (typeof TABS)[number]['id'];
 
@@ -239,6 +241,7 @@ export function People() {
   const [deactivating, setDeactivating] = useState<Member>();
   const [roleDialog, setRoleDialog] = useState<Role | 'new'>();
   const [teamDialog, setTeamDialog] = useState<Team | 'new'>();
+  const [agentDialog, setAgentDialog] = useState(false);
   const [notice, setNotice] = useState<string>();
   const tab: Tab = TABS.find((item) => item.id === params.get('tab'))?.id ?? 'people';
   const data = directory.data;
@@ -265,7 +268,9 @@ export function People() {
       ? { label: 'Invite', icon: UserPlus, onClick: () => setMemberDialog('new') }
       : tab === 'teams'
         ? { label: 'Team', icon: Plus, onClick: () => setTeamDialog('new') }
-        : { label: 'Role', icon: Plus, onClick: () => setRoleDialog('new') };
+        : tab === 'agents'
+          ? { label: 'Agent', icon: Plus, onClick: () => setAgentDialog(true) }
+          : { label: 'Role', icon: Plus, onClick: () => setRoleDialog('new') };
 
   return (
     <Page
@@ -433,6 +438,8 @@ export function People() {
             </ul>
           </section>
         ) : null}
+
+        {data && tab === 'agents' ? <AgentsTab directory={data} canManage={canManage} creating={agentDialog} onCreated={() => setAgentDialog(false)} /> : null}
 
         {data && tab === 'roles' ? (
           <section className="m-card" aria-label="Roles" style={{ padding: 0, overflow: 'hidden' }}>

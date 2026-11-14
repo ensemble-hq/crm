@@ -9,6 +9,7 @@ import { workflowDetailSchema, workflowSchema, workflowSettingsSchema } from './
 import { dashboardSchema, reportDefinitionSchema, reportResultSchema, reportSettingsSchema } from './reports';
 import { convertLeadSchema, forecastSchema, lineItemSchema } from './sales';
 import { enrollResultSchema, saveSequenceSchema, sequenceDetailSchema, sequenceSchema } from './sequences';
+import { agentSchema, createAgentKeySchema, createdAgentKeySchema, saveAgentSchema } from './team';
 import { accessSchema, deactivateMemberSchema, directorySchema, inviteMemberSchema, memberSchema, roleSchema, saveRoleSchema, saveTeamSchema, teamSchema, updateMemberSchema } from './team';
 
 /**
@@ -769,6 +770,56 @@ export const operations: Operation[] = [
     input: none,
     output: assistantUsageSchema,
     effect: 'read',
+    internal: true,
+  },
+  {
+    name: 'agents.list',
+    method: 'listAgents',
+    title: 'List agents',
+    description: 'Returns the agents that work in this CRM, with their role, what they may do, and the keys they sign in with.',
+    input: none,
+    output: z.array(agentSchema),
+    effect: 'read',
+    internal: true,
+  },
+  {
+    name: 'agents.save',
+    method: 'saveAgent',
+    title: 'Create or change an agent',
+    description: 'Creates an agent, or changes its name, role, team or what it may do.',
+    input: saveAgentSchema,
+    output: agentSchema,
+    effect: 'write',
+    internal: true,
+  },
+  {
+    name: 'agents.remove',
+    method: 'removeAgent',
+    title: 'Remove an agent',
+    description: 'Switches an agent off and revokes its keys.',
+    input: z.string(),
+    output: z.void(),
+    effect: 'destructive',
+    internal: true,
+  },
+  {
+    name: 'agents.createKey',
+    method: 'createAgentKey',
+    title: 'Make a key for an agent',
+    description: 'Makes a key the agent signs in with. Returned once.',
+    input: createAgentKeySchema,
+    output: createdAgentKeySchema,
+    effect: 'write',
+    internal: true,
+  },
+  {
+    name: 'agents.revokeKey',
+    method: 'revokeAgentKey',
+    title: 'Revoke an agent\'s key',
+    description: 'Stops a key working at once.',
+    input: z.string(),
+    output: z.void(),
+    effect: 'destructive',
     internal: true,
   },
 ];

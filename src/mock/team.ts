@@ -182,6 +182,13 @@ export function createTeamApi(respond: <T>(compute: () => T) => Promise<T>, reas
         roles.splice(roles.indexOf(role), 1);
       }),
 
+    // Agents sign in to a server with a key, and the demo has no server.
+    listAgents: () => respond(() => []),
+    saveAgent: () => Promise.reject(new Error('Agents need the server. This is the demo, which runs in your browser.')),
+    removeAgent: () => Promise.resolve(),
+    createAgentKey: () => Promise.reject(new Error('Agents need the server.')),
+    revokeAgentKey: () => Promise.resolve(),
+
     viewAs: (userId) =>
       respond(() => {
         if (userId === null) {

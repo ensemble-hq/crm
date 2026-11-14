@@ -16,7 +16,8 @@ export type Actor = {
   role: Role;
   teamId: string | null;
   /** Everyone on the acting person's team, themselves included. */
-  teammates: string[];
+  teammates: string[];  /** Set when the actor is an agent: what kind of thing it may do at all, whatever its role reaches. */
+  agent?: { reach: 'read' | 'write' | 'everything' };
 };
 
 const actors = new WeakMap<Context, Actor>();
@@ -62,10 +63,23 @@ export function assertCan(actor: Actor, action: 'edit' | 'delete', record: CrmRe
 }
 
 export function assertAllowed(actor: Actor, permission: 'manageSettings' | 'managePeople' | 'exportRecords', doing: string): void {
+  // Who is in the CRM, and what they may do, is decided by people. An agent never does, whatever its role says.
+  if (actor.agent && permission === 'managePeople') throw new AuthError('auth/forbidden', `An agent can't ${doing}. A person has to.`);
   if (!actor.role[permission]) throw new AuthError('auth/forbidden', `As ${actor.role.name}, you can't ${doing}. Ask an admin.`);
 }
 
 export function accessOf(actor: Actor): Access {
   const { role } = actor;
   return { roleName: role.name, view: role.view, edit: role.edit, delete: role.delete, manageSettings: role.manageSettings, managePeople: role.managePeople, exportRecords: role.exportRecords, viewedBy: actor.userId === actor.signedInId ? null : actor.signedInId };
+}
+
+/** Refuses an operation an agent is not let do: by its kind (reading, changing, or deleting and sending), and any that manage the CRM's own plumbing. */
+export function assertAgentMay(actor: Actor, operation: { title: string; effect: 'read' | 'write' | 'destructive' | 'send'; internal?: boolean }): void {
+  if (!actor.agent) return;
+  if (operation.internal) throw new AuthError('auth/forbidden', 'That is for people to do, not agents.');
+  const allowed = actor.agent.reach === 'everything' || operation.effect === 'read' || (actor.agent.reach === 'write' && operation.effect === 'write');
+  if (!allowed) {
+    const limit = actor.agent.reach === 'read' ? 'only look things up' : 'create and change things, but not delete, merge or send';
+    throw new AuthError('auth/forbidden', `This agent may ${limit}. A person who manages people can change that.`);
+  }
 }

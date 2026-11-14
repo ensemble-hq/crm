@@ -19,7 +19,8 @@ import { BookingPagesRepository, CaptureService, FormsRepository, MeetingsReposi
 import { ImportService } from './import/import.service';
 import { NotificationsRepository } from './notifications/notifications.repository';
 import { NotificationsService } from './notifications/notifications.service';
-import { actingContext } from './people/access';
+import { actingContext, assertAgentMay } from './people/access';
+import { AgentsService } from './people/agents.service';
 import { PeopleRepository, RolesRepository, TeamsRepository } from './people/people.repository';
 import { PeopleService } from './people/people.service';
 import { RecordEvents } from './records/records.events';
@@ -55,7 +56,11 @@ export function createServices(deps: ServiceDeps) {
   const recordsRepository = new RecordsRepository(deps.db);
   const outbox = new Outbox(deps.db, { source: deps.source });
   const events = new RecordEvents(outbox, deps.transaction);
-  const people = new PeopleService(new PeopleRepository(deps.db), new TeamsRepository(deps.db), new RolesRepository(deps.db), (ctx, fromId, toId) => recordsRepository.reassign(ctx, fromId, toId));
+  const peopleRepository = new PeopleRepository(deps.db);
+  const teamsRepository = new TeamsRepository(deps.db);
+  const rolesRepository = new RolesRepository(deps.db);
+  const agents = new AgentsService(deps.db, peopleRepository, teamsRepository, rolesRepository);
+  const people = new PeopleService(peopleRepository, teamsRepository, rolesRepository, (ctx, fromId, toId) => recordsRepository.reassign(ctx, fromId, toId));
   const objectsRepository = new ObjectsRepository(deps.db);
   const workspace = new WorkspaceService(objectsRepository, people);
   const settings = new SettingsService(objectsRepository, recordsRepository, deps.transaction, async (ctx, objectId) => void (await outbox.add(ctx, settingsChanged, { objectId })));
@@ -83,7 +88,7 @@ export function createServices(deps: ServiceDeps) {
   const sales = new SalesService(new LineItemsRepository(deps.db), records, recordsRepository, events, activityRepository, workspace);
   const capture = new CaptureService(new FormsRepository(deps.db), new SubmissionsRepository(deps.db), new BookingPagesRepository(deps.db), new MeetingsRepository(deps.db), recordsRepository, events, activityRepository, people, workspace);
   const importer = new ImportService(recordsRepository, events, workspace, people);
-  return { people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences, settings, sales, capture };
+  return { people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences, settings, sales, capture, agents };
 }
 
 /** How long a slow operation, such as a turn of the assistant on a model, may run. */
@@ -97,7 +102,7 @@ type Handler = (ctx: Context, input: any) => Promise<unknown>;
  * is left out of what the server offers.
  */
 export function registerServices(communication: CommunicationLayer, deps: ServiceDeps): Operation[] {
-  const { people, workspace, records, activity, brief, notifications, workflows, importer, inbox, mail, reports, sequences, settings, sales, capture } = createServices(deps);
+  const { people, workspace, records, activity, brief, notifications, workflows, importer, inbox, mail, reports, sequences, settings, sales, capture, agents } = createServices(deps);
 
   // The assistant reaches the CRM the way everything else does: through the operations, as the person asking.
   const assistant = new AssistantService(new AssistantSettingsRepository(deps.db), createEncryption({ adapter: 'local', keys: { primary: deps.secretsKey } }), operations, (ctx, operation, input) => communication.call(ctx, operation, input), new AssistantTurnsRepository(deps.db), deps.push);
@@ -157,6 +162,11 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     'properties.delete': (ctx, input) => settings.deleteProperty(ctx, input),
     'views.save': (ctx, input) => settings.saveView(ctx, input),
     'views.delete': (ctx, input) => settings.deleteView(ctx, input),
+    'agents.list': (ctx) => agents.list(ctx),
+    'agents.save': (ctx, input) => agents.save(ctx, input),
+    'agents.remove': (ctx, input) => agents.remove(ctx, input),
+    'agents.createKey': (ctx, input) => agents.createKey(ctx, input),
+    'agents.revokeKey': (ctx, input) => agents.revokeKey(ctx, input),
     'assistant.settings': (ctx) => assistant.getSettings(ctx),
     'assistant.saveSettings': (ctx, input) => assistant.saveSettings(ctx, input),
     'assistant.turn': (ctx, input) => assistant.turn(ctx, input),
@@ -198,7 +208,14 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
       ...(operation.slow ? { timeoutMs: SLOW_MS } : {}),
       // Every operation starts by working out who it runs as; nothing below this line can skip it. The
       // few a visitor's browser calls run as nobody, in this instance's one tenant.
-      handler: operation.public ? (ctx, input) => handler({ ...ctx, tenantId: TENANT_ID, userId: null }, input) : async (ctx, input) => handler(actingContext(ctx, await people.actor(ctx)), input),
+      handler: operation.public
+        ? (ctx, input) => handler({ ...ctx, tenantId: TENANT_ID, userId: null }, input)
+        : async (ctx, input) => {
+            const actor = await people.actor(ctx);
+            // An agent is held to what it was set up to do, on top of what its role reaches.
+            assertAgentMay(actor, operation);
+            return handler(actingContext(ctx, actor), input);
+          },
     });
   }
 

@@ -6,6 +6,10 @@ export const peopleTable = defineTable('people', {
   tenantId: column.text().notNull(),
   name: column.text().notNull(),
   email: column.text().notNull(),
+  /** `person`, or `agent` for software that works in the CRM under its own name and signs in with a key. */
+  kind: column.text().notNull().default('person'),
+  /** For an agent: `read`, `write` or `everything`. See the agents contract. */
+  reach: column.text(),
   roleId: column.text().notNull(),
   teamId: column.text(),
   /** `active`, `invited` (not signed in yet) or `deactivated` (no access; kept so their history still has a name). */

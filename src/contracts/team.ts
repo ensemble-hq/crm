@@ -55,6 +55,33 @@ export const accessSchema = z.object({
 });
 export type Access = z.infer<typeof accessSchema>;
 
+/**
+ * An agent is software that works in the CRM under its own name: an outside AI agent connected over
+ * MCP, a script, an integration. It is a member like a person, with a role that sets which records
+ * it reaches, plus a limit on what kind of thing it may do at all. What it changes carries its name.
+ */
+export const agentReachSchema = z.enum(['read', 'write', 'everything']);
+export type AgentReach = z.infer<typeof agentReachSchema>;
+
+export const agentKeySchema = z.object({ id: z.string(), name: z.string(), prefix: z.string(), createdAt: z.string(), lastUsedAt: z.string().nullable() });
+
+export const agentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  roleId: z.string(),
+  teamId: z.string().nullable(),
+  /** `read`: look things up only. `write`: also create and change. `everything`: also delete, merge and send. */
+  reach: agentReachSchema,
+  status: z.enum(['active', 'deactivated']),
+  /** The keys it signs in with. Only the start of each is kept; the key itself is shown once, when it is made. */
+  keys: z.array(agentKeySchema),
+});
+export type Agent = z.infer<typeof agentSchema>;
+
+export const saveAgentSchema = z.object({ id: z.string().optional(), name: z.string().min(1), roleId: z.string(), teamId: z.string().nullable(), reach: agentReachSchema });
+export const createAgentKeySchema = z.object({ agentId: z.string(), name: z.string().min(1) });
+export const createdAgentKeySchema = z.object({ id: z.string(), prefix: z.string(), key: z.string() });
+
 export const inviteMemberSchema = z.object({ name: z.string(), email: z.string(), roleId: z.string(), teamId: z.string().nullable() });
 export const updateMemberSchema = z.object({ id: z.string(), roleId: z.string().optional(), teamId: z.string().nullable().optional() });
 export const deactivateMemberSchema = z.object({ id: z.string(), reassignTo: z.string() });
@@ -76,4 +103,12 @@ export interface TeamApi {
   deleteRole(id: string): Promise<void>;
   /** See the CRM exactly as another person does. Pass null to go back to yourself. Admins only. */
   viewAs(userId: string | null): Promise<void>;
+  listAgents(): Promise<Agent[]>;
+  /** Creates an agent, or changes one when `id` is given. */
+  saveAgent(input: z.infer<typeof saveAgentSchema>): Promise<Agent>;
+  /** Switches an agent off for good and revokes its keys. What it did keeps its name. */
+  removeAgent(id: string): Promise<void>;
+  /** Makes a key for an agent. The key is returned once and cannot be read again. */
+  createAgentKey(input: z.infer<typeof createAgentKeySchema>): Promise<z.infer<typeof createdAgentKeySchema>>;
+  revokeAgentKey(id: string): Promise<void>;
 }

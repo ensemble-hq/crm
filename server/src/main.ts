@@ -33,6 +33,7 @@ async function main(): Promise<void> {
   const deps = { db: database.db, transaction: database.transaction, source: config.serviceName, email, secretsKey: settings.secretsKey, push: live ? (ctx: Parameters<typeof live.sendToUser>[0], userId: string, data: unknown) => live.sendToUser(ctx, userId, data) : undefined };
   const operations = registerServices(communication, deps);
 
+  const agentKeys = createServices(deps).agents;
   const authenticate = createAuthStrategy(settings, { production: config.env === 'production', jwtSecret: config.auth?.jwtSecret, jwtIssuer: config.auth?.jwtIssuer, jwtAudience: config.auth?.jwtAudience });
 
   const api = createApiServer({
@@ -49,7 +50,14 @@ async function main(): Promise<void> {
     .withAuthStrategy('session', authenticate)
     // Email providers sign what they deliver; that signature is their sign-in.
     .withAuthStrategy('inbound', hmacSignatureStrategy({ secret: settings.inboundSecret, header: 'x-signature', provider: 'email', tenantId: TENANT_ID }))
-    .withAuth('session')
+    // An agent signs in with its key, sent as `Authorization: Bearer ak_…` or `x-api-key`. Anything else is a person's session.
+    .withAuthStrategy('agent', async (request) => {
+      const bearer = typeof request.headers.authorization === 'string' && request.headers.authorization.startsWith('Bearer ak_') ? request.headers.authorization.slice(7) : undefined;
+      const key = bearer ?? (typeof request.headers['x-api-key'] === 'string' ? request.headers['x-api-key'] : undefined);
+      if (!key) return null;
+      return { ...(await agentKeys.verify(key)), tenantId: TENANT_ID };
+    })
+    .withAuth(['agent', 'session'])
     // Anyone can reach the public form and booking operations, so callers who are not signed in are held to a modest rate per address.
     .withRateLimit({ limiter: new MemoryRateLimiter(), default: { windowMs: 60_000, maxRequests: 6_000 }, anonymous: { windowMs: 60_000, maxRequests: 60 } })
     .withHealth(lifecycle.health)

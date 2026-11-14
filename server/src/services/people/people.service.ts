@@ -43,13 +43,15 @@ export class PeopleService {
     const role = roleOf(acting);
     if (!role) throw new AuthError('auth/forbidden', 'Your role no longer exists. Ask an admin to give you another.');
     const teammates = acting.teamId === null ? [acting.id] : everyone.filter((person) => person.teamId === acting.teamId).map((person) => person.id);
-    return { signedInId: signedIn.id, userId: acting.id, role, teamId: acting.teamId, teammates };
+    const reach = acting.reach === 'write' || acting.reach === 'everything' ? acting.reach : 'read';
+    return { signedInId: signedIn.id, userId: acting.id, role, teamId: acting.teamId, teammates, ...(acting.kind === 'agent' ? { agent: { reach } } : {}) };
   }
 
   /** Everyone records can be given to: people who have not been deactivated. */
   async users(ctx: Context): Promise<User[]> {
     const rows = await this.people.findMany(ctx, {}, { sort: { field: 'createdAt', direction: 'asc' }, limit: 1000 });
-    return rows.filter((row) => row.status !== 'deactivated').map((row) => ({ id: row.id, name: row.name, email: row.email }));
+    // Agents are included so what they did shows their name and records can be given to them.
+    return rows.filter((row) => row.status !== 'deactivated').map((row) => ({ id: row.id, name: row.name, email: row.email, ...(row.kind === 'agent' ? { kind: 'agent' as const } : {}) }));
   }
 
   async directory(ctx: Context): Promise<Directory> {
@@ -58,7 +60,7 @@ export class PeopleService {
       this.teams.findMany(ctx, {}, { sort: { field: 'createdAt', direction: 'asc' }, limit: 200 }),
       this.roles.findMany(ctx, {}, { sort: { field: 'position', direction: 'asc' }, limit: 200 }),
     ]);
-    return { members: members.map(toMember), teams: teams.map((team) => ({ id: team.id, name: team.name })), roles: roles.map(toRole) };
+    return { members: members.filter((member) => member.kind !== 'agent').map(toMember), teams: teams.map((team) => ({ id: team.id, name: team.name })), roles: roles.map(toRole) };
   }
 
   private async member(ctx: Context, memberId: string): Promise<PersonRow> {
@@ -68,7 +70,7 @@ export class PeopleService {
   }
 
   private async activeAdmins(ctx: Context): Promise<number> {
-    return this.people.count(ctx, { roleId: ADMIN_ROLE, status: 'active' });
+    return this.people.count(ctx, { roleId: ADMIN_ROLE, status: 'active', kind: 'person' });
   }
 
   private async checkPlacement(ctx: Context, roleId: string | undefined, teamId: string | null | undefined): Promise<void> {
