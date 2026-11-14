@@ -116,7 +116,7 @@ export class MailService {
   }
 
   /** Stores an outgoing message as queued. Call it inside the transaction of whatever caused the send. */
-  async queue(ctx: Context, input: { conversationId: string; sender: { id: string; name: string; email: string }; toEmail: string; subject: string; body: string; purpose?: Purpose }): Promise<string> {
+  async queue(ctx: Context, input: { conversationId: string; sender: { id: string; name: string; email: string }; toEmail: string; subject: string; body: string; purpose?: Purpose; sendAt?: Date }): Promise<string> {
     const purpose = input.purpose ?? 'conversation';
     // Refused here if the address has opted out or had its share this week, before anything is stored.
     await this.rules.check(ctx, input.toEmail, purpose);
@@ -138,6 +138,8 @@ export class MailService {
       senderId: input.sender.id,
       attempts: 0,
       lastError: null,
+      // A message for later waits in the same queue; it just is not due until its time.
+      ...(input.sendAt ? { nextAttemptAt: input.sendAt } : {}),
     });
     await this.conversations.refresh(ctx, input.conversationId, { unread: false });
     await this.outbox.add(ctx, emailQueued, { messageId });
@@ -178,7 +180,8 @@ export class MailService {
         { fromName: message.fromName, fromEmail: message.fromEmail, toEmail: message.toEmail, subject: message.subject, text: message.body, messageId: message.messageIdHeader ?? `<${message.id}@crm>`, inReplyTo: previous[0]?.messageIdHeader ?? undefined, ...(purpose === 'automated' ? { unsubscribeUrl: this.rules.oneClickUrl(message.toEmail) } : {}) },
         { idempotencyKey: message.id },
       );
-      await this.messages.update(ctx, message.id, { status: 'sent', providerId: sent.providerId, lastError: null });
+      await this.messages.update(ctx, message.id, { status: 'sent', providerId: sent.providerId, lastError: null, sentAt: new Date() });
+      await this.conversations.refresh(ctx, message.conversationId, {});
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       // An address the service says does not exist is never tried again, by anyone.

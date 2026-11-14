@@ -30,6 +30,8 @@ function toMessage(row: MessageRow): Message {
     // "Being sent right now" is still waiting as far as a person is concerned.
     ...(outgoing ? { status: row.status === 'sent' ? 'sent' : row.status === 'failed' ? 'failed' : 'queued' } : {}),
     ...(outgoing && row.status !== 'sent' && row.lastError ? { problem: row.lastError } : {}),
+    // Never tried and not yet due: it is waiting for the time its sender chose.
+    ...(outgoing && row.status === 'queued' && row.attempts === 0 && row.nextAttemptAt.getTime() > Date.now() ? { scheduledFor: row.nextAttemptAt.toISOString() } : {}),
   };
 }
 
@@ -98,9 +100,12 @@ export class InboxService {
   }
 
   /** Sends a reply on the thread. It is stored as queued here; the worker sends it. */
-  async reply(ctx: Context, input: { conversationId: string; body: string }): Promise<Message> {
+  async reply(ctx: Context, input: { conversationId: string; body: string; sendAt?: string }): Promise<Message> {
     const body = input.body.trim();
     if (!body) throw new ValidationError('Write something before sending.');
+    const sendAt = input.sendAt ? new Date(input.sendAt) : undefined;
+    if (sendAt && !(sendAt.getTime() > Date.now())) throw new ValidationError('Choose a time in the future to send it later.');
+    if (sendAt && sendAt.getTime() > Date.now() + 366 * 86_400_000) throw new ValidationError('A reply can be held for up to a year.');
     const conversation = await this.find(ctx, input.conversationId);
     const me = (await this.people.users(ctx)).find((user) => user.id === ctx.userId);
     if (!me) throw new ValidationError('You need to be an active member to send email.');
@@ -108,15 +113,28 @@ export class InboxService {
     const toEmail = typeof contact?.properties.email === 'string' ? contact.properties.email : '';
     if (!toEmail) throw new ValidationError('This contact has no email address.');
     const messageId = await this.transaction(ctx, async () => {
-      const queued = await this.mail.queue(ctx, { conversationId: conversation.id, sender: me, toEmail, subject: /^re:/i.test(conversation.subject) ? conversation.subject : `Re: ${conversation.subject}`, body });
+      const queued = await this.mail.queue(ctx, { conversationId: conversation.id, sender: me, toEmail, subject: /^re:/i.test(conversation.subject) ? conversation.subject : `Re: ${conversation.subject}`, body, sendAt });
       // Replying to something in the shared queue takes it.
       if (conversation.assigneeId === null) await this.conversations.update(ctx, conversation.id, { assigneeId: me.id });
       for (const recordId of [conversation.contactId, conversation.dealId]) {
-        if (recordId) await this.activities.create(ctx, { id: id('act'), recordId, kind: 'email', title: `Email sent: ${conversation.subject}`, body, actorId: me.id });
+        if (recordId) await this.activities.create(ctx, { id: id('act'), recordId, kind: 'email', title: `${sendAt ? 'Email scheduled' : 'Email sent'}: ${conversation.subject}`, body, actorId: me.id });
       }
       return queued;
     });
     return toMessage(await this.messages.getById(ctx, messageId));
+  }
+
+  /** Takes back a reply that is waiting for its time. */
+  async cancelScheduled(ctx: Context, messageId: string): Promise<void> {
+    const message = await this.messages.findById(ctx, messageId);
+    if (!message) throw new NotFoundError('message', messageId);
+    await this.find(ctx, message.conversationId);
+    await this.transaction(ctx, async () => {
+      const conversationId = await this.messages.cancelScheduled(ctx, messageId);
+      if (!conversationId) throw new ConflictError('That email has already been sent, or is being sent now.');
+      await this.conversations.refresh(ctx, conversationId, {});
+      await this.changed?.(ctx, conversationId);
+    });
   }
 
   counts(ctx: Context): Promise<InboxCounts> {

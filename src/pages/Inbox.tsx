@@ -59,7 +59,21 @@ function ConversationRow({ conversation, references, selected, folder }: { conve
   );
 }
 
-function MessageBubble({ message }: { message: Message }) {
+/** A moment as the value a date-and-time picker takes: local time, to the minute. */
+function localInput(moment: Date): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${moment.getFullYear()}-${pad(moment.getMonth() + 1)}-${pad(moment.getDate())}T${pad(moment.getHours())}:${pad(moment.getMinutes())}`;
+}
+
+/** Nine tomorrow morning, where the person is: the usual reason to send later. */
+function tomorrowMorning(): string {
+  const moment = new Date();
+  moment.setDate(moment.getDate() + 1);
+  moment.setHours(9, 0, 0, 0);
+  return localInput(moment);
+}
+
+function MessageBubble({ message, onCancel }: { message: Message; onCancel: () => void }) {
   const mine = message.direction === 'out';
   return (
     <article className="m-stack" data-gap="1" style={{ alignItems: mine ? 'flex-end' : 'flex-start' }}>
@@ -83,7 +97,16 @@ function MessageBubble({ message }: { message: Message }) {
         {message.body}
       </div>
       {/* An outgoing message that has not gone yet says so; one that could not go says why. */}
-      {message.status === 'queued' ? <span style={small}>{message.problem ? `Not sent yet, trying again: ${message.problem}` : 'Sending…'}</span> : null}
+      {message.scheduledFor ? (
+        <span className="m-cluster" data-gap="2" style={small}>
+          Will be sent {fullFormat.format(new Date(message.scheduledFor))}
+          <button type="button" className="m-button" data-variant="ghost" data-size="sm" onClick={onCancel}>
+            Cancel it
+          </button>
+        </span>
+      ) : message.status === 'queued' ? (
+        <span style={small}>{message.problem ? `Not sent yet, trying again: ${message.problem}` : 'Sending…'}</span>
+      ) : null}
       {message.status === 'failed' ? (
         <span className="m-field-error" role="alert">
           Not sent{message.problem ? `: ${message.problem}` : '.'}
@@ -101,6 +124,8 @@ function Thread({ conversationId, onChanged }: { conversationId: string; onChang
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string>();
+  // Empty until the person asks to send later; then the local date and time they picked.
+  const [later, setLater] = useState<string>();
   const end = useRef<HTMLDivElement>(null);
   const conversation = data?.conversation.id === conversationId ? data.conversation : undefined;
   const messages = conversation ? (data?.messages ?? []) : [];
@@ -151,14 +176,27 @@ function Thread({ conversationId, onChanged }: { conversationId: string; onChang
     onChanged();
   }
 
+  async function cancel(messageId: string) {
+    setSendError(undefined);
+    try {
+      await api.cancelScheduledReply(messageId);
+    } catch (cause) {
+      setSendError(cause instanceof Error ? cause.message : 'That email could not be cancelled.');
+    }
+    reload();
+    onChanged();
+  }
+
   async function send(event: FormEvent) {
     event.preventDefault();
     if (reply.trim() === '') return;
     setSending(true);
     setSendError(undefined);
     try {
-      await api.sendReply({ conversationId, body: reply });
+      // The picker gives a local date and time; it is sent on as the moment that is everywhere.
+      await api.sendReply({ conversationId, body: reply, ...(later ? { sendAt: new Date(later).toISOString() } : {}) });
       setReply('');
+      setLater(undefined);
       reload();
       onChanged();
       workspace.touch();
@@ -229,7 +267,7 @@ function Thread({ conversationId, onChanged }: { conversationId: string; onChang
       <div style={{ flex: 1, minBlockSize: 0, overflowY: 'auto', padding: 'var(--m-space-4)', background: 'var(--m-color-bg-canvas)' }}>
         <div className="m-stack" data-gap="4">
           {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} />
+            <MessageBubble key={message.id} message={message} onCancel={() => void cancel(message.id)} />
           ))}
           <div ref={end} />
         </div>
@@ -288,8 +326,23 @@ function Thread({ conversationId, onChanged }: { conversationId: string; onChang
           <div className="m-cluster" data-gap="2">
             {/* Only true on mock data; against the server, Send really sends. */}
             {import.meta.env.VITE_API_URL ? null : <span style={small}>Mock: nothing leaves this browser.</span>}
-            <button type="submit" className="m-button" data-variant="primary" data-size="sm" disabled={sending || reply.trim() === ''}>
-              <Send size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> {sending ? 'Sending…' : 'Send'}
+            {later === undefined ? (
+              <button type="button" className="m-button" data-variant="ghost" data-size="sm" onClick={() => setLater(tomorrowMorning())}>
+                Send later
+              </button>
+            ) : (
+              <>
+                <label className="m-sr-only" htmlFor="conversation-send-at">
+                  When to send it
+                </label>
+                <input className="m-input" data-size="sm" type="datetime-local" id="conversation-send-at" value={later} min={localInput(new Date())} onChange={(event) => setLater(event.target.value)} style={{ inlineSize: 210 }} />
+                <button type="button" className="m-button" data-variant="ghost" data-size="sm" onClick={() => setLater(undefined)}>
+                  Send now instead
+                </button>
+              </>
+            )}
+            <button type="submit" className="m-button" data-variant="primary" data-size="sm" disabled={sending || reply.trim() === '' || later === ''}>
+              <Send size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> {sending ? 'Sending…' : later === undefined ? 'Send' : 'Schedule'}
             </button>
           </div>
         </div>

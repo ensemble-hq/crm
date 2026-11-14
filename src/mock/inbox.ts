@@ -216,6 +216,7 @@ export function createInboxApi(respond: <T>(compute: () => T) => Promise<T>, log
           fromEmail: me?.email ?? '',
           body,
           sentAt: new Date().toISOString(),
+          ...(input.sendAt ? { status: 'queued' as const, scheduledFor: input.sendAt } : {}),
         };
         const list = inbox().messages.get(conversation.id) ?? [];
         list.push(message);
@@ -229,6 +230,20 @@ export function createInboxApi(respond: <T>(compute: () => T) => Promise<T>, log
         logEmail(conversation.contactId, conversation.subject, body);
         if (conversation.dealId) logEmail(conversation.dealId, conversation.subject, body);
         return message;
+      }),
+
+    cancelScheduledReply: (messageId) =>
+      respond(() => {
+        for (const [conversationId, list] of inbox().messages) {
+          const index = list.findIndex((message) => message.id === messageId && message.scheduledFor);
+          if (index < 0) continue;
+          list.splice(index, 1);
+          const conversation = find(conversationId);
+          conversation.messageCount = list.length;
+          conversation.preview = (list[list.length - 1]?.body ?? '').replace(/\s+/g, ' ').slice(0, 120);
+          return;
+        }
+        throw new Error('That email has already been sent, or is being sent now.');
       }),
 
     listEmailTemplates: () => respond(() => emailTemplates),

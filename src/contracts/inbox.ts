@@ -38,6 +38,8 @@ export const messageSchema = z.object({
   status: z.enum(['queued', 'sent', 'failed']).optional(),
   /** Why it failed, in words, when it did. */
   problem: z.string().optional(),
+  /** Set while an outgoing message is waiting for a time its sender chose. Until then it can be cancelled. */
+  scheduledFor: z.string().optional(),
 });
 export type Message = z.infer<typeof messageSchema>;
 
@@ -147,7 +149,10 @@ export interface InboxApi {
   getConversation(id: string): Promise<ConversationDetail>;
   updateConversation(input: UpdateConversation): Promise<Conversation>;
   /** Sends a reply on the thread, and logs it on the contact and the deal. */
-  sendReply(input: { conversationId: string; body: string }): Promise<Message>;
+  /** With `sendAt`, the reply is kept and sent at that time instead of now. */
+  sendReply(input: { conversationId: string; body: string; sendAt?: string }): Promise<Message>;
+  /** Takes back a reply that is waiting for its time. Refused once it has gone or is going. */
+  cancelScheduledReply(messageId: string): Promise<void>;
   listEmailTemplates(): Promise<EmailTemplate[]>;
   inboxCounts(): Promise<InboxCounts>;
   getEmailHealth(): Promise<EmailHealth>;

@@ -102,6 +102,32 @@ describe('email going out', () => {
   });
 });
 
+describe('sending later', () => {
+  it('holds a reply until its time, lets it be cancelled, and sends it once when due', async () => {
+    await arrive('later-1', 'later@example.com', 'When suits');
+    const conversation = await conversationWith('When suits');
+    const reply = (body: string, sendAt?: string) => crm.call<Message>(MAYA, 'inbox.reply', { conversationId: conversation?.id, body, sendAt });
+    expect(await refusal(reply('Too late', new Date(Date.now() - 60_000).toISOString()))).toMatch(/in the future/);
+    const at = new Date(Date.now() + 3_600_000).toISOString();
+    const held = await reply('Tomorrow works.', at);
+    expect(held).toMatchObject({ status: 'queued', scheduledFor: at });
+    const dropped = await reply('Never mind this one.', at);
+    // Neither the event nor the sweep sends it before its time, and it is not counted as a backlog.
+    await crm.services.mail.deliver(crm.system(), held.id);
+    expect((await crm.services.mail.sweep(crm.system())).sent).toBe(0);
+    expect(await atProvider('later@example.com')).toHaveLength(0);
+    expect((await crm.call<{ queued: number }>(MAYA, 'inbox.health')).queued).toBe(0);
+    await crm.call(MAYA, 'inbox.cancelScheduled', dropped.id);
+    await crm.db.execute(sql`update messages set next_attempt_at = now() where id = ${held.id}`);
+    expect((await crm.services.mail.sweep(crm.system())).sent).toBe(1);
+    expect((await atProvider('later@example.com')).map((mail) => mail.text)).toEqual(['Tomorrow works.']);
+    const thread = await crm.call<ConversationDetail>(MAYA, 'inbox.get', conversation?.id);
+    expect(thread.messages.filter((message) => message.direction === 'out')).toEqual([expect.objectContaining({ status: 'sent', body: 'Tomorrow works.' })]);
+    expect(thread.messages.some((message) => message.scheduledFor)).toBe(false);
+    expect(await refusal(crm.call(MAYA, 'inbox.cancelScheduled', held.id))).toMatch(/already been sent/);
+  });
+});
+
 describe('consent and opting out', () => {
   let otto: CrmRecord;
   let token: string;

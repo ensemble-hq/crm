@@ -147,6 +147,7 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     'inbox.get': (ctx, input) => inbox.get(ctx, input),
     'inbox.update': (ctx, input) => inbox.update(ctx, input),
     'inbox.reply': (ctx, input) => inbox.reply(ctx, input),
+    'inbox.cancelScheduled': (ctx, input) => inbox.cancelScheduled(ctx, input),
     'inbox.counts': (ctx) => inbox.counts(ctx),
     'inbox.health': (ctx) => inbox.health(ctx),
     'email.preference': (ctx, input) => rules.describe(ctx, input),

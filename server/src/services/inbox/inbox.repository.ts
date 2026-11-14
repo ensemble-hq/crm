@@ -102,6 +102,14 @@ export class MessagesRepository extends DrizzleRepository<MessageRow> {
   }
 
   /** Queued messages that are due, oldest first. */
+  /** Removes a message that is waiting for a time its sender chose, if it is still waiting. Says which conversation it was in, or nothing if it was too late. */
+  async cancelScheduled(ctx: Context, id: string): Promise<string | undefined> {
+    const rows = (await this.db.execute(
+      sql`delete from messages where ${and(this.buildWhere(ctx), sql`messages.id = ${id}`, sql`messages.direction = 'out'`, sql`messages.status = 'queued'`, sql`messages.attempts = 0`, sql`messages.next_attempt_at > now()`)} returning conversation_id`,
+    )) as unknown as Array<{ conversation_id: string }>;
+    return rows[0]?.conversation_id;
+  }
+
   async due(ctx: Context, limit: number): Promise<string[]> {
     const rows = (await this.db.execute(sql`select id from messages where ${and(this.buildWhere(ctx), sql`messages.status = 'queued'`, sql`messages.next_attempt_at <= now()`)} order by next_attempt_at limit ${limit}`)) as unknown as Array<{ id: string }>;
     return rows.map((row) => row.id);
@@ -141,8 +149,8 @@ export class InboundEmailsRepository extends DrizzleRepository<InboundEmailRow> 
   async health(ctx: Context): Promise<Omit<EmailHealth, 'lastSweepAt'>> {
     const [row] = (await this.db.execute(sql`
       select
-        (select count(*)::int from messages where tenant_id = ${ctx.tenantId} and status in ('queued', 'sending')) as queued,
-        (select extract(epoch from now() - min(created_at))::int from messages where tenant_id = ${ctx.tenantId} and status in ('queued', 'sending')) as "oldestQueuedSeconds",
+        (select count(*)::int from messages where tenant_id = ${ctx.tenantId} and status in ('queued', 'sending') and (attempts > 0 or next_attempt_at <= now())) as queued,
+        (select extract(epoch from now() - min(created_at))::int from messages where tenant_id = ${ctx.tenantId} and status in ('queued', 'sending') and (attempts > 0 or next_attempt_at <= now())) as "oldestQueuedSeconds",
         (select count(*)::int from messages where tenant_id = ${ctx.tenantId} and status = 'failed') as "failedOutgoing",
         (select count(*)::int from inbound_emails where tenant_id = ${ctx.tenantId} and status = 'received') as "waitingIncoming",
         (select count(*)::int from inbound_emails where tenant_id = ${ctx.tenantId} and status = 'failed') as "failedIncoming"`)) as unknown as Array<Omit<EmailHealth, 'lastSweepAt'>>;
