@@ -293,4 +293,76 @@ const deals: ObjectDefinition = {
   board: { groupBy: 'stage', sumProperty: 'amount', dateProperty: 'closeDate' },
 };
 
-export const objects: ObjectDefinition[] = [contacts, companies, deals];
+export const taskTypes: Option[] = [
+  { id: 'todo', label: 'To-do' },
+  { id: 'call', label: 'Call', tone: 'info' },
+  { id: 'email', label: 'Email', tone: 'info' },
+  { id: 'meeting', label: 'Meeting', tone: 'warning' },
+];
+
+export const taskStatuses: Option[] = [
+  { id: 'open', label: 'To do' },
+  { id: 'done', label: 'Done', tone: 'success' },
+];
+
+const tasks: ObjectDefinition = {
+  id: 'tasks',
+  singular: 'Task',
+  plural: 'Tasks',
+  icon: 'check',
+  primaryProperty: 'name',
+  secondaryProperty: 'dueDate',
+  properties: [
+    { id: 'name', label: 'Task', type: 'text', group: 'About', onCreate: true },
+    { id: 'type', label: 'Type', type: 'select', options: taskTypes, group: 'About', onCreate: true },
+    { id: 'dueDate', label: 'Due', type: 'date', group: 'About', onCreate: true },
+    { id: 'priority', label: 'Priority', type: 'select', options: priorities, group: 'About', onCreate: true },
+    { id: 'status', label: 'Status', type: 'select', options: taskStatuses, group: 'About', required: true },
+    { id: 'owner', label: 'Assigned to', type: 'user', group: 'About', onCreate: true },
+    { id: 'deal', label: 'Deal', type: 'reference', referenceObjectId: 'deals', group: 'About what' },
+    { id: 'contact', label: 'Contact', type: 'reference', referenceObjectId: 'contacts', group: 'About what' },
+    { id: 'company', label: 'Company', type: 'reference', referenceObjectId: 'companies', group: 'About what' },
+    { id: 'createdAt', label: 'Created', type: 'date', group: 'Record', system: true },
+  ],
+  views: [
+    {
+      id: 'due',
+      name: 'Due now',
+      columns: ['name', 'type', 'dueDate', 'priority', 'deal', 'contact'],
+      filters: [
+        { property: 'owner', operator: 'in', value: ['$me'] },
+        { property: 'status', operator: 'in', value: ['open'] },
+        { property: 'dueDate', operator: 'lt', value: '$tomorrow' },
+      ],
+      sort: { property: 'dueDate', direction: 'asc' },
+    },
+    {
+      id: 'upcoming',
+      name: 'Upcoming',
+      columns: ['name', 'type', 'dueDate', 'priority', 'deal', 'contact'],
+      filters: [
+        { property: 'owner', operator: 'in', value: ['$me'] },
+        { property: 'status', operator: 'in', value: ['open'] },
+        { property: 'dueDate', operator: 'gt', value: '$today' },
+      ],
+      sort: { property: 'dueDate', direction: 'asc' },
+    },
+    {
+      id: 'team',
+      name: 'Everyone\'s open tasks',
+      columns: ['name', 'owner', 'type', 'dueDate', 'priority', 'deal'],
+      filters: [{ property: 'status', operator: 'in', value: ['open'] }],
+      sort: { property: 'dueDate', direction: 'asc' },
+    },
+    {
+      id: 'done',
+      name: 'Done',
+      columns: ['name', 'owner', 'type', 'dueDate', 'deal', 'contact'],
+      filters: [{ property: 'status', operator: 'in', value: ['done'] }],
+      sort: { property: 'dueDate', direction: 'desc' },
+    },
+  ],
+  completion: { property: 'status', open: 'open', done: 'done' },
+};
+
+export const objects: ObjectDefinition[] = [contacts, companies, deals, tasks];

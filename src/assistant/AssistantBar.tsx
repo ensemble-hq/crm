@@ -44,14 +44,14 @@ export function AssistantBar({ offset }: { /** Width of the sidebar, so the bar 
 
   const about = assistant.page.recordId && object ? `this ${object.singular.toLowerCase()}` : object ? `these ${object.plural.toLowerCase()}` : 'your CRM';
   const suggestions = assistant.page.recordId
-    ? ['Summarize this', 'Draft a follow-up email', 'Add a note: left a voicemail']
+    ? ['Summarize this', 'Draft a follow-up email', 'Remind me to call them tomorrow']
     : object?.id === 'deals'
       ? ['Show only mine closing this month', 'Show open deals over $100k', 'Which big deals have gone quiet?']
       : object?.id === 'contacts'
         ? ['Show only my leads', 'Show unassigned contacts', 'Import a spreadsheet of leads']
         : object
           ? [`Show only my ${object.plural.toLowerCase()}`, 'How is the pipeline looking?']
-          : ['How is the pipeline looking?', 'Which big deals have gone quiet?', 'Who has closed the most this year?'];
+          : ['What should I do today?', 'How is the pipeline looking?', 'Which big deals have gone quiet?'];
 
   function send(message: string) {
     if (assistant.working || message.trim() === '') return;

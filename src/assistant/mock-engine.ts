@@ -465,10 +465,122 @@ async function showFiltered(ctx: EngineContext, object: ObjectDefinition, filter
   );
 }
 
+/** "What should I do today?": the tasks due, and the deals that need the user. */
+async function today(ctx: EngineContext): Promise<void> {
+  const tasks = ctx.objects.find((object) => object.completion);
+  if (!tasks) {
+    await ctx.say('This workspace has no tasks set up, so I have nothing to plan your day from.');
+    return;
+  }
+  const [due, closing] = await ctx.tool(
+    'search_records',
+    'Reading your tasks and the deals closing soon',
+    () =>
+      Promise.all([
+        api.listRecords({ objectId: tasks.id, viewId: tasks.views[0]?.id, page: 1, pageSize: 10 }),
+        api.listRecords({
+          objectId: 'deals',
+          filters: [
+            { property: 'owner', operator: 'in', value: ['$me'] },
+            { property: 'stage', operator: 'in', value: OPEN_STAGES },
+            { property: 'closeDate', operator: 'lt', value: '$in14days' },
+          ],
+          sort: { property: 'closeDate', direction: 'asc' },
+          page: 1,
+          pageSize: 3,
+        }),
+      ]),
+    ([tasksDue]) => plural(tasksDue.total, 'task'),
+  );
+  if (due.total === 0) {
+    await ctx.say('Nothing is due today. A good day to work the pipeline.');
+  } else {
+    ctx.show({
+      kind: 'table',
+      title: 'Due today or overdue',
+      subtitle: `${plural(due.total, 'task')}, oldest first`,
+      objectId: tasks.id,
+      columns: ['name', 'type', 'dueDate', 'priority', 'deal'],
+      records: due.records,
+      references: due.references,
+      total: due.total,
+    });
+    const urgent = due.records.filter((task) => task.properties.priority === 'high').length;
+    await ctx.say(`You have ${plural(due.total, 'task')} due. I would start with the oldest${urgent > 0 ? `; ${urgent} of the first ${due.records.length} are high priority` : ''}. The list is on the right.`);
+  }
+  const next = closing.records[0];
+  if (next) {
+    await ctx.say(
+      `${plural(closing.total, 'deal')} of yours ${closing.total === 1 ? 'is' : 'are'} due to close within two weeks. The nearest is ${String(next.properties.name)} with ${
+        typeof next.properties.company === 'string' ? (closing.references[next.properties.company]?.label ?? 'a company') : 'a company'
+      }, on ${formatDate(String(next.properties.closeDate))}.`,
+    );
+  }
+  ctx.suggest(['Which big deals have gone quiet?', 'Show only mine closing this month']);
+}
+
+const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+/** "tomorrow", "friday", "next week" as a date, counted from today. Undefined when no day was named. */
+function dueFrom(text: string): string | undefined {
+  const start = Date.parse(MOCK_TODAY);
+  const day = (offset: number) => new Date(start + offset * 86_400_000).toISOString().slice(0, 10);
+  if (/\btoday\b/.test(text)) return day(0);
+  if (/\btomorrow\b/.test(text)) return day(1);
+  if (/\bnext week\b/.test(text)) return day(7);
+  const weekday = WEEKDAYS.findIndex((name) => new RegExp(`\\b${name}\\b`).test(text));
+  if (weekday === -1) return undefined;
+  const ahead = (weekday - new Date(start).getUTCDay() + 7) % 7 || 7;
+  return day(ahead);
+}
+
+/** "Remind me to call them Thursday": makes a task, linked to the record on screen when there is one. */
+async function remind(ctx: EngineContext, what: string): Promise<void> {
+  const tasks = ctx.objects.find((object) => object.completion);
+  if (!tasks?.completion) return help(ctx);
+  const due = dueFrom(what.toLowerCase()) ?? dueFrom('tomorrow');
+  const title = what.replace(/\s*\b(?:on|by|this|next)?\s*(?:today|tomorrow|next week|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b\.?$/i, '').trim();
+  const name = `${title.slice(0, 1).toUpperCase()}${title.slice(1)}`;
+  const properties: Record<string, PropertyValue> = {
+    name,
+    type: /\b(call|phone|ring)\b/i.test(name) ? 'call' : /\b(e-?mail|send|write)\b/i.test(name) ? 'email' : /\b(meet|meeting)\b/i.test(name) ? 'meeting' : 'todo',
+    dueDate: due ?? null,
+    priority: 'medium',
+    owner: ctx.currentUser.id,
+    [tasks.completion.property]: tasks.completion.open,
+  };
+  let about = '';
+  const recordId = ctx.page.recordId;
+  await ctx.tool(
+    'create_record',
+    'Creating the task',
+    async () => {
+      if (recordId) {
+        const { record } = await api.getRecord(recordId);
+        const from = ctx.objects.find((object) => object.id === record.objectId);
+        for (const property of tasks.properties) {
+          if (property.type !== 'reference') continue;
+          if (property.referenceObjectId === record.objectId) properties[property.id] = record.id;
+          else {
+            const carried = from?.properties.find((item) => item.type === 'reference' && item.referenceObjectId === property.referenceObjectId);
+            const value = carried ? record.properties[carried.id] : undefined;
+            if (typeof value === 'string') properties[property.id] = value;
+          }
+        }
+        if (from && record.objectId !== tasks.id) about = `, linked to this ${from.singular.toLowerCase()}`;
+      }
+      return api.createRecord({ objectId: tasks.id, properties });
+    },
+    () => 'created',
+  );
+  ctx.touch();
+  await ctx.say(`Done. "${name}" is on your task list${due ? `, due ${formatDate(due)}` : ''}${about}.`);
+}
+
 async function help(ctx: EngineContext): Promise<void> {
   await pause(300);
   await ctx.say('This is a scripted preview of the assistant, so it understands a few requests. Try one of these. The answers use the real data in this workspace.');
-  ctx.suggest(['How is the pipeline looking?', 'Which big deals have gone quiet?', 'Import a spreadsheet of leads', 'Add a renewal date to deals', 'Build a customer portal']);
+  ctx.suggest(['What should I do today?', 'How is the pipeline looking?', 'Which big deals have gone quiet?', 'Import a spreadsheet of leads', 'Add a renewal date to deals', 'Build a customer portal']);
 }
 
 /** Answers one message. Each branch stands in for what the model would decide to do. */
@@ -479,6 +591,9 @@ export async function respond(input: { text: string; attachments: Attachment[] }
 
   if (file) return importFile(ctx, file);
   if (/sample file/.test(text)) return importFile(ctx, SAMPLE_FILE);
+  const reminder = /^(?:remind me to|remember to|create a task to|add a task to|add a task:?|task:)\s+(.{3,})$/i.exec(input.text.trim());
+  if (reminder?.[1]) return remind(ctx, reminder[1]);
+  if (/what should i do|plan my day|my day|what.s (on|next|due)|to-?do list|what do i have/.test(text)) return today(ctx);
   const recordId = ctx.page.recordId;
   if (recordId) {
     const note = /^(?:add |log |leave )?(?:a )?note(?: that|:)?\s+(.{3,})$/i.exec(input.text.trim());

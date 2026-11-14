@@ -40,16 +40,38 @@ function property(object: ObjectDefinition, propertyId: string): PropertyDefinit
   return object.properties.find((item) => item.id === propertyId);
 }
 
+function daysFromToday(days: number): string {
+  return new Date(Date.parse(MOCK_TODAY) + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+/** The first or last day of the month `offset` months from this one. */
+function monthEdge(offset: number, edge: 'start' | 'end'): string {
+  const [year = 0, month = 1] = MOCK_TODAY.split('-').map(Number);
+  // Day 0 of the following month is the last day of this one.
+  const date = edge === 'start' ? new Date(Date.UTC(year, month - 1 + offset, 1)) : new Date(Date.UTC(year, month + offset, 0));
+  return date.toISOString().slice(0, 10);
+}
+
 function resolveToken(value: string): string {
   switch (value) {
     case '$me':
       return CURRENT_USER_ID;
     case '$today':
       return MOCK_TODAY;
+    case '$tomorrow':
+      return daysFromToday(1);
+    case '$in14days':
+      return daysFromToday(14);
+    case '$14daysAgo':
+      return daysFromToday(-14);
     case '$monthStart':
-      return `${MOCK_TODAY.slice(0, 7)}-01`;
+      return monthEdge(0, 'start');
     case '$monthEnd':
-      return `${MOCK_TODAY.slice(0, 7)}-31`;
+      return monthEdge(0, 'end');
+    case '$lastMonthStart':
+      return monthEdge(-1, 'start');
+    case '$lastMonthEnd':
+      return monthEdge(-1, 'end');
     default:
       return value;
   }

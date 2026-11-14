@@ -17,7 +17,7 @@ const root = document.getElementById('root');
 if (!root) throw new Error('Missing #root element');
 
 /** Areas the navigation links to that have no screen yet. Listed so they don't match `/:objectId`. */
-const PLACEHOLDERS = ['inbox', 'tasks', 'sequences', 'workflows', 'reports'];
+const PLACEHOLDERS = ['inbox', 'sequences', 'workflows', 'reports'];
 
 createRoot(root).render(
   <StrictMode>

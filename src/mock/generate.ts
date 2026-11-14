@@ -18,7 +18,7 @@ import {
  * the volume a real workspace has. Same seed, same data, on every load.
  */
 
-export const VOLUME = { companies: 6_000, contacts: 50_000, deals: 2_400 } as const;
+export const VOLUME = { companies: 6_000, contacts: 50_000, deals: 2_400, tasks: 4_000 } as const;
 
 const DAY = 86_400_000;
 const NOW = Date.parse(MOCK_NOW);
@@ -218,6 +218,46 @@ function generateDeals(random: () => number, companies: CrmRecord[], contactsByC
   return result;
 }
 
+const TASK_NAMES: Array<{ type: string; name: string }> = [
+  { type: 'call', name: 'Call about the proposal' },
+  { type: 'call', name: 'Check in by phone' },
+  { type: 'email', name: 'Send revised pricing' },
+  { type: 'email', name: 'Follow up after the demo' },
+  { type: 'email', name: 'Share the security questionnaire' },
+  { type: 'meeting', name: 'Prepare for the review meeting' },
+  { type: 'meeting', name: 'Book a kickoff call' },
+  { type: 'todo', name: 'Update the close date and next step' },
+  { type: 'todo', name: 'Get legal sign-off on the contract' },
+  { type: 'todo', name: 'Confirm the decision maker' },
+];
+
+/** Tasks hang off deals; nine in ten are done. Open ones fall across the coming month, with a few overdue. */
+function generateTasks(random: () => number, deals: CrmRecord[]): CrmRecord[] {
+  const result: CrmRecord[] = [];
+  for (let index = 0; index < VOLUME.tasks; index += 1) {
+    const deal = deals[Math.floor(random() * deals.length)] as CrmRecord;
+    const done = random() < 0.9;
+    const template = pick(random, TASK_NAMES);
+    const createdAt = NOW - Math.floor(done ? 20 + random() * 400 : random() * 30) * DAY;
+    const dueAt = done ? createdAt + Math.floor(random() * 14) * DAY : NOW + (Math.floor(random() * 30) - 2) * DAY;
+    result.push(
+      record('tasks', `task_${pad(index + 1, 5)}`, createdAt, {
+        name: template.name,
+        type: template.type,
+        dueDate: isoDate(dueAt),
+        priority: (priorities[weighted(random, [30, 50, 20])] as Option).id,
+        status: done ? 'done' : 'open',
+        // A task belongs to whoever owns the deal, when someone does.
+        owner: typeof deal.properties.owner === 'string' ? deal.properties.owner : pick(random, users).id,
+        deal: deal.id,
+        contact: deal.properties.contact ?? null,
+        company: deal.properties.company ?? null,
+      }),
+    );
+  }
+  return result;
+}
+
 let cached: Dataset | undefined;
 
 export function dataset(): Dataset {
@@ -234,13 +274,15 @@ export function dataset(): Dataset {
     else contactsByCompany.set(companyId, [contact]);
   }
   const deals = generateDeals(random, companies, contactsByCompany);
+  const tasks = generateTasks(random, deals);
   const byId = new Map<string, CrmRecord>();
-  for (const item of [...companies, ...contacts, ...deals]) byId.set(item.id, item);
+  for (const item of [...companies, ...contacts, ...deals, ...tasks]) byId.set(item.id, item);
   cached = {
     byObject: new Map([
       ['companies', companies],
       ['contacts', contacts],
       ['deals', deals],
+      ['tasks', tasks],
     ]),
     byId,
   };

@@ -4,9 +4,11 @@ import { Link, Navigate, useParams } from 'react-router-dom';
 import { api, useQuery } from '../api';
 import { Page } from '../app/Page';
 import { useWorkspace } from '../app/workspace';
-import type { ObjectDefinition } from '../contracts/metadata';
+import type { ObjectDefinition, PropertyValue as Value } from '../contracts/metadata';
 import type { Activity, ActivityKind, CrmRecord, Reference, RelatedGroup } from '../contracts/records';
-import { PropertyValue, formatDateTime } from '../ui/PropertyValue';
+import { CompleteButton, isComplete } from '../ui/CompleteButton';
+import { PropertyValue, formatDate, formatDateTime } from '../ui/PropertyValue';
+import { CreateRecordDialog } from './CreateRecordDialog';
 import { RecordProperties } from './RecordProperties';
 import { objectIcon } from '../ui/icons';
 import { ICON, cardTitle, link, medium, plainList, rowDivider, small, toolbarButton } from '../ui/styles';
@@ -84,11 +86,21 @@ function Related({ groups }: { groups: RelatedGroup[] }) {
                 const secondary = object.properties.find((property) => property.id === object.secondaryProperty);
                 const secondaryValue = secondary ? record.properties[secondary.id] : undefined;
                 return (
-                  <li key={record.id} className="m-stack" data-gap="0">
-                    <Link to={`/${object.id}/${record.id}`} style={{ ...medium, color: 'inherit', textDecoration: 'none' }}>
-                      {String(record.properties[object.primaryProperty] ?? 'Untitled')}
-                    </Link>
-                    {secondary && secondary.type !== 'reference' && typeof secondaryValue === 'string' ? <span style={small}>{secondaryValue}</span> : null}
+                  <li key={record.id} className="m-cluster" data-gap="2" data-align="start" style={{ flexWrap: 'nowrap' }}>
+                    {object.completion ? (
+                      <span style={{ display: 'inline-flex', paddingBlockStart: 2 }}>
+                        <CompleteButton object={object} record={record} />
+                      </span>
+                    ) : null}
+                    <span className="m-stack" data-gap="0">
+                      <Link
+                        to={`/${object.id}/${record.id}`}
+                        style={{ ...medium, color: isComplete(object, record) ? 'var(--m-color-fg-muted)' : 'inherit', textDecoration: isComplete(object, record) ? 'line-through' : 'none' }}
+                      >
+                        {String(record.properties[object.primaryProperty] ?? 'Untitled')}
+                      </Link>
+                      {secondary && secondary.type !== 'reference' && typeof secondaryValue === 'string' ? <span style={small}>{secondary.type === 'date' ? `Due ${formatDate(secondaryValue)}` : secondaryValue}</span> : null}
+                    </span>
                   </li>
                 );
               })}
@@ -105,7 +117,7 @@ function Related({ groups }: { groups: RelatedGroup[] }) {
   );
 }
 
-function Timeline({ recordId }: { recordId: string }) {
+function Timeline({ recordId, onAddTask }: { recordId: string; onAddTask?: () => void }) {
   const { user, revision } = useWorkspace();
   const [filter, setFilter] = useState<ActivityKind | 'all'>('all');
   const [note, setNote] = useState('');
@@ -142,9 +154,9 @@ function Timeline({ recordId }: { recordId: string }) {
                 { label: 'Email', icon: Mail },
                 { label: 'Log a call', icon: Phone },
                 { label: 'Meeting', icon: Video },
-                { label: 'Task', icon: CheckSquare },
-              ].map((action) => (
-                <button key={action.label} type="button" className="m-button" data-variant="ghost" data-size="sm">
+                { label: 'Task', icon: CheckSquare, onClick: onAddTask },
+              ].map((action: { label: string; icon: LucideIcon; onClick?: () => void }) => (
+                <button key={action.label} type="button" className="m-button" data-variant="ghost" data-size="sm" onClick={action.onClick}>
                   <action.icon size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> {action.label}
                 </button>
               ))}
@@ -218,11 +230,34 @@ function Timeline({ recordId }: { recordId: string }) {
   );
 }
 
+/**
+ * What a task made from a record page starts with: open, owned by the person making it, and linked
+ * to the record it was made on, plus that record's own company and contact where the task has a
+ * place for them.
+ */
+function taskAbout(taskObject: ObjectDefinition, object: ObjectDefinition, record: CrmRecord, userId: string): Record<string, Value> {
+  const values: Record<string, Value> = { owner: userId };
+  if (taskObject.completion) values[taskObject.completion.property] = taskObject.completion.open;
+  for (const property of taskObject.properties) {
+    if (property.type !== 'reference') continue;
+    if (property.referenceObjectId === object.id) values[property.id] = record.id;
+    else {
+      const carried = object.properties.find((item) => item.type === 'reference' && item.referenceObjectId === property.referenceObjectId);
+      const value = carried ? record.properties[carried.id] : undefined;
+      if (typeof value === 'string') values[property.id] = value;
+    }
+  }
+  return values;
+}
+
 /** The record page for any object: its properties by group, what it's related to, and its activity. */
 export function RecordDetail() {
   const { objectId, recordId = '' } = useParams();
-  const { object: findObject, revision, touch } = useWorkspace();
+  const { object: findObject, objects, currentUser, revision, touch } = useWorkspace();
   const object = findObject(objectId);
+  const [addingTask, setAddingTask] = useState(false);
+  // The object whose records get finished: tasks.
+  const taskObject = objects.find((item) => item.completion);
   const detail = useQuery(() => api.getRecord(recordId), [recordId, revision]);
   const related = useQuery(() => api.listRelated(recordId), [recordId, revision]);
 
@@ -274,10 +309,22 @@ export function RecordDetail() {
           <span className="m-spinner" role="status" aria-label={`Loading ${object.singular.toLowerCase()}`} />
         </div>
       ) : null}
+      {record && addingTask && taskObject ? (
+        <CreateRecordDialog
+          object={taskObject}
+          initial={taskAbout(taskObject, object, record, currentUser.id)}
+          onClose={() => setAddingTask(false)}
+          onCreated={() => {
+            setAddingTask(false);
+            touch();
+          }}
+        />
+      ) : null}
       {record ? (
         <div className="m-stack" data-gap="5">
           <div className="m-stack" data-gap="2">
             <div className="m-cluster" data-gap="3" data-align="center">
+              <CompleteButton object={object} record={record} size={22} />
               <h1 style={{ fontSize: 'var(--m-font-size-2xl)', fontWeight: 'var(--m-font-weight-medium)', letterSpacing: 'var(--m-font-tracking-tight)', lineHeight: 'var(--m-font-leading-tight)' }}>
                 {name}
               </h1>
@@ -308,7 +355,7 @@ export function RecordDetail() {
                 <Related groups={related.data ?? []} />
               </div>
             </aside>
-            <Timeline recordId={record.id} />
+            <Timeline recordId={record.id} onAddTask={taskObject && taskObject.id !== object.id ? () => setAddingTask(true) : undefined} />
           </div>
         </div>
       ) : null}

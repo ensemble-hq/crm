@@ -50,6 +50,11 @@ export function operatorLabel(operator: FilterOperator, type: PropertyType): str
 export const TOKENS: Record<string, string> = {
   $me: 'me',
   $today: 'today',
+  $tomorrow: 'tomorrow',
+  $in14days: '14 days from now',
+  $14daysAgo: '14 days ago',
+  $lastMonthStart: 'the start of last month',
+  $lastMonthEnd: 'the end of last month',
   $monthStart: 'the start of this month',
   $monthEnd: 'the end of this month',
 };

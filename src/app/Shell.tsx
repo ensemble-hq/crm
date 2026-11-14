@@ -1,6 +1,7 @@
-import { BarChart3, Bell, Bookmark, CheckSquare, House, Inbox, type LucideIcon, Monitor, Moon, PanelLeft, PanelLeftOpen, Search, Send, Settings, Sparkles, Sun, Workflow } from 'lucide-react';
+import { BarChart3, Bell, Bookmark, House, Inbox, type LucideIcon, Monitor, Moon, PanelLeft, PanelLeftOpen, Search, Send, Settings, Sparkles, Sun, Workflow } from 'lucide-react';
 import { type CSSProperties, useEffect, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
+import { api, useQuery } from '../api';
 import { AssistantBar } from '../assistant/AssistantBar';
 import { AssistantProvider } from '../assistant/AssistantProvider';
 import { objectIcon } from '../ui/icons';
@@ -62,12 +63,15 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
   const here = `${location.pathname}${location.search}`;
 
   // Objects come from the workspace's definitions, so a custom object appears here by itself.
+  // Tasks sit with the inbox, as the day's work, and show how many of yours are due.
+  const taskObject = workspace.objects.find((object) => object.completion);
+  const due = useQuery(() => (taskObject ? api.listRecords({ objectId: taskObject.id, viewId: taskObject.views[0]?.id, page: 1, pageSize: 1 }) : Promise.resolve(undefined)), [taskObject?.id, workspace.revision]);
   const primary: NavItem[] = [
     { to: '/assistant', label: 'Assistant', icon: Sparkles },
-    { to: '/', label: 'Overview', icon: House },
+    { to: '/', label: 'Today', icon: House },
     { to: '/inbox', label: 'Inbox', icon: Inbox, count: 6 },
-    { to: '/tasks', label: 'Tasks', icon: CheckSquare, count: 5 },
-    ...workspace.objects.map((object) => ({ to: `/${object.id}`, label: object.plural, icon: objectIcon(object.icon) })),
+    ...(taskObject ? [{ to: `/${taskObject.id}`, label: taskObject.plural, icon: objectIcon(taskObject.icon), count: due.data?.total }] : []),
+    ...workspace.objects.filter((object) => object !== taskObject).map((object) => ({ to: `/${object.id}`, label: object.plural, icon: objectIcon(object.icon) })),
     { to: '/sequences', label: 'Sequences', icon: Send },
     { to: '/workflows', label: 'Workflows', icon: Workflow },
     { to: '/reports', label: 'Reports', icon: BarChart3 },

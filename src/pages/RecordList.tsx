@@ -5,6 +5,7 @@ import { api, useQuery } from '../api';
 import { Page } from '../app/Page';
 import { useWorkspace } from '../app/workspace';
 import type { Filter, ObjectDefinition, PropertyDefinition, Sort, PropertyValue as Value, ViewDefinition } from '../contracts/metadata';
+import { CompleteButton, isComplete } from '../ui/CompleteButton';
 import { Modal } from '../ui/Modal';
 import { PropertyInput } from '../ui/PropertyInput';
 import { PropertyValue } from '../ui/PropertyValue';
@@ -338,9 +339,20 @@ function RecordTable({
                       {columns.map((column) => (
                         <td key={column.id} data-numeric={NUMERIC.has(column.type) ? '' : undefined}>
                           {column.id === object.primaryProperty ? (
-                            <Link to={`/${object.id}/${record.id}`} style={{ color: 'inherit', textDecoration: 'none', fontWeight: 'var(--m-font-weight-semibold)', whiteSpace: 'nowrap' }}>
-                              {String(name ?? 'Untitled')}
-                            </Link>
+                            <span className="m-cluster" data-gap="2" style={{ flexWrap: 'nowrap' }}>
+                              <CompleteButton object={object} record={record} />
+                              <Link
+                                to={`/${object.id}/${record.id}`}
+                                style={{
+                                  color: isComplete(object, record) ? 'var(--m-color-fg-muted)' : 'inherit',
+                                  textDecoration: isComplete(object, record) ? 'line-through' : 'none',
+                                  fontWeight: 'var(--m-font-weight-semibold)',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {String(name ?? 'Untitled')}
+                              </Link>
+                            </span>
                           ) : (
                             <PropertyValue property={column} value={record.properties[column.id]} references={data.references} />
                           )}

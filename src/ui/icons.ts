@@ -1,4 +1,4 @@
-import { Box, Briefcase, Building2, CalendarDays, FileText, FolderClosed, Handshake, type LucideIcon, Package, Star, Ticket, Users, Wrench } from 'lucide-react';
+import { Box, Briefcase, Building2, CalendarDays, CheckSquare, FileText, FolderClosed, Handshake, type LucideIcon, Package, Star, Ticket, Users, Wrench } from 'lucide-react';
 
 /** Icons an object definition can name. A custom object picks one of these. */
 export const objectIcons: Record<string, LucideIcon> = {
@@ -8,6 +8,7 @@ export const objectIcons: Record<string, LucideIcon> = {
   handshake: Handshake,
   package: Package,
   ticket: Ticket,
+  check: CheckSquare,
   briefcase: Briefcase,
   calendar: CalendarDays,
   file: FileText,

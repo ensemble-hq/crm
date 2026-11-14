@@ -7,14 +7,25 @@ import { Modal } from '../ui/Modal';
 import { PropertyInput } from '../ui/PropertyInput';
 
 /** A create form built from the object's definition: every property marked `onCreate` gets a field. */
-export function CreateRecordDialog({ object, onClose, onCreated }: { object: ObjectDefinition; onClose: () => void; onCreated: (record: CrmRecord) => void }) {
+export function CreateRecordDialog({
+  object,
+  initial,
+  onClose,
+  onCreated,
+}: {
+  object: ObjectDefinition;
+  /** Values set before the form opens, including ones the form doesn't ask for (what a new task is about). */
+  initial?: Record<string, PropertyValue>;
+  onClose: () => void;
+  onCreated: (record: CrmRecord) => void;
+}) {
   const { currentUser } = useWorkspace();
   const fields = object.properties.filter((property) => property.onCreate);
   // New records start with the person creating them as the owner.
   const [values, setValues] = useState<Record<string, PropertyValue>>(() => {
-    const initial: Record<string, PropertyValue> = {};
-    if (fields.some((field) => field.id === 'owner')) initial.owner = currentUser.id;
-    return initial;
+    const start: Record<string, PropertyValue> = {};
+    if (fields.some((field) => field.id === 'owner')) start.owner = currentUser.id;
+    return { ...start, ...initial };
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
