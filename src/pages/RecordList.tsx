@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, CalendarDays, ChevronLeft, Combine, Copy, ChevronRight, Columns3, Download, Filter as FilterIcon, LayoutList, List, Pencil, Plus, Search, Send, SlidersHorizontal, Trash2, Upload, UserPlus, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, CalendarDays, ChevronLeft, Combine, Copy, ChevronRight, Columns3, Download, Filter as FilterIcon, LayoutList, List, Pencil, Plus, Search, Send, SlidersHorizontal, Trash2, Upload, UserPlus, X, Tags } from 'lucide-react';
 import { type CSSProperties, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, useQuery } from '../api';
@@ -172,6 +172,114 @@ function BulkEditDialog({ object, ids, initialProperty, onClose, onDone }: { obj
   );
 }
 
+/**
+ * Put records in a segment by hand, or take them out: add or remove choices of a several-choices
+ * field, leaving each record's other choices alone. It can apply to the rows ticked, or to
+ * everything the list is showing.
+ */
+function LabelDialog({ object, ids, everything, onClose, onDone }: { object: ObjectDefinition; ids: string[]; everything: { filters: Filter[]; search: string; total: number }; onClose: () => void; onDone: (message: string) => void }) {
+  const workspace = useWorkspace();
+  const fields = object.properties.filter((property) => property.type === 'multiselect' && !property.system);
+  const [fieldId, setFieldId] = useState(fields.find((property) => property.id === 'segments')?.id ?? fields[0]?.id ?? '');
+  const [mode, setMode] = useState<'add' | 'remove'>('add');
+  const [chosen, setChosen] = useState<string[]>([]);
+  const [fresh, setFresh] = useState('');
+  const [all, setAll] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const field = fields.find((property) => property.id === fieldId);
+  const count = all ? everything.total : ids.length;
+  const noun = count === 1 ? object.singular.toLowerCase() : object.plural.toLowerCase();
+  const name = fresh.trim();
+  const mayAddChoices = workspace.access.manageSettings && mode === 'add';
+
+  async function apply() {
+    if (!field) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      const add = mode === 'add' ? [...chosen] : [];
+      if (mayAddChoices && name) {
+        // A new segment is a new choice on the field; it is made first, then the records are put in it.
+        const existing = field.options?.find((option) => option.label.toLowerCase() === name.toLowerCase());
+        const id = existing?.id ?? (name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `choice-${Date.now().toString(36)}`);
+        if (!existing) {
+          await api.updateProperty({ objectId: object.id, propertyId: field.id, options: [...(field.options ?? []), { id, label: name }] });
+          await workspace.reload();
+        }
+        if (!add.includes(id)) add.push(id);
+      }
+      const result = await api.labelRecords({ objectId: object.id, property: field.id, add, remove: mode === 'remove' ? chosen : [], ...(all ? { filters: everything.filters, search: everything.search || undefined } : { ids }) });
+      const parts = [`${result.changed.toLocaleString('en-US')} ${result.changed === 1 ? object.singular.toLowerCase() : object.plural.toLowerCase()} ${mode === 'add' ? 'added' : 'taken out'}`];
+      if (result.unchanged > 0) parts.push(`${result.unchanged.toLocaleString('en-US')} already ${mode === 'add' ? 'in' : 'out'}`);
+      if (result.skipped > 0) parts.push(`${result.skipped.toLocaleString('en-US')} skipped because you can't edit them`);
+      onDone(`${parts.join(', ')}.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'That could not be saved.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const nothing = chosen.length === 0 && !(mayAddChoices && name);
+  return (
+    <Modal open size="sm" title={mode === 'add' ? `Add ${count.toLocaleString('en-US')} ${noun} to…` : `Take ${count.toLocaleString('en-US')} ${noun} out of…`} submitLabel={mode === 'add' ? 'Add them' : 'Take them out'} busy={busy} error={error} onClose={onClose} onSubmit={() => (nothing ? setError('Choose at least one.') : void apply())}>
+      {fields.length > 1 ? (
+        <div className="m-field">
+          <label className="m-field-label" htmlFor="label-field">
+            Field
+          </label>
+          <select
+            className="m-select"
+            id="label-field"
+            value={fieldId}
+            onChange={(event) => {
+              setFieldId(event.target.value);
+              setChosen([]);
+            }}
+          >
+            {fields.map((property) => (
+              <option key={property.id} value={property.id}>
+                {property.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+      <div className="m-cluster" data-gap="3">
+        <label className="m-field" data-layout="inline">
+          <input className="m-radio" type="radio" name="label-mode" checked={mode === 'add'} onChange={() => setMode('add')} /> Add to
+        </label>
+        <label className="m-field" data-layout="inline">
+          <input className="m-radio" type="radio" name="label-mode" checked={mode === 'remove'} onChange={() => setMode('remove')} /> Take out of
+        </label>
+      </div>
+      <div className="m-stack" data-gap="1">
+        {(field?.options ?? []).map((option) => (
+          <label key={option.id} className="m-field" data-layout="inline">
+            <input className="m-checkbox" type="checkbox" checked={chosen.includes(option.id)} onChange={(event) => setChosen(event.target.checked ? [...chosen, option.id] : chosen.filter((id) => id !== option.id))} /> {option.label}
+          </label>
+        ))}
+        {(field?.options ?? []).length === 0 && !mayAddChoices ? <p style={{ ...small, margin: 0 }}>There are none yet. Someone who manages settings can make the first.</p> : null}
+      </div>
+      {mayAddChoices ? (
+        <div className="m-field">
+          <label className="m-field-label" htmlFor="label-new">
+            Or a new one
+          </label>
+          <input className="m-input" id="label-new" value={fresh} placeholder="Name it" onChange={(event) => setFresh(event.target.value)} />
+        </div>
+      ) : null}
+      {everything.total > ids.length ? (
+        <label className="m-field" data-layout="inline">
+          <input className="m-checkbox" type="checkbox" checked={all} onChange={(event) => setAll(event.target.checked)} /> Apply to all {everything.total.toLocaleString('en-US')} in this list, not just the {ids.length.toLocaleString('en-US')} ticked
+        </label>
+      ) : null}
+      <p className="m-field-hint">Their other choices are left as they are. To see who is in one, filter the list by {field?.label ?? 'the field'}.</p>
+    </Modal>
+  );
+}
+
 /** Put the selected contacts into a sequence. Contacts already in it, or without an email, are left out and named. */
 function EnrollDialog({ ids, onClose, onDone }: { ids: string[]; onClose: () => void; onDone: (message: string) => void }) {
   const sequences = useQuery(() => api.listSequences(), []);
@@ -246,7 +354,7 @@ function RecordTable({
 }) {
   const { revision, touch } = useWorkspace();
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulk, setBulk] = useState<{ kind: 'edit'; property?: string } | { kind: 'delete' } | { kind: 'enroll' } | { kind: 'merge' }>();
+  const [bulk, setBulk] = useState<{ kind: 'edit'; property?: string } | { kind: 'delete' } | { kind: 'enroll' } | { kind: 'merge' } | { kind: 'label' }>();
   const [busy, setBusy] = useState(false);
   const [bulkError, setBulkError] = useState<string>();
   const sortKey = sort ? `${sort.property}:${sort.direction}` : '';
@@ -332,6 +440,11 @@ function RecordTable({
                     <button type="button" className="m-button" data-size="sm" style={toolbarButton} onClick={() => setBulk({ kind: 'edit' })}>
                       <Pencil size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Edit a field
                     </button>
+                    {object.properties.some((property) => property.type === 'multiselect' && !property.system) ? (
+                      <button type="button" className="m-button" data-size="sm" style={toolbarButton} onClick={() => setBulk({ kind: 'label' })}>
+                        <Tags size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> {object.properties.some((property) => property.id === 'segments') ? 'Segments' : 'Tags'}
+                      </button>
+                    ) : null}
                     {object.id === 'contacts' ? (
                       <button type="button" className="m-button" data-size="sm" style={toolbarButton} onClick={() => setBulk({ kind: 'enroll' })}>
                         <Send size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Enrol in sequence
@@ -450,6 +563,18 @@ function RecordTable({
         <MergeDialog
           object={object}
           ids={[ids[0], ids[1]]}
+          onClose={() => setBulk(undefined)}
+          onDone={(message) => {
+            onNotice(message);
+            finishBulk();
+          }}
+        />
+      ) : null}
+      {bulk?.kind === 'label' ? (
+        <LabelDialog
+          object={object}
+          ids={ids}
+          everything={{ filters, search, total: total ?? ids.length }}
           onClose={() => setBulk(undefined)}
           onDone={(message) => {
             onNotice(message);

@@ -123,6 +123,7 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     'records.related': (ctx, input) => records.related(ctx, input),
     'records.create': (ctx, input) => records.create(ctx, input),
     'records.update': (ctx, input) => records.update(ctx, input),
+    'records.label': (ctx, input) => records.label(ctx, input),
     'records.delete': (ctx, input) => records.remove(ctx, input),
     'records.import': (ctx, input) => importer.run(ctx, input),
     'activity.list': (ctx, input) => activity.list(ctx, input),

@@ -8,7 +8,7 @@ import { emailPreferenceSchema, emailSettingsSchema, setEmailPreferenceSchema, u
 import { conversationDetailSchema, conversationListSchema, conversationQuerySchema, conversationSchema, emailHealthSchema, emailTemplateSchema, inboxCountsSchema, messageSchema, updateConversationSchema } from './inbox';
 import { stageRulesSchema } from './metadata';
 import { createObjectSchema, createPropertySchema, filterSchema, objectDefinitionSchema, saveViewSchema, updatePropertySchema, userSchema, viewDefinitionSchema } from './metadata';
-import { activitySchema, createActivitySchema, duplicatesQuerySchema, duplicatesSchema, mergeRecordsSchema, importRequestSchema, importResultSchema, notificationSchema, referenceSchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi } from './records';
+import { activitySchema, createActivitySchema, duplicatesQuerySchema, duplicatesSchema, mergeRecordsSchema, importRequestSchema, importResultSchema, notificationSchema, referenceSchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi, labelRecordsSchema, labelResultSchema } from './records';
 import { workflowDetailSchema, workflowSchema, workflowSettingsSchema } from './workflows';
 import { dashboardSchema, reportDefinitionSchema, reportResultSchema, reportSettingsSchema } from './reports';
 import { convertLeadSchema, forecastSchema, lineItemSchema, dealPeopleSchema, dealPersonSchema } from './sales';
@@ -123,6 +123,15 @@ export const operations: Operation[] = [
     description: 'Changes some properties of a record and leaves the rest as they are. Set a property to null to clear it. Moving a deal to another stage is an update of its stage property.',
     input: updateRecordSchema,
     output: recordSchema,
+    effect: 'write',
+  },
+  {
+    name: 'records.label',
+    method: 'labelRecords',
+    title: 'Add records to a segment, or take them out',
+    description: 'Adds choices to, or removes them from, a several-choices property on many records at once, leaving their other choices alone. Putting contacts in a hand-built segment is this with property "segments". Name the records with `ids`, or with `viewId`, `filters` and `search` to mean everything a list shows (up to 5,000). The choices must already exist on the property (properties.update adds one). Returns how many changed, how many already were that way, and how many were skipped because you may not edit them.',
+    input: labelRecordsSchema,
+    output: labelResultSchema,
     effect: 'write',
   },
   {

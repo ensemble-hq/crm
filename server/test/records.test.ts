@@ -161,3 +161,27 @@ describe('people on a deal', () => {
     expect((await crm.call<{ people: unknown[] }>(MAYA, 'dealPeople.list', deal)).people).toEqual([{ contactId: boss, role: 'decision-maker' }]);
   });
 });
+
+describe('segments built by hand', () => {
+  it('adds many records to a segment and takes them out, leaving their other choices alone', async () => {
+    const make = async (name: string, more: Record<string, unknown> = {}) => (await crm.call<CrmRecord>(MAYA, 'records.create', { objectId: 'contacts', properties: { name, email: `${name.toLowerCase().replace(/ /g, '.')}@segment.example`, owner: MAYA, ...more } })).id;
+    const [one, two, three] = [await make('Seg One', { segments: ['beta'] }), await make('Seg Two'), await make('Seg Three', { owner: FEMI })];
+    const label = (as: string, more: Record<string, unknown>) => crm.call<{ changed: number; unchanged: number; skipped: number }>(as, 'records.label', { objectId: 'contacts', property: 'segments', ...more });
+    expect(await refusal(label(MAYA, { ids: [one], add: ['no-such-segment'] }))).toMatch(/no choice "no-such-segment"/);
+    expect(await refusal(label(MAYA, { ids: [one], property: 'name', add: ['x'] }))).toMatch(/several choices/);
+    expect(await label(MAYA, { ids: [one, two], add: ['newsletter'] })).toEqual({ changed: 2, unchanged: 0, skipped: 0 });
+    expect(await label(MAYA, { ids: [one, two], add: ['newsletter'] })).toEqual({ changed: 0, unchanged: 2, skipped: 0 });
+    const segments = async (id: string) => (await crm.call<RecordDetail>(MAYA, 'records.get', id)).record.properties.segments;
+    expect(await segments(one)).toEqual(['beta', 'newsletter']);
+    // Everything a list shows, by its filters: the segment can then be found by filtering on it.
+    expect(await label(MAYA, { filters: [{ property: 'email', operator: 'contains', value: '@segment.example' }], add: ['spring-event'] })).toMatchObject({ changed: 3 });
+    expect((await list({ objectId: 'contacts', filters: [{ property: 'segments', operator: 'eq', value: 'spring-event' }] })).total).toBe(3);
+    expect(await label(MAYA, { ids: [one], remove: ['beta', 'spring-event'] })).toMatchObject({ changed: 1 });
+    expect(await segments(one)).toEqual(['newsletter']);
+    // Someone who cannot edit a record leaves it as it is, and is told how many were passed over.
+    const asRep = await label(JONAS, { ids: [three, two], add: ['beta'] });
+    expect(asRep.skipped + asRep.changed).toBeLessThanOrEqual(2);
+    expect(asRep.skipped).toBeGreaterThanOrEqual(1);
+    expect(await segments(three)).toEqual(['spring-event']);
+  });
+});

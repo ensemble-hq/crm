@@ -2,7 +2,7 @@ import { ConflictError, type Context, NotFoundError, ValidationError } from '@ma
 import { type SQL, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import type { ObjectDefinition, PropertyValue } from '../../../../src/contracts/metadata';
-import type { CreateRecord, CrmRecord, Duplicates, MergeRecords, ListQuery, ListResult, RecordDetail, Reference, RelatedGroup, SummaryQuery, SummaryRow, UpdateRecord } from '../../../../src/contracts/records';
+import type { CreateRecord, CrmRecord, Duplicates, MergeRecords, ListQuery, ListResult, RecordDetail, Reference, RelatedGroup, SummaryQuery, SummaryRow, UpdateRecord, LabelRecords, LabelResult } from '../../../../src/contracts/records';
 import { actorOf, assertCan, visibility } from '../people/access';
 import { compute, isEditable, problemWith } from '../../../../src/lib/rules';
 import type { WorkspaceService } from '../workspace/workspace.service';
@@ -16,6 +16,9 @@ const RELATED_LIMIT = 5;
 function empty(value: PropertyValue | undefined): boolean {
   return value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0);
 }
+
+/** The most records one labelling may touch. */
+const LABEL_LIMIT = 5_000;
 
 export class RecordsService {
   constructor(
@@ -223,6 +226,52 @@ export class RecordsService {
     const object = await this.workspace.definition(ctx, objectId);
     const [matching, total] = await Promise.all([this.records.total(ctx, this.where(ctx, object, { filters: conditions })), this.records.total(ctx, this.where(ctx, object, {}))]);
     return { matching, total };
+  }
+
+  /** Adds or removes choices of a several-choices field on many records, leaving their other choices alone. */
+  async label(ctx: Context, input: LabelRecords): Promise<LabelResult> {
+    const object = await this.workspace.definition(ctx, input.objectId);
+    const field = property(object, input.property);
+    if (field.type !== 'multiselect' || !isEditable(field)) throw new ValidationError(`${field.label} is not a field that holds several choices.`);
+    const add = input.add ?? [];
+    const remove = input.remove ?? [];
+    if (add.length + remove.length === 0) throw new ValidationError('Say what to add or remove.');
+    const unknown = add.find((choice) => !field.options?.some((option) => option.id === choice));
+    if (unknown) throw new ValidationError(`${field.label} has no choice "${unknown}". Add it to the field first.`);
+    const inObject = sql`records.object_id = ${object.id}`;
+    let targets: CrmRecord[];
+    if (input.ids) targets = await this.records.byIds(ctx, input.ids, inObject, ...this.visible(ctx));
+    else {
+      const where = this.where(ctx, object, { viewId: input.viewId, filters: input.filters, search: input.search });
+      if ((await this.records.total(ctx, where)) > LABEL_LIMIT) throw new ValidationError(`That is more than ${LABEL_LIMIT.toLocaleString('en-US')} ${object.plural.toLowerCase()}. Narrow it down and do it in parts.`);
+      targets = await this.records.select(ctx, where, sql`records.id`, LABEL_LIMIT, 0);
+    }
+    const actor = actorOf(ctx);
+    const changes: Array<{ record: CrmRecord; changes: Record<string, PropertyValue> }> = [];
+    let unchanged = 0;
+    let skipped = 0;
+    for (const record of targets) {
+      try {
+        assertCan(actor, 'edit', record, object.singular.toLowerCase());
+      } catch {
+        skipped += 1;
+        continue;
+      }
+      const current = Array.isArray(record.properties[field.id]) ? (record.properties[field.id] as string[]) : [];
+      const next = [...current.filter((choice) => !remove.includes(choice)), ...add.filter((choice) => !current.includes(choice))];
+      if (next.length === current.length && next.every((choice, index) => choice === current[index])) unchanged += 1;
+      // A score or formula that counts on the field is worked out again with it.
+      else changes.push({ record, changes: { [field.id]: next, ...compute(object, { ...record.properties, [field.id]: next }) } });
+    }
+    await this.events.transaction(ctx, async () => {
+      for (let start = 0; start < changes.length; start += 1_000) {
+        const batch = changes.slice(start, start + 1_000);
+        await this.records.patchMany(ctx, batch.map((item) => ({ id: item.record.id, changes: item.changes })));
+        // Each record is announced like any other change, so workflows that watch the field run.
+        for (const item of batch) await this.events.changed(ctx, { ...item.record, properties: { ...item.record.properties, ...item.changes } }, item.changes);
+      }
+    });
+    return { changed: changes.length, unchanged, skipped };
   }
 
   reassign(ctx: Context, fromId: string, toId: string): Promise<number> {

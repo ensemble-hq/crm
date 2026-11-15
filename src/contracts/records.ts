@@ -50,6 +50,26 @@ export const listResultSchema = z.object({
 });
 export type ListResult = z.infer<typeof listResultSchema>;
 
+/**
+ * Adds choices to, or takes them off, a several-choices field on many records at once, leaving
+ * each record's other choices alone. This is how records are put in a segment by hand. The records
+ * are named by id, or as everything a list shows (a view, filters, a search).
+ */
+export const labelRecordsSchema = z.object({
+  objectId: z.string(),
+  /** The several-choices property, such as `segments` or `tags`. */
+  property: z.string(),
+  add: z.array(z.string()).default([]),
+  remove: z.array(z.string()).default([]),
+  ids: z.array(z.string()).max(5_000).optional(),
+  viewId: z.string().optional(),
+  filters: z.array(filterSchema).optional(),
+  search: z.string().optional(),
+});
+export type LabelRecords = z.input<typeof labelRecordsSchema>;
+export const labelResultSchema = z.object({ changed: z.number().int(), unchanged: z.number().int(), skipped: z.number().int() });
+export type LabelResult = z.infer<typeof labelResultSchema>;
+
 export const summaryQuerySchema = z.object({
   objectId: z.string(),
   viewId: z.string().optional(),
@@ -196,6 +216,8 @@ export interface CrmApi extends InboxApi, ReportsApi, SequencesApi, WorkflowsApi
   listActivity(recordId: string): Promise<Activity[]>;
   createRecord(input: CreateRecord): Promise<CrmRecord>;
   updateRecord(input: UpdateRecord): Promise<CrmRecord>;
+  /** Adds or removes choices of a several-choices field on many records. `skipped` counts records the caller may not edit. */
+  labelRecords(input: LabelRecords): Promise<LabelResult>;
   deleteRecords(ids: string[]): Promise<{ deleted: number }>;
   importRecords(input: ImportRequest): Promise<ImportResult>;
   mergeRecords(input: MergeRecords): Promise<CrmRecord>;

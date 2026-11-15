@@ -42,6 +42,14 @@ export const sources: Option[] = [
   { id: 'import', label: 'Import' },
 ];
 
+/** Hand-built groups a record can be put in. A team makes its own; these are examples. */
+export const segmentOptions: Option[] = [
+  { id: 'newsletter', label: 'Newsletter' },
+  { id: 'spring-event', label: 'Spring event invitees' },
+  { id: 'beta', label: 'Beta programme' },
+];
+const segmentsProperty = (group: string) => ({ id: 'segments', label: 'Segments', type: 'multiselect' as const, options: segmentOptions, group });
+
 export const contactTags: Option[] = [
   { id: 'decision-maker', label: 'Decision maker' },
   { id: 'champion', label: 'Champion' },
@@ -133,6 +141,7 @@ const contacts: ObjectDefinition = {
     { id: 'leadStatus', label: 'Lead status', type: 'select', options: leadStatuses, group: 'Sales' },
     { id: 'source', label: 'Source', type: 'select', options: sources, group: 'Sales' },
     { id: 'tags', label: 'Tags', type: 'multiselect', options: contactTags, group: 'Sales' },
+    segmentsProperty('Sales'),
     { id: 'lastContacted', label: 'Last contacted', type: 'date', group: 'Sales', system: true },
     { id: 'city', label: 'City', type: 'text', group: 'Location' },
     { id: 'country', label: 'Country', type: 'select', options: countries, group: 'Location' },
@@ -400,6 +409,7 @@ const leads: ObjectDefinition = {
     { id: 'source', label: 'Source', type: 'select', options: sources, group: 'Qualification', onCreate: true },
     { id: 'owner', label: 'Owner', type: 'user', group: 'Qualification', onCreate: true },
     { id: 'estimatedValue', label: 'Estimated value', type: 'currency', group: 'Qualification' },
+    segmentsProperty('Qualification'),
     {
       id: 'fitScore',
       label: 'Fit score',

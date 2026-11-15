@@ -56,7 +56,7 @@ HubSpot's free CRM plus "Smart CRM" Starter ($20 per seat per month). Several ba
 | Arrange the record page | Card and tab layout (Free), per-team layouts (Professional), conditional cards (Starter) | Record page layout per object; because each customer owns their code, any layout is possible by asking | First release (layout); By design (beyond) | No: layouts are set up fresh |
 | Choose what the create form asks | Create-form customization | "Ask when creating" per property | Mock | No |
 | Save a filtered list | Saved views (50 per user), board, calendar and report views (Beta) | Saved views with table and board; calendar view | Mock (table, board); First release (calendar, editing views) | Yes: filters and columns |
-| Group records for campaigns and reports | Segments, formerly lists (Free: 10 active) | Segments, static and dynamic, unlimited; describe one in a sentence | First release | Yes: definitions and static membership |
+| Group records for campaigns and reports | Segments, formerly lists (Free: 10 active) | Segments, static (a Segments field with bulk add and remove, built) and dynamic (saved views, built), unlimited; describe one in a sentence | First release | Yes: definitions and static membership |
 | Move records through stages | Pipelines (Free: 1 per object), stage-required properties | Pipelines on any object, unlimited, with required fields per stage | Mock (one pipeline); First release (several, required fields) | Yes |
 | Enforce how deals move | Pipeline rules (Professional): no skipping, no moving back | Stage rules on a pipeline | First release | Partly |
 | Mark records with colour labels | Object tags (Starter: 20) | Coloured tags and dropdown colours | Mock (colours); First release (rule-based tags) | Yes |

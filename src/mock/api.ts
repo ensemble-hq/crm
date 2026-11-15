@@ -763,6 +763,27 @@ export const mockApi: CrmApi = {
       return object;
     }),
 
+  labelRecords: (input) =>
+    respond(() => {
+      const object = definition(input.objectId);
+      const add = input.add ?? [];
+      const remove = input.remove ?? [];
+      const targets = input.ids ? input.ids.map((id) => get(id)) : select({ objectId: input.objectId, filters: input.filters ?? [] });
+      let changed = 0;
+      let unchanged = 0;
+      for (const item of targets) {
+        const current = Array.isArray(item.properties[input.property]) ? (item.properties[input.property] as string[]) : [];
+        const next = [...current.filter((choice) => !remove.includes(choice)), ...add.filter((choice) => !current.includes(choice))];
+        if (next.join('|') === current.join('|')) unchanged += 1;
+        else {
+          item.properties[input.property] = next;
+          Object.assign(item.properties, compute(object, item.properties));
+          changed += 1;
+        }
+      }
+      return { changed, unchanged, skipped: 0 };
+    }),
+
   deleteRecords: (ids) =>
     respond(() => {
       const data = dataset();
