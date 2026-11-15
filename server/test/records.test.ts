@@ -185,3 +185,19 @@ describe('segments built by hand', () => {
     expect(await segments(three)).toEqual(['spring-event']);
   });
 });
+
+describe('repeating tasks', () => {
+  it('puts a finished task back on the list for next time, once', async () => {
+    const task = await crm.call<CrmRecord>(MAYA, 'records.create', { objectId: 'tasks', properties: { name: 'Check in with the account', status: 'open', owner: MAYA, repeat: 'weekly', dueDate: '2099-01-05', priority: 'high' } });
+    const mine = async () => (await list({ objectId: 'tasks', filters: [{ property: 'name', operator: 'eq', value: 'Check in with the account' }], sort: { property: 'dueDate', direction: 'asc' } })).records;
+    await crm.call(MAYA, 'records.update', { id: task.id, properties: { priority: 'low' } });
+    expect(await mine()).toHaveLength(1);
+    await crm.call(MAYA, 'records.update', { id: task.id, properties: { status: 'done' } });
+    const after = await mine();
+    expect(after.map((item) => [item.properties.status, item.properties.dueDate])).toEqual([['done', '2099-01-05'], ['open', '2099-01-12']]);
+    expect(after[1]?.properties).toMatchObject({ owner: MAYA, repeat: 'weekly', priority: 'low' });
+    // Saving it again as done does not make another.
+    await crm.call(MAYA, 'records.update', { id: task.id, properties: { status: 'done' } });
+    expect(await mine()).toHaveLength(2);
+  });
+});

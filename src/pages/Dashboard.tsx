@@ -155,9 +155,16 @@ export function Dashboard() {
             title="Your tasks"
             action={
               tasks ? (
-                <Link to={`/${tasks.id}`} style={link}>
-                  View all
-                </Link>
+                <span className="m-cluster" data-gap="3">
+                  {data && data.due.total > 0 ? (
+                    <Link to="/queue" style={link}>
+                      Work through them
+                    </Link>
+                  ) : null}
+                  <Link to={`/${tasks.id}`} style={link}>
+                    View all
+                  </Link>
+                </span>
               ) : null
             }
           >

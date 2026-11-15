@@ -14,6 +14,7 @@ import type {
   SummaryQuery,
   SummaryRow,
 } from '../contracts/records';
+import { nextDue } from '../lib/repeat';
 import { compute } from '../lib/rules';
 import { MOCK_NOW, MOCK_TODAY, objects, users } from './definitions';
 import { dataset } from './generate';
@@ -677,6 +678,10 @@ export const mockApi: CrmApi = {
       Object.assign(item.properties, compute(definition(item.objectId), item.properties));
       item.updatedAt = new Date().toISOString();
       if (Object.keys(changed).length > 0) fire({ kind: 'changed', record: item, changed }, workflowDeps);
+      // A repeating task that was just finished comes round again.
+      const completion = definition(item.objectId).completion;
+      const due = completion && changed[completion.property] === completion.done && typeof item.properties.repeat === 'string' ? nextDue(item.properties.repeat, typeof item.properties.dueDate === 'string' ? item.properties.dueDate : null, MOCK_TODAY) : undefined;
+      if (completion && due) insert(item.objectId, { ...item.properties, [completion.property]: completion.open, dueDate: due });
       return item;
     }),
 

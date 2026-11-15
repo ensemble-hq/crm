@@ -21,6 +21,7 @@ import { Unsubscribe } from './pages/Unsubscribe';
 import { AuditLog } from './pages/AuditLog';
 import { ReportBuilder, Reports } from './pages/Reports';
 import { SequenceDetail, Sequences } from './pages/Sequences';
+import { TaskQueue } from './pages/TaskQueue';
 import { ObjectSettings, Settings } from './pages/Settings';
 import { WorkflowBuilder } from './pages/WorkflowBuilder';
 import { Workflows } from './pages/Workflows';
@@ -62,6 +63,7 @@ createRoot(root).render(
           <Route path="settings/objects/:objectId" element={<ObjectSettings />} />
           <Route path="settings/people" element={<People />} />
           <Route path="settings/audit" element={<AuditLog />} />
+          <Route path="queue" element={<TaskQueue />} />
           <Route path=":objectId" element={<RecordList />} />
           <Route path=":objectId/:recordId" element={<RecordDetail />} />
           <Route path="*" element={<ComingSoon />} />

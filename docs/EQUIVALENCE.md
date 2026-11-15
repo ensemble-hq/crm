@@ -76,7 +76,7 @@ HubSpot's Sales Hub (Professional $100 per seat per month, Enterprise $150). Mos
 | --- | --- | --- | --- | --- |
 | Qualify a lead before it becomes a deal | Leads object with its own pipeline (Professional) | A Lead object on the same model, or lifecycle stages on the contact; the template ships with one and the customer can switch | First release | Yes |
 | Start the day knowing what to do | Sales workspace, guided actions (Professional) | The daily briefing and the assistant: "what should I do today?" answers with a list it can act on | First release; By design | n/a |
-| Work through a list of tasks | Tasks (Free), queues, repeating tasks (Starter) | Tasks, queues and repeating tasks | First release | Yes |
+| Work through a list of tasks | Tasks (Free), queues, repeating tasks (Starter) | Tasks, a queue to work through what is due, and repeating tasks (all built) | First release | Yes |
 | Share leads out fairly | Lead rotation (Professional), form routing with booking (Enterprise) | Assignment rules; a form can book straight into the right person's calendar | First release | Partly: rules re-created |
 | Email from the CRM and have it logged | Inbox connection, 1-to-1 email (Free) | Gmail and Outlook two-way sync | First release | Yes: logged emails |
 | Work from your own inbox | Chrome extension and Outlook add-in (Free) | Gmail and Outlook add-ins: log, track, templates, and the assistant in the sidebar | First release | n/a |

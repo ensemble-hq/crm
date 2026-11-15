@@ -1,3 +1,4 @@
+import { REPEATS } from '../lib/repeat';
 import type { ObjectDefinition, Option, User } from '../contracts/metadata';
 
 /** The mock's fixed "now", so generated data and relative filters never drift. */
@@ -338,6 +339,7 @@ const tasks: ObjectDefinition = {
     { id: 'priority', label: 'Priority', type: 'select', options: priorities, group: 'About', onCreate: true },
     { id: 'status', label: 'Status', type: 'select', options: taskStatuses, group: 'About', required: true },
     { id: 'owner', label: 'Assigned to', type: 'user', group: 'About', onCreate: true },
+    { id: 'repeat', label: 'Repeats', type: 'select', options: [...REPEATS], group: 'About' },
     { id: 'deal', label: 'Deal', type: 'reference', referenceObjectId: 'deals', group: 'About what' },
     { id: 'contact', label: 'Contact', type: 'reference', referenceObjectId: 'contacts', group: 'About what' },
     { id: 'company', label: 'Company', type: 'reference', referenceObjectId: 'companies', group: 'About what' },

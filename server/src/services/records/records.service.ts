@@ -3,6 +3,7 @@ import { type SQL, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import type { ObjectDefinition, PropertyValue } from '../../../../src/contracts/metadata';
 import type { CreateRecord, CrmRecord, Duplicates, MergeRecords, ListQuery, ListResult, RecordDetail, Reference, RelatedGroup, SummaryQuery, SummaryRow, UpdateRecord, LabelRecords, LabelResult } from '../../../../src/contracts/records';
+import { nextDue } from '../../../../src/lib/repeat';
 import { actorOf, assertCan, visibility } from '../people/access';
 import { compute, isEditable, problemWith } from '../../../../src/lib/rules';
 import type { WorkspaceService } from '../workspace/workspace.service';
@@ -169,8 +170,23 @@ export class RecordsService {
     return this.events.transaction(ctx, async () => {
       const updated = (await this.records.patch(ctx, record.id, patch)) ?? record;
       await this.events.changed(ctx, updated, changed);
+      await this.comeRound(ctx, object, updated, changed);
       return updated;
     });
+  }
+
+  /** A repeating task that has just been finished is put back on the list for the next time, in the same step. */
+  private async comeRound(ctx: Context, object: ObjectDefinition, done: CrmRecord, changed: Record<string, PropertyValue>): Promise<void> {
+    const completion = object.completion;
+    if (!completion || changed[completion.property] !== completion.done || typeof done.properties.repeat !== 'string') return;
+    const today = new Date().toISOString().slice(0, 10);
+    const due = nextDue(done.properties.repeat, typeof done.properties.dueDate === 'string' ? done.properties.dueDate : null, today);
+    if (!due) return;
+    // Everything a person set carries over; what the CRM worked out is worked out again.
+    const carried = Object.fromEntries(object.properties.filter((item) => isEditable(item)).map((item) => [item.id, done.properties[item.id] ?? null]));
+    const typed = { ...carried, [completion.property]: completion.open, dueDate: due, createdAt: today };
+    const next = await this.records.insert(ctx, { id: `${object.id.slice(0, 3)}_${randomUUID().replace(/-/g, '').slice(0, 12)}`, objectId: object.id, properties: { ...typed, ...compute(object, typed) } });
+    await this.events.created(ctx, next);
   }
 
   /**
