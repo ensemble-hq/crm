@@ -1,4 +1,4 @@
-import type { AIAdapter, AIMessage } from '@mariachi/ai';
+import type { AIAdapter, AIMessage, ToolCall } from '@mariachi/ai';
 import { ConflictError, type Context, ValidationError } from '@mariachi/core';
 import { type DrizzleDb, DrizzleRepository } from '@mariachi/database-postgres';
 import type { Encryption } from '@mariachi/encryption';
@@ -32,6 +32,8 @@ const SETTINGS_ID = 'assistant';
 const MAX_ROUNDS = 8;
 /** A tool result longer than this is cut, and the model is told so, so one large list cannot fill its context. */
 const MAX_RESULT_CHARS = 14_000;
+/** How many characters of streamed text are sent to the browser at a time. */
+const STREAM_BATCH_CHARS = 24;
 /** How much of an attached text file the model is given. */
 const MAX_FILE_CHARS = 60_000;
 
@@ -134,13 +136,17 @@ export class AssistantService {
     const events: AssistantEvent[] = [];
     let sent = 0;
     // Events reach the browser in order; a push that fails is skipped, because the full answer follows in the reply anyway.
+    // Words the model is still writing, sent as they come when it can stream. They belong to the event that will have this index once it is whole.
+    const whisper = async (index: number, delta: string) => {
+      if (input.turnId && this.push) await this.push(ctx, asker, { topic: 'assistant', turnId: input.turnId, index, delta }).catch(() => undefined);
+    };
     const flush = async () => {
       if (!input.turnId || !this.push) return;
       for (; sent < events.length; sent += 1) await this.push(ctx, asker, { topic: 'assistant', turnId: input.turnId, index: sent, event: events[sent] }).catch(() => undefined);
     };
     let failure: string | undefined;
     try {
-      return await this.run(ctx, input, events, used, flush);
+      return await this.run(ctx, input, events, used, flush, input.turnId && this.push ? whisper : undefined);
     } catch (error) {
       failure = error instanceof Error ? error.message : String(error);
       throw error;
@@ -249,7 +255,7 @@ export class AssistantService {
     };
   }
 
-  private async run(ctx: Context, input: AssistantTurn, events: AssistantEvent[], used: { provider: string; model: string; inputTokens: number; outputTokens: number; rounds: number }, flush: () => Promise<void>): Promise<AssistantReply> {
+  private async run(ctx: Context, input: AssistantTurn, events: AssistantEvent[], used: { provider: string; model: string; inputTokens: number; outputTokens: number; rounds: number }, flush: () => Promise<void>, whisper?: (index: number, delta: string) => Promise<void>): Promise<AssistantReply> {
     const { adapter, model, provider } = await this.adapter(ctx);
     used.provider = provider;
     used.model = model;
@@ -297,7 +303,9 @@ export class AssistantService {
     let tokens = 0;
 
     for (let round = 0; round < MAX_ROUNDS; round += 1) {
-      const response = await adapter.generate(messages, { model, tools });
+      // With someone watching and a model that can stream its words along with its tool calls, the words go out as they are written.
+      const at = events.length;
+      const response = whisper && streamsWithTools(adapter) ? await streamed(adapter, messages, { model, tools }, (delta) => whisper(at, delta)) : await adapter.generate(messages, { model, tools });
       tokens += response.usage.totalTokens;
       used.inputTokens += response.usage.inputTokens;
       used.outputTokens += response.usage.outputTokens;
@@ -402,6 +410,37 @@ export class AssistantService {
 }
 
 /** A one-line account of a lookup, for the row the person sees in the conversation. */
+/**
+ * Whether a model's adapter can stream a round without losing the tool calls in it. Streaming
+ * only the text is not enough: the assistant has to know what the model asked for. An adapter
+ * says it can by setting `streamsToolCalls` and putting `toolCalls` on its last chunk.
+ */
+function streamsWithTools(adapter: AIAdapter): adapter is AIAdapter & Required<Pick<AIAdapter, 'stream'>> {
+  return typeof adapter.stream === 'function' && (adapter as { streamsToolCalls?: boolean }).streamsToolCalls === true;
+}
+
+/** One round of the model, streamed: `onText` gets the words in small batches as they arrive, and the whole answer comes back at the end. */
+async function streamed(adapter: AIAdapter & Required<Pick<AIAdapter, 'stream'>>, messages: AIMessage[], config: { model: string; tools: Tool[] }, onText: (delta: string) => Promise<void>): Promise<{ content: string; toolCalls?: ToolCall[]; usage: { inputTokens: number; outputTokens: number; totalTokens: number } }> {
+  let content = '';
+  let waiting = '';
+  let toolCalls: ToolCall[] | undefined;
+  let usage = { inputTokens: 0, outputTokens: 0 };
+  for await (const chunk of adapter.stream(messages, config)) {
+    content += chunk.content;
+    waiting += chunk.content;
+    // A few words at a time: often enough to read as writing, not so often that every letter is a message.
+    if (waiting.length >= STREAM_BATCH_CHARS || (chunk.done && waiting)) {
+      await onText(waiting);
+      waiting = '';
+    }
+    if (chunk.done) {
+      usage = chunk.usage ?? usage;
+      toolCalls = (chunk as { toolCalls?: ToolCall[] }).toolCalls;
+    }
+  }
+  return { content, toolCalls, usage: { ...usage, totalTokens: usage.inputTokens + usage.outputTokens } };
+}
+
 function summarize(result: unknown): string {
   if (Array.isArray(result)) return `${result.length} ${result.length === 1 ? 'row' : 'rows'}`;
   if (result && typeof result === 'object') {

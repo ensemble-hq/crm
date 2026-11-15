@@ -12,7 +12,8 @@
  */
 
 export type Notice = { topic: 'records' | 'inbox' | 'notifications' | 'settings'; objectId?: string };
-export type TurnEvent = { topic: 'assistant'; turnId: string; index: number; event: unknown };
+/** Either a whole event of the turn, or `delta`: more words of the event that will have this index once the model has finished writing it. */
+export type TurnEvent = { topic: 'assistant'; turnId: string; index: number; event?: unknown; delta?: string };
 
 const CHANGES = 'changes';
 

@@ -23,6 +23,10 @@ export type EngineContext = {
   currentUser: User;
   /** Writes a paragraph of the answer, word by word. */
   say(text: string): Promise<void>;
+  /** Shows a paragraph the model is still writing, as far as it has got. Nothing is kept until `settle`. */
+  draft?(text: string): void;
+  /** Puts in place a paragraph that was shown while it was written. */
+  settle?(text: string): void;
   /** Offers follow-up messages as buttons. */
   suggest(replies: string[]): void;
   /** Runs one tool and shows it as a row in the conversation. */

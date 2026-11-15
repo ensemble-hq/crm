@@ -143,6 +143,17 @@ export function useAssistant(environment: { page: () => PageContext; navigate: (
             setActivity('');
             await write(messageId, paragraph);
           },
+          draft: (text) => {
+            setActivity('');
+            const existing = written.current.get(messageId);
+            patchMessage(messageId, (message) => ({ ...message, text: `${existing ? `${existing}\n\n` : ''}${text}`, streaming: true }));
+          },
+          settle: (text) => {
+            const existing = written.current.get(messageId);
+            const shown = `${existing ? `${existing}\n\n` : ''}${text}`;
+            written.current.set(messageId, shown);
+            patchMessage(messageId, (message) => ({ ...message, text: shown, streaming: true }));
+          },
           suggest: (replies) => patchMessage(messageId, (message) => ({ ...message, replies })),
           tool: async (name, label, run, describe) => {
             const id = nextId('tool');
@@ -208,7 +219,7 @@ export function useAssistant(environment: { page: () => PageContext; navigate: (
         }
         transcript.current.push({ role: 'user', text: trimmed || `Look at ${attachments[0]?.name ?? 'this file'}.`, ...(fileIds.length > 0 ? { fileIds } : {}) });
         const said: string[] = [];
-        await respondFromServer(transcript.current, { ...context, say: async (paragraph) => void (said.push(paragraph), await context.say(paragraph)) });
+        await respondFromServer(transcript.current, { ...context, say: async (paragraph) => void (said.push(paragraph), await context.say(paragraph)), settle: (paragraph) => void (said.push(paragraph), context.settle?.(paragraph)) });
         transcript.current.push({ role: 'assistant', text: said.join('\n\n') || '(showed something beside the conversation)' });
       });
     },

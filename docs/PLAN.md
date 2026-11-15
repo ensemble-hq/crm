@@ -315,7 +315,7 @@ Built so far (in `server/`):
 - Sign-in behind an interface with `dev` and `jwt` providers, and a seed of the demo company.
 - The web app's live mode sends those operations to the server and everything else to the mock.
 
-Not yet: the Ensemble sign-in and email adapters and connected mailboxes (only development providers exist), the assistant's words appearing letter by letter as the model writes them (events stream, text within one does not), and reading files that are not text (PDFs, pictures) in the assistant.
+Not yet: the Ensemble sign-in and email adapters and connected mailboxes (only development providers exist), the assistant's words appearing as the model writes them on Mariachi's own adapters (the CRM streams them when an adapter sets `streamsToolCalls` and reports its tool calls on the last chunk of a stream; Mariachi's adapters stream text only, so they are still asked in one go), and reading files that are not text (PDFs, pictures) in the assistant.
 
 Tests: `pnpm test` (needs `pnpm db:up`). Unit tests sit beside the shared code (`src/lib/*.test.ts`). The server tests in `server/test` run the real services against a real Postgres database, `crm_test`, which they create and empty themselves, and call operations the way the HTTP API and MCP do, so who is acting, an agent's limits and the audit log are exercised too. They cover access by role, records and import, computed fields and stage rules, email in and out with its failure cases, consent and opting out, sequences, workflows (on events, on a schedule and when called), agents, the audit log, public forms and booking, and the assistant on a scripted model.
 

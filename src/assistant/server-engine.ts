@@ -20,10 +20,12 @@ async function runStep(step: { operation: string; input?: unknown }): Promise<vo
   await viaAssistant(() => (api[operation.method as keyof CrmApi] as (input: unknown) => Promise<unknown>)(step.input));
 }
 
-async function play(event: AssistantEvent, ctx: EngineContext): Promise<void> {
+async function play(event: AssistantEvent, ctx: EngineContext, alreadyShown: boolean): Promise<void> {
   switch (event.type) {
     case 'say':
-      await ctx.say(event.text);
+      // Words that were shown as the model wrote them are put in place; anything else is written out now.
+      if (alreadyShown && ctx.settle) ctx.settle(event.text);
+      else await ctx.say(event.text);
       break;
     case 'tool':
       // Already done on the server; shown as a finished row.
@@ -67,16 +69,38 @@ export async function respondFromServer(history: Array<{ role: 'user' | 'assista
   let played = 0;
   let playing = Promise.resolve();
   // Plays every event that is next in line. Chained, so two arrivals never play at once or out of order.
+  // Words of an event the model is still writing, by the index the event will have.
+  const drafts = new Map<number, string>();
+  const shown = new Set<number>();
+  let busy = false;
   const advance = () => {
     playing = playing.then(async () => {
+      busy = true;
       for (let next = arrived.get(played); next; next = arrived.get(played)) {
         played += 1;
-        await play(next, ctx);
+        await play(next, ctx, shown.has(played - 1));
+      }
+      busy = false;
+      // Whatever was written while earlier events were still being played shows now.
+      const waiting = drafts.get(played);
+      if (waiting && ctx.draft && !arrived.has(played)) {
+        shown.add(played);
+        ctx.draft(waiting);
       }
     });
     return playing;
   };
   const listening = listenToTurn(turnId, (message) => {
+    if (message.delta !== undefined) {
+      const text = `${drafts.get(message.index) ?? ''}${message.delta}`;
+      drafts.set(message.index, text);
+      // Shown at once when it is the next thing to play and nothing before it is still being played.
+      if (message.index === played && !busy && ctx.draft) {
+        shown.add(message.index);
+        ctx.draft(text);
+      }
+      return;
+    }
     arrived.set(message.index, message.event as AssistantEvent);
     void advance();
   });
