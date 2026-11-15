@@ -204,10 +204,10 @@ export class SequencesService {
       const fill = (text: string) => text.replace(/\{\{firstName\}\}/g, String(contact.properties.name ?? '').split(' ')[0] ?? '').replace(/\{\{myName\}\}/g, sender.name.split(' ')[0] ?? sender.name);
       // Later emails go out on the thread the first one started, so the contact sees one conversation.
       if (enrollment.conversationId) {
-        await this.mail.queue(ctx, { conversationId: enrollment.conversationId, sender, toEmail: String(contact.properties.email ?? ''), subject: fill(template.subject || template.name), body: fill(template.body), purpose: 'automated' });
+        await this.mail.queue(ctx, { conversationId: enrollment.conversationId, sender, toEmail: String(contact.properties.email ?? ''), subject: fill(template.subject || template.name), body: fill(template.body), design: template.design, fill, purpose: 'automated' });
         return enrollment.conversationId;
       }
-      return (await this.mail.compose(ctx, { contact, sender, subject: fill(template.subject || template.name), body: fill(template.body), purpose: 'automated' })).conversationId;
+      return (await this.mail.compose(ctx, { contact, sender, subject: fill(template.subject || template.name), body: fill(template.body), design: template.design, fill, purpose: 'automated' })).conversationId;
     }
 
     const tasks = (await this.workspace.definitions(ctx)).find((object) => object.completion);

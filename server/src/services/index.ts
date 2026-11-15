@@ -162,6 +162,8 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     'templates.list': (ctx) => inbox.listTemplates(ctx),
     'templates.save': (ctx, input) => inbox.saveTemplate(ctx, input),
     'templates.delete': (ctx, input) => inbox.deleteTemplate(ctx, input),
+    'templates.design': (ctx, input) => assistant.designEmail(ctx, input),
+    'templates.sendTest': (ctx, input) => inbox.sendTest(ctx, input),
     'records.merge': async (ctx, input) => {
       const other = await records.find(ctx, input.mergeId);
       const kept = await records.merge(ctx, input);

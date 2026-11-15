@@ -22,6 +22,8 @@ export type OutboundEmail = {
   toEmail: string;
   subject: string;
   text: string;
+  /** The designed version. A provider sends both, and the mail app shows this one when it can. */
+  html?: string;
   messageId: string;
   inReplyTo?: string;
   /** For automated email: where the recipient unsubscribes. A provider sends it as the `List-Unsubscribe` and `List-Unsubscribe-Post` headers, so mail apps can offer their own unsubscribe button. */

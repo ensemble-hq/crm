@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { assistantReplySchema, assistantSettingsSchema, assistantTurnSchema, assistantUsageSchema, saveAssistantSettingsSchema } from './assistant';
 import { auditCheckSchema, auditPageSchema, auditQuerySchema } from './audit';
 import { erasureSchema, personalDataSchema } from './privacy';
+import { designReplySchema, designRequestSchema, emailDesignSchema } from './emailDesign';
 import { briefSchema } from './brief';
 import { bookingPageSchema, bookingPageSettingsSchema, daySlotsSchema, formDetailSchema, formSchema, formSettingsSchema, meetingSchema, publicFormSchema } from './capture';
 import { emailPreferenceSchema, emailSettingsSchema, setEmailPreferenceSchema, unsubscribePageSchema } from './inbox';
@@ -412,9 +413,28 @@ export const operations: Operation[] = [
     method: 'saveEmailTemplate',
     title: 'Create or change a saved email',
     description: 'Creates an email template, or replaces one when `id` is given.',
-    input: z.object({ id: z.string().optional(), name: z.string(), subject: z.string(), body: z.string() }),
+    input: z.object({ id: z.string().optional(), name: z.string(), subject: z.string(), body: z.string().describe('The email as plain text. Ignored when `design` is given: the plain text is then taken from the design.'), design: emailDesignSchema.nullable().optional().describe('The designed version: a look and a list of blocks. Null makes it a plain email again.') }),
     output: emailTemplateSchema,
     effect: 'write',
+  },
+  {
+    name: 'templates.design',
+    method: 'designEmail',
+    title: 'Design an email with the model',
+    description: 'Asks the connected model to design an email from a description, or to change the one given (all of it, or only the block named). Returns the subject and the design. Nothing is saved; save it with templates.save.',
+    input: designRequestSchema,
+    output: designReplySchema,
+    effect: 'read',
+    slow: true,
+  },
+  {
+    name: 'templates.sendTest',
+    method: 'sendTestEmail',
+    title: 'Send yourself a test of an email',
+    description: 'Sends the email given to the person asking, at their own address, with the merge fields filled in with example names. It is sent as a one-off, not as automated email.',
+    input: z.object({ subject: z.string(), body: z.string(), design: emailDesignSchema.optional() }),
+    output: z.object({ to: z.string() }),
+    effect: 'send',
   },
   {
     name: 'templates.delete',

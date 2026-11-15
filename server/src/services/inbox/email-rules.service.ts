@@ -189,6 +189,12 @@ export class EmailRules {
     return `\n\n--\n${this.organization}${postalAddress ? `\n${postalAddress}` : ''}\nTo stop getting these emails: ${this.unsubscribeUrl(email)}`;
   }
 
+  /** The same, as parts, for an email that is designed. */
+  async footerParts(ctx: Context, email: string): Promise<{ organization: string; postalAddress?: string; unsubscribeUrl: string }> {
+    const { postalAddress } = await this.getSettings(ctx);
+    return { organization: this.organization, ...(postalAddress ? { postalAddress } : {}), unsubscribeUrl: this.unsubscribeUrl(email) };
+  }
+
   private addressOf(token: string): string {
     const [encoded = '', signature = ''] = token.split('.');
     const address = Buffer.from(encoded, 'base64url').toString();

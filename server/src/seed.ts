@@ -144,7 +144,7 @@ async function main(): Promise<void> {
 
     // The demo inbox: threads that already happened, so every message is either received or sent.
     for (const [index, template] of emailTemplates.entries()) {
-      await db.execute(sql`insert into email_templates (id, tenant_id, name, subject, body, created_at) values (${template.id}, ${TENANT_ID}, ${template.name}, ${template.subject}, ${template.body}, now() - make_interval(mins => ${emailTemplates.length - index}))`);
+      await db.execute(sql`insert into email_templates (id, tenant_id, name, subject, body, design, created_at) values (${template.id}, ${TENANT_ID}, ${template.name}, ${template.subject}, ${template.body}, ${template.design ? JSON.stringify(template.design) : null}::jsonb, now() - make_interval(mins => ${emailTemplates.length - index}))`);
     }
     const { conversations, messages } = inbox();
     await db.execute(sql`

@@ -3,6 +3,7 @@ import type { CrmRecord, Reference } from '../contracts/records';
 import { MOCK_NOW, OPEN_STAGES, users } from './definitions';
 import { dataset, mulberry32 } from './generate';
 import { session } from './team';
+import { STARTERS, renderEmailText } from '../lib/emailDesign';
 
 /** Generated email threads over the mock deals and contacts, and an in-memory inbox on top of them. */
 
@@ -159,12 +160,25 @@ function find(id: string): Conversation {
 }
 
 /** The team's saved emails. Used for replies in the inbox and for the email steps of sequences. */
+/** One designed email, so the designer has something to show from the start. */
+function welcomeEmail(): EmailTemplate {
+  const design = (STARTERS.find((starter) => starter.id === 'announcement') ?? STARTERS[0])!.build();
+  design.preheader = 'Here is what happens next, and who to ask.';
+  const [header, hero, text, columns] = design.blocks;
+  if (header?.kind === 'header') header.text = 'Northwind';
+  if (hero?.kind === 'hero') Object.assign(hero, { heading: 'Welcome aboard, {{firstName}}', text: 'You are all set. Here is what happens over the next few days.', buttonLabel: 'Book your kickoff call', buttonUrl: 'https://example.com/kickoff' });
+  if (text?.kind === 'text') text.text = 'Hi {{firstName}},\n\nThank you for choosing Northwind. I will be your contact from here on, so reply to this email whenever you need anything.';
+  if (columns?.kind === 'columns') columns.items = [{ heading: 'Today', text: 'Your account is ready to sign in to.' }, { heading: 'This week', text: 'A 30 minute kickoff call to set things up together.' }, { heading: 'After that', text: 'A check-in once you have had a month with it.' }];
+  return { id: 'tpl_welcome', name: 'Welcome a new customer', subject: 'Welcome to Northwind', body: renderEmailText(design), design };
+}
+
 export const emailTemplates: EmailTemplate[] = [
   { id: 'tpl_intro', name: 'Introduction', subject: 'A quick introduction', body: 'Hi {{firstName}},\n\nI look after new customers at Northwind. I saw you were interested in what we do, and wanted to introduce myself in case I can help.\n\nWould a short call this week be useful?\n\nBest,\n{{myName}}' },
   { id: 'tpl_thanks', name: 'Thanks, I am on it', subject: 'Thanks for your time', body: 'Hi {{firstName}},\n\nThanks for this. I am looking into it and will come back to you by the end of tomorrow.\n\nBest,\n{{myName}}' },
   { id: 'tpl_meeting', name: 'Offer a call', subject: 'Shall we talk it through?', body: 'Hi {{firstName}},\n\nIt might be quicker to talk this through. Do you have 20 minutes on Tuesday or Wednesday? Here is my calendar if it is easier to pick a time.\n\nBest,\n{{myName}}' },
   { id: 'tpl_pricing', name: 'Send pricing', subject: 'Pricing, as promised', body: 'Hi {{firstName}},\n\nI have attached the pricing we discussed. It includes onboarding and support, with no setup fee.\n\nLet me know if you would like me to walk your team through it.\n\nBest,\n{{myName}}' },
   { id: 'tpl_nudge', name: 'Gentle nudge', subject: 'Checking in', body: 'Hi {{firstName}},\n\nI wanted to check whether you had a chance to look at my last message. Happy to answer any questions, or to pick this up later if the timing is off.\n\nBest,\n{{myName}}' },
+  welcomeEmail(),
 ];
 
 let sequence = 0;

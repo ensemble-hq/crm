@@ -75,6 +75,8 @@ function tomorrowMorning(): string {
 
 function MessageBubble({ message, onCancel }: { message: Message; onCancel: () => void }) {
   const mine = message.direction === 'out';
+  // Our own designed emails show as designed. One from outside shows as words until asked, because loading its pictures tells the sender it was opened.
+  const [designed, setDesigned] = useState(mine);
   return (
     <article className="m-stack" data-gap="1" style={{ alignItems: mine ? 'flex-end' : 'flex-start' }}>
       <span className="m-cluster" data-gap="2" style={small}>
@@ -94,8 +96,13 @@ function MessageBubble({ message, onCancel }: { message: Message; onCancel: () =
           boxShadow: mine ? undefined : 'var(--m-shadow-sm)',
         }}
       >
-        {message.body}
+        {message.html && designed ? <iframe title={`Email from ${message.fromName}`} sandbox="" srcDoc={message.html} style={{ display: 'block', inlineSize: 'min(600px, 70vw)', blockSize: 460, border: 0, borderRadius: 'var(--m-radius-md)', background: 'var(--m-color-bg-surface)' }} /> : message.body}
       </div>
+      {message.html ? (
+        <button type="button" className="m-button" data-variant="ghost" data-size="sm" onClick={() => setDesigned(!designed)}>
+          {designed ? 'Show the words only' : 'Show it as designed'}
+        </button>
+      ) : null}
       {/* An outgoing message that has not gone yet says so; one that could not go says why. */}
       {message.scheduledFor ? (
         <span className="m-cluster" data-gap="2" style={small}>

@@ -4,7 +4,9 @@ import { type DrizzleDb, DrizzleRepository } from '@mariachi/database-postgres';
 import type { Encryption } from '@mariachi/encryption';
 import { z } from 'zod';
 import type { AssistantEvent, AssistantReply, AssistantSettings, AssistantTurn, AssistantUsage, SaveAssistantSettings } from '../../../src/contracts/assistant';
+import type { DesignReply, DesignRequest } from '../../../src/contracts/emailDesign';
 import type { ObjectDefinition } from '../../../src/contracts/metadata';
+import { designEmail } from './email-designer';
 import type { Operation } from '../../../src/contracts/operations';
 import type { ListResult, RecordDetail, Workspace } from '../../../src/contracts/records';
 import { and, sql } from 'drizzle-orm';
@@ -153,6 +155,31 @@ export class AssistantService {
           error: failure ?? null,
         })
         .catch((error: unknown) => ctx.logger.error({ error }, 'An assistant turn could not be recorded'));
+    }
+  }
+
+  /** Designs an email on the connected model, or changes one. Counted with the assistant's use. */
+  async designEmail(ctx: Context, input: DesignRequest): Promise<DesignReply> {
+    const started = Date.now();
+    const used = { provider: '', model: '', inputTokens: 0, outputTokens: 0, rounds: 0 };
+    let failure: string | undefined;
+    try {
+      const { adapter, model, provider } = await this.adapter(ctx);
+      Object.assign(used, { provider, model });
+      const workspace = (await this.call(ctx, 'workspace.get', undefined)) as Workspace;
+      const me = workspace.users.find((user) => user.id === workspace.currentUserId);
+      const result = await designEmail({ adapter, model }, input, { organization: workspace.name, sender: me?.name ?? 'a member of the team' }).catch((error: unknown) => {
+        throw error instanceof ValidationError || error instanceof ConflictError ? error : new ConflictError(`The model could not be reached: ${error instanceof Error ? error.message : String(error)}`);
+      });
+      Object.assign(used, { inputTokens: result.inputTokens, outputTokens: result.outputTokens, rounds: result.rounds });
+      return result.reply;
+    } catch (error) {
+      failure = error instanceof Error ? error.message : String(error);
+      throw error;
+    } finally {
+      await this.turns
+        .create(ctx, { id: `turn_${randomUUID().replace(/-/g, '').slice(0, 12)}`, userId: ctx.userId ?? actorOf(ctx).signedInId, question: `Design an email: ${input.prompt}`.slice(0, 500), ...used, lookups: 0, plannedSteps: 0, durationMs: Date.now() - started, error: failure ?? null })
+        .catch((error: unknown) => ctx.logger.error({ error }, 'An email design could not be recorded'));
     }
   }
 

@@ -10,6 +10,7 @@ On screen so far, all on mock data:
 - Inbox: email threads linked to their contact, company and deal; assign, close, reply with templates or a drafted reply; sent replies are logged on the records (mock email until Gmail and Outlook sync exists)
 - Import: a four-step wizard for CSV files (match columns, dry-run review, import, undo), and CSV export of any view
 - Reports: a dashboard of saved reports, a report builder with live preview (count, total or average, split by any property or by month or quarter), and reports built by asking the assistant
+- Email designer: an email is a look and a stack of blocks (banner, text, button, columns, highlight, picture, sign-off), edited in place, dragged into order, previewed for computer, phone and plain text, and sent to yourself as a test. The connected model writes a first version from a sentence, changes the whole email, or rewrites one part; what it returns is checked against the same format a person's design is. Designs are sent as HTML with a plain-text version, filled in per recipient, with the address and the way out added to automated email
 - Sequences: steps of emails, calls and tasks with waits, drafted from a sentence, with enrolment from the contacts list and per-sequence results; editable email templates shared with the inbox
 - Workflows: a canvas builder (React Flow) for "when this happens, if these conditions, do these things", built from a sentence or by hand; workflows that are on really run in the mock, with a history of runs
 - Forms: a builder with a working preview, a hosted public page per form, and submissions that create or update a contact by email
@@ -309,7 +310,7 @@ Built so far (in `server/`):
 - Sign-in behind an interface with `dev` and `jwt` providers, and a seed of the demo company.
 - The web app's live mode sends those operations to the server and everything else to the mock.
 
-Not yet: the Ensemble sign-in and email adapters and connected mailboxes (only development providers exist), delivery and bounce reports, attachments and HTML bodies, time zones on booking pages, restoring deleted records, the assistant's words appearing letter by letter as the model writes them (events stream, text within one does not), and files given to the assistant on a model.
+Not yet: the Ensemble sign-in and email adapters and connected mailboxes (only development providers exist), delivery and bounce reports, attachments, time zones on booking pages, restoring deleted records, the assistant's words appearing letter by letter as the model writes them (events stream, text within one does not), and files given to the assistant on a model.
 
 Tests: `pnpm test` (needs `pnpm db:up`). Unit tests sit beside the shared code (`src/lib/*.test.ts`). The server tests in `server/test` run the real services against a real Postgres database, `crm_test`, which they create and empty themselves, and call operations the way the HTTP API and MCP do, so who is acting, an agent's limits and the audit log are exercised too. They cover access by role, records and import, computed fields and stage rules, email in and out with its failure cases, consent and opting out, sequences, workflows (on events, on a schedule and when called), agents, the audit log, public forms and booking, and the assistant on a scripted model.
 

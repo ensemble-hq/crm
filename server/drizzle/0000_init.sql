@@ -204,6 +204,7 @@ CREATE TABLE "email_templates" (
 	"name" text NOT NULL,
 	"subject" text DEFAULT '' NOT NULL,
 	"body" text DEFAULT '' NOT NULL,
+	"design" jsonb,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -246,6 +247,7 @@ CREATE TABLE "messages" (
 	"to_email" text DEFAULT '' NOT NULL,
 	"subject" text DEFAULT '' NOT NULL,
 	"body" text NOT NULL,
+	"html" text,
 	"status" text NOT NULL,
 	"message_id_header" text,
 	"provider_id" text,

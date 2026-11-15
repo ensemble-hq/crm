@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, CheckSquare, Mail, Pause, Pencil, Phone, Play, Plus, Send, Sparkles, Trash2, UserMinus } from 'lucide-react';
-import { type CSSProperties, useState } from 'react';
+import { type CSSProperties, useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, useQuery } from '../api';
 import { Page } from '../app/Page';
@@ -7,7 +7,9 @@ import { useWorkspace } from '../app/workspace';
 import { draftSequence } from '../assistant/mock-engine';
 import type { EmailTemplate } from '../contracts/inbox';
 import type { Enrollment, Sequence, SequenceStep } from '../contracts/sequences';
+import { designFromText } from '../lib/emailDesign';
 import { Modal } from '../ui/Modal';
+import { EmailThumb } from './EmailDesigner';
 import { formatDate } from '../ui/PropertyValue';
 import { ICON, cardTitle, figure, medium, plainList, rowDivider, small } from '../ui/styles';
 
@@ -38,53 +40,10 @@ function StatusBadge({ status }: { status: Sequence['status'] }) {
   );
 }
 
-/** Name, subject and body of one saved email. */
-function TemplateDialog({ template, onClose, onSaved }: { template: EmailTemplate | 'new'; onClose: () => void; onSaved: () => void }) {
-  const existing = template === 'new' ? undefined : template;
-  const [name, setName] = useState(existing?.name ?? '');
-  const [subject, setSubject] = useState(existing?.subject ?? '');
-  const [body, setBody] = useState(existing?.body ?? 'Hi {{firstName}},\n\n\n\nBest,\n{{myName}}');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-
-  async function save() {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await api.saveEmailTemplate({ id: existing?.id, name, subject, body });
-      onSaved();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'The template could not be saved.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Modal open size="lg" title={existing ? `Edit "${existing.name}"` : 'New template'} submitLabel={existing ? 'Save' : 'Create template'} busy={busy} error={error} onClose={onClose} onSubmit={save}>
-      <div className="m-field">
-        <label className="m-field-label" htmlFor="template-name">
-          Name
-        </label>
-        <input className="m-input" id="template-name" value={name} onChange={(event) => setName(event.target.value)} required />
-      </div>
-      <div className="m-field">
-        <label className="m-field-label" htmlFor="template-subject">
-          Subject
-        </label>
-        <input className="m-input" id="template-subject" value={subject} onChange={(event) => setSubject(event.target.value)} />
-      </div>
-      <div className="m-field">
-        <label className="m-field-label" htmlFor="template-body">
-          Message
-        </label>
-        <textarea className="m-input" id="template-body" rows={10} value={body} onChange={(event) => setBody(event.target.value)} />
-        <p className="m-field-hint">
-          <code>{'{{firstName}}'}</code> becomes the contact's first name and <code>{'{{myName}}'}</code> the sender's.
-        </p>
-      </div>
-    </Modal>
-  );
+/** A saved email's picture, sized to its card. */
+function ThumbFit({ template }: { template: EmailTemplate }) {
+  const design = useMemo(() => template.design ?? designFromText(template.body), [template]);
+  return <EmailThumb design={design} subject={template.subject} ratio={0.85} />;
 }
 
 /** Start a sequence from a sentence, or from nothing. */
@@ -126,7 +85,6 @@ export function Sequences() {
   const navigate = useNavigate();
   const [version, setVersion] = useState(0);
   const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState<EmailTemplate | 'new'>();
   const [removeError, setRemoveError] = useState<string>();
   const sequences = useQuery(() => api.listSequences(), [version]);
   const templates = useQuery(() => api.listEmailTemplates(), [version]);
@@ -152,19 +110,19 @@ export function Sequences() {
             <Plus size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Sequence
           </button>
         ) : (
-          <button type="button" className="m-button" data-variant="primary" data-size="sm" onClick={() => setEditing('new')}>
-            <Plus size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Template
+          <button type="button" className="m-button" data-variant="primary" data-size="sm" onClick={() => navigate('/sequences/emails/new')}>
+            <Plus size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Email
           </button>
         )
       }
     >
       <div className="m-stack" data-gap="4">
         <div className="m-cluster" data-justify="between" data-gap="3">
-          <h1 style={{ ...figure, fontVariantNumeric: 'normal' }}>{tab === 'sequences' ? 'Sequences' : 'Email templates'}</h1>
+          <h1 style={{ ...figure, fontVariantNumeric: 'normal' }}>{tab === 'sequences' ? 'Sequences' : 'Saved emails'}</h1>
           <div className="m-cluster" data-gap="1" role="group" aria-label="Show">
             {[
               { id: 'sequences', label: 'Sequences' },
-              { id: 'templates', label: `Templates${templates.data ? ` ${templates.data.length}` : ''}` },
+              { id: 'templates', label: `Emails${templates.data ? ` ${templates.data.length}` : ''}` },
             ].map((item) => (
               <button
                 key={item.id}
@@ -240,43 +198,29 @@ export function Sequences() {
                 {removeError}
               </p>
             ) : null}
-            <section className="m-card" aria-label="Templates" style={{ padding: 0, overflow: 'hidden' }}>
-              <ul style={plainList}>
-                {(templates.data ?? []).map((template, index) => (
-                  <li key={template.id} className="m-cluster" data-justify="between" data-gap="3" style={{ flexWrap: 'nowrap', padding: 'var(--m-space-3) var(--m-space-4)', ...(index === 0 ? {} : rowDivider) }}>
-                    <div className="m-stack" data-gap="0" style={{ flex: 1, minInlineSize: 0 }}>
-                      <span style={medium}>{template.name}</span>
-                      <span style={{ ...small, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {template.subject ? `${template.subject} · ` : ''}
-                        {template.body.replace(/\s+/g, ' ').slice(0, 110)}
-                      </span>
-                    </div>
-                    <button type="button" className="m-button" data-variant="ghost" data-size="sm" data-icon-only aria-label={`Edit ${template.name}`} onClick={() => setEditing(template)}>
-                      <Pencil size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />
-                    </button>
+            <section aria-label="Saved emails" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 'var(--m-space-4)' }}>
+              {(templates.data ?? []).map((template) => (
+                <article key={template.id} className="m-card" style={{ padding: 0, overflow: 'hidden' }}>
+                  <Link to={`/sequences/emails/${template.id}`} aria-label={`Open ${template.name}`} style={{ display: 'block', borderBlockEnd: 'var(--m-border-width-thin) solid var(--m-color-border-muted)' }}>
+                    <ThumbFit template={template} />
+                  </Link>
+                  <div className="m-cluster" data-justify="between" data-gap="2" style={{ flexWrap: 'nowrap', padding: 'var(--m-space-3)' }}>
+                    <Link to={`/sequences/emails/${template.id}`} className="m-stack" data-gap="0" style={{ flex: 1, minInlineSize: 0, textDecoration: 'none', color: 'inherit' }}>
+                      <span style={{ ...medium, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{template.name}</span>
+                      <span style={{ ...small, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{template.subject || 'No subject'}</span>
+                    </Link>
                     <button type="button" className="m-button" data-variant="ghost" data-size="sm" data-icon-only aria-label={`Delete ${template.name}`} onClick={() => void removeTemplate(template)}>
                       <Trash2 size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />
                     </button>
-                  </li>
-                ))}
-              </ul>
+                  </div>
+                </article>
+              ))}
             </section>
-            <p style={{ ...small, margin: 0 }}>Templates are used for replies in the inbox and for the email steps of sequences.</p>
+            <p style={{ ...small, margin: 0 }}>Saved emails are used for replies in the inbox, the email steps of sequences, and the emails workflows send.</p>
           </>
         )}
       </div>
       {creating ? <NewSequenceDialog onClose={() => setCreating(false)} onCreated={(id) => navigate(`/sequences/${id}`)} /> : null}
-      {editing ? (
-        <TemplateDialog
-          key={editing === 'new' ? 'new' : editing.id}
-          template={editing}
-          onClose={() => setEditing(undefined)}
-          onSaved={() => {
-            setEditing(undefined);
-            setVersion((value) => value + 1);
-          }}
-        />
-      ) : null}
     </Page>
   );
 }

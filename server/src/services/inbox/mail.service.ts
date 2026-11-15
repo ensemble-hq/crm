@@ -2,7 +2,9 @@ import type { Context } from '@mariachi/core';
 import type { Outbox } from '@mariachi/events/outbox';
 import { randomUUID } from 'node:crypto';
 import type { PropertyValue } from '../../../../src/contracts/metadata';
+import type { EmailDesign } from '../../../../src/contracts/emailDesign';
 import type { CrmRecord } from '../../../../src/contracts/records';
+import { type Fill, renderEmailHtml, renderEmailText, sampleFill } from '../../../../src/lib/emailDesign';
 import { type EmailProvider, PermanentSendError } from '../../email';
 import { emailQueued, emailReceived } from '../../events';
 import type { InboundPayload } from '../../schema';
@@ -83,6 +85,7 @@ export class MailService {
           toEmail: mail.toEmail ?? '',
           subject: mail.subject,
           body: mail.text,
+          html: mail.html ?? null,
           messageIdHeader: mail.messageId ?? null,
           sentAt: mail.receivedAt ? new Date(mail.receivedAt) : arrival.receivedAt,
         });
@@ -116,11 +119,14 @@ export class MailService {
   }
 
   /** Stores an outgoing message as queued. Call it inside the transaction of whatever caused the send. */
-  async queue(ctx: Context, input: { conversationId: string; sender: { id: string; name: string; email: string }; toEmail: string; subject: string; body: string; purpose?: Purpose; sendAt?: Date }): Promise<string> {
+  async queue(ctx: Context, input: { conversationId: string; sender: { id: string; name: string; email: string }; toEmail: string; subject: string; body: string; design?: EmailDesign | null; fill?: Fill; purpose?: Purpose; sendAt?: Date }): Promise<string> {
     const purpose = input.purpose ?? 'conversation';
     // Refused here if the address has opted out or had its share this week, before anything is stored.
     await this.rules.check(ctx, input.toEmail, purpose);
-    const body = purpose === 'automated' ? `${input.body}${await this.rules.footer(ctx, input.toEmail)}` : input.body;
+    // A designed email is sent as HTML with its own words as the plain-text version beside it.
+    const words = input.design ? renderEmailText(input.design, input.fill) : input.body;
+    const body = purpose === 'automated' ? `${words}${await this.rules.footer(ctx, input.toEmail)}` : words;
+    const html = input.design ? renderEmailHtml(input.design, { subject: input.subject, fill: input.fill, ...(purpose === 'automated' ? { footer: await this.rules.footerParts(ctx, input.toEmail) } : {}) }) : null;
     const messageId = id('msg');
     await this.messages.create(ctx, {
       id: messageId,
@@ -131,6 +137,7 @@ export class MailService {
       toEmail: input.toEmail,
       subject: input.subject,
       body,
+      html,
       purpose,
       status: 'queued',
       messageIdHeader: `<${messageId}@crm>`,
@@ -147,16 +154,26 @@ export class MailService {
   }
 
   /** Starts a new conversation with a contact by sending them an email: what a workflow's "send an email" does. */
-  async compose(ctx: Context, input: { contact: CrmRecord; sender: { id: string; name: string; email: string }; subject: string; body: string; dealId?: string | null; purpose?: Purpose }): Promise<{ messageId: string; conversationId: string }> {
+  async compose(ctx: Context, input: { contact: CrmRecord; sender: { id: string; name: string; email: string }; subject: string; body: string; design?: EmailDesign | null; fill?: Fill; dealId?: string | null; purpose?: Purpose }): Promise<{ messageId: string; conversationId: string }> {
     const toEmail = typeof input.contact.properties.email === 'string' ? input.contact.properties.email : '';
     if (!toEmail) throw new Error(`${String(input.contact.properties.name ?? 'The contact')} has no email address.`);
     return this.transaction(ctx, async () => {
       const company = typeof input.contact.properties.company === 'string' ? input.contact.properties.company : null;
       const conversation = await this.conversations.create(ctx, { id: id('conv'), subject: input.subject, status: 'open', assigneeId: input.sender.id, contactId: input.contact.id, companyId: company, dealId: input.dealId ?? null, unread: false, preview: '', messageCount: 0 });
-      const messageId = await this.queue(ctx, { conversationId: conversation.id, sender: input.sender, toEmail, subject: input.subject, body: input.body, purpose: input.purpose });
+      const messageId = await this.queue(ctx, { conversationId: conversation.id, sender: input.sender, toEmail, subject: input.subject, body: input.body, design: input.design, fill: input.fill, purpose: input.purpose });
       await this.activities.create(ctx, { id: id('act'), recordId: input.contact.id, kind: 'email', title: `Email sent: ${input.subject}`, body: input.body, actorId: input.sender.id });
       return { messageId, conversationId: conversation.id };
     });
+  }
+
+  /** Sends an email straight to a member of the team so they can see how it arrives. Merge fields get example names. Nothing is kept. */
+  async sendTest(ctx: Context, to: { name: string; email: string }, input: { subject: string; body: string; design?: EmailDesign }): Promise<void> {
+    const subject = `[Test] ${sampleFill(input.subject) || 'No subject'}`;
+    const key = id('test');
+    await this.provider.send(
+      { fromName: to.name, fromEmail: to.email, toEmail: to.email, subject, text: input.design ? renderEmailText(input.design, sampleFill) : sampleFill(input.body), ...(input.design ? { html: renderEmailHtml(input.design, { subject, fill: sampleFill, footer: await this.rules.footerParts(ctx, to.email) }) } : {}), messageId: `<${key}@crm>` },
+      { idempotencyKey: key },
+    );
   }
 
   /** Sends a queued message, if it is due and no other worker has taken it. */
@@ -177,7 +194,7 @@ export class MailService {
     try {
       const previous = await this.messages.findMany(ctx, { conversationId: message.conversationId, direction: 'in' }, { sort: { field: 'sentAt', direction: 'desc' }, limit: 1 });
       const sent = await this.provider.send(
-        { fromName: message.fromName, fromEmail: message.fromEmail, toEmail: message.toEmail, subject: message.subject, text: message.body, messageId: message.messageIdHeader ?? `<${message.id}@crm>`, inReplyTo: previous[0]?.messageIdHeader ?? undefined, ...(purpose === 'automated' ? { unsubscribeUrl: this.rules.oneClickUrl(message.toEmail) } : {}) },
+        { fromName: message.fromName, fromEmail: message.fromEmail, toEmail: message.toEmail, subject: message.subject, text: message.body, ...(message.html ? { html: message.html } : {}), messageId: message.messageIdHeader ?? `<${message.id}@crm>`, inReplyTo: previous[0]?.messageIdHeader ?? undefined, ...(purpose === 'automated' ? { unsubscribeUrl: this.rules.oneClickUrl(message.toEmail) } : {}) },
         { idempotencyKey: message.id },
       );
       await this.messages.update(ctx, message.id, { status: 'sent', providerId: sent.providerId, lastError: null, sentAt: new Date() });

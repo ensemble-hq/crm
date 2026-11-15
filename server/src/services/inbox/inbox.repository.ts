@@ -82,10 +82,10 @@ export class MessagesRepository extends DrizzleRepository<MessageRow> {
   }
 
   /** Adds an incoming message unless it is already there. True if it was added. */
-  async addIncoming(ctx: Context, message: { id: string; conversationId: string; fromName: string; fromEmail: string; toEmail: string; subject: string; body: string; messageIdHeader: string | null; sentAt: Date }): Promise<boolean> {
+  async addIncoming(ctx: Context, message: { id: string; conversationId: string; fromName: string; fromEmail: string; toEmail: string; subject: string; body: string; html: string | null; messageIdHeader: string | null; sentAt: Date }): Promise<boolean> {
     const rows = (await this.db.execute(sql`
-      insert into messages (id, tenant_id, conversation_id, direction, from_name, from_email, to_email, subject, body, status, message_id_header, sent_at)
-      values (${message.id}, ${ctx.tenantId}, ${message.conversationId}, 'in', ${message.fromName}, ${message.fromEmail}, ${message.toEmail}, ${message.subject}, ${message.body}, 'received', ${message.messageIdHeader}, ${message.sentAt.toISOString()}::timestamptz)
+      insert into messages (id, tenant_id, conversation_id, direction, from_name, from_email, to_email, subject, body, html, status, message_id_header, sent_at)
+      values (${message.id}, ${ctx.tenantId}, ${message.conversationId}, 'in', ${message.fromName}, ${message.fromEmail}, ${message.toEmail}, ${message.subject}, ${message.body}, ${message.html}, 'received', ${message.messageIdHeader}, ${message.sentAt.toISOString()}::timestamptz)
       on conflict (id) do nothing returning id`)) as unknown as unknown[];
     return rows.length > 0;
   }

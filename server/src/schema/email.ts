@@ -1,4 +1,5 @@
 import { column, defineTable, index, type InferEntity } from '@mariachi/database';
+import type { EmailDesign } from '../../../src/contracts/emailDesign';
 
 /** What an email provider hands over, in one shape whichever provider it is. */
 export type InboundPayload = {
@@ -7,6 +8,8 @@ export type InboundPayload = {
   toEmail?: string;
   subject: string;
   text: string;
+  /** The HTML version, when the email had one. Shown in a sandbox, never trusted. */
+  html?: string;
   /** The email's own Message-ID header, and the ones it answers. Used to find its thread. */
   messageId?: string;
   inReplyTo?: string;
@@ -81,6 +84,8 @@ export const messagesTable = defineTable(
     toEmail: column.text().notNull().default(''),
     subject: column.text().notNull().default(''),
     body: column.text().notNull(),
+    /** The designed version, when there is one. `body` is always the plain text. */
+    html: column.text(),
     /** In: `received`. Out: `queued`, `sending`, `sent` or `failed`. */
     status: column.text().notNull(),
     /** The Message-ID header, so a reply can be matched to its thread. */
@@ -109,6 +114,8 @@ export const emailTemplatesTable = defineTable('email_templates', {
   name: column.text().notNull(),
   subject: column.text().notNull().default(''),
   body: column.text().notNull().default(''),
+  /** The design, when it was made in the designer. `body` is then its plain text. */
+  design: column.json().$type<EmailDesign>(),
   createdAt: column.timestamp().notNull().defaultNow(),
   updatedAt: column.timestamp().notNull().defaultNow(),
 });

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { emailDesignSchema } from './emailDesign';
 import { referenceSchema } from './records';
 
 /**
@@ -33,6 +34,8 @@ export const messageSchema = z.object({
   fromName: z.string(),
   fromEmail: z.string(),
   body: z.string(),
+  /** The designed version, when the message has one. `body` is always there as plain text. */
+  html: z.string().optional(),
   sentAt: z.string(),
   /** Where an outgoing message has got to. Absent on incoming ones. `queued` is waiting to go or being retried. */
   status: z.enum(['queued', 'sent', 'failed']).optional(),
@@ -83,6 +86,8 @@ export const emailTemplateSchema = z.object({
   subject: z.string(),
   /** May contain `{{firstName}}` and `{{myName}}`, filled in when the template is used. */
   body: z.string(),
+  /** How it looks, when it was made in the designer. Absent on a plain email. `body` is then the same words as plain text. */
+  design: emailDesignSchema.optional(),
 });
 export type EmailTemplate = z.infer<typeof emailTemplateSchema>;
 

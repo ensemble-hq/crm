@@ -1,5 +1,8 @@
 import { z } from 'zod';
+import type { DesignReply, DesignRequest, EmailDesign } from './emailDesign';
 import type { EmailTemplate } from './inbox';
+
+export type SaveEmailTemplate = { id?: string; name: string; subject: string; body: string; design?: EmailDesign | null };
 import { referenceSchema } from './records';
 
 /**
@@ -86,6 +89,10 @@ export interface SequencesApi {
   /** Takes a contact out of a sequence. */
   stopEnrollment(id: string): Promise<void>;
   /** Creates a template, or replaces one when `id` is given. */
-  saveEmailTemplate(input: { id?: string; name: string; subject: string; body: string }): Promise<EmailTemplate>;
+  saveEmailTemplate(input: SaveEmailTemplate): Promise<EmailTemplate>;
+  /** Asks the connected model to design an email, or to change one. Nothing is saved. */
+  designEmail(input: DesignRequest): Promise<DesignReply>;
+  /** Sends a saved email to the person asking, with the merge fields filled in with examples. */
+  sendTestEmail(input: { subject: string; body: string; design?: EmailDesign }): Promise<{ to: string }>;
   deleteEmailTemplate(id: string): Promise<void>;
 }

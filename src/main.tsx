@@ -9,6 +9,7 @@ import { WorkspaceProvider } from './app/WorkspaceProvider';
 import { AssistantPage } from './pages/Assistant';
 import { ComingSoon } from './pages/ComingSoon';
 import { Dashboard } from './pages/Dashboard';
+import { EmailDesigner } from './pages/EmailDesigner';
 import { Forecast } from './pages/Forecast';
 import { FormBuilder, Forms, PublicForm } from './pages/Forms';
 import { ImportPage } from './pages/Import';
@@ -53,6 +54,7 @@ createRoot(root).render(
           <Route path="reports" element={<Reports />} />
           <Route path="reports/:reportId" element={<ReportBuilder />} />
           <Route path="sequences" element={<Sequences />} />
+          <Route path="sequences/emails/:templateId" element={<EmailDesigner />} />
           <Route path="sequences/:sequenceId" element={<SequenceDetail />} />
           <Route path="workflows" element={<Workflows />} />
           <Route path="workflows/:workflowId" element={<WorkflowBuilder />} />

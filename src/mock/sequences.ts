@@ -4,6 +4,26 @@ import type { Enrollment, Sequence, SequenceStats, SequenceStep, SequencesApi } 
 import { MOCK_NOW } from './definitions';
 import { dataset, mulberry32 } from './generate';
 import { emailTemplates } from './inbox';
+import type { DesignReply, DesignRequest } from '../contracts/emailDesign';
+import { STARTERS, renderEmailText } from '../lib/emailDesign';
+
+/** What the designer gets in the demo, where there is no model: the nearest ready-made layout, headed with the request. */
+function draftWithoutModel(input: DesignRequest): DesignReply {
+  const note = 'This is the demo, which has no model: you got a ready-made layout to edit. On your own workspace the connected model writes the email for you.';
+  const wanted = input.prompt.toLowerCase();
+  if (input.design && input.blockId) {
+    const blocks = input.design.blocks.map((block) => {
+      if (block.id !== input.blockId || !('text' in block)) return block;
+      const first = block.text.split(/(?<=[.!?])\s+/)[0] ?? block.text;
+      return { ...block, text: /short|brief|tight/.test(wanted) ? first : block.text };
+    });
+    return { subject: input.subject ?? '', design: { ...input.design, blocks }, note };
+  }
+  const pick = /news|digest|monthly|roundup/.test(wanted) ? 'newsletter' : /invit|event|webinar|join us/.test(wanted) ? 'invitation' : /announc|launch|new feature|introduc/.test(wanted) ? 'announcement' : /follow|meeting|call|recap/.test(wanted) ? 'followup' : 'note';
+  const design = (STARTERS.find((starter) => starter.id === pick) ?? STARTERS[0])!.build();
+  const subject = input.prompt.trim().replace(/\s+/g, ' ').replace(/[.!?]+$/, '');
+  return { subject: subject.length > 60 ? `${subject.slice(0, 57)}…` : subject.charAt(0).toUpperCase() + subject.slice(1), design: input.design ? { ...design, theme: input.design.theme } : design, note };
+}
 
 /** Sequences and their enrolments, in memory. Nothing is sent and no time passes: the schedule is shown, not run. */
 
@@ -204,8 +224,10 @@ export function createSequencesApi(respond: <T>(compute: () => T) => Promise<T>)
 
     saveEmailTemplate: (input) =>
       respond(() => {
-        const fields = { name: input.name.trim(), subject: input.subject.trim(), body: input.body };
-        if (!fields.name) throw new Error('Give the template a name.');
+        const existingDesign = input.id ? emailTemplates.find((template) => template.id === input.id)?.design : undefined;
+        const design = input.design === undefined ? existingDesign : (input.design ?? undefined);
+        const fields = { name: input.name.trim(), subject: input.subject.trim(), body: design && input.design ? renderEmailText(design) : input.body, design };
+        if (!fields.name) throw new Error('Give the email a name.');
         if (input.id) {
           const existing = emailTemplates.find((template) => template.id === input.id);
           if (!existing) throw new Error('That template no longer exists.');
@@ -217,6 +239,12 @@ export function createSequencesApi(respond: <T>(compute: () => T) => Promise<T>)
         emailTemplates.push(created);
         return created;
       }),
+
+    // The demo has no model, so it lays out a sensible start from the request and says so.
+    designEmail: (input) =>
+      new Promise((resolve) => setTimeout(resolve, 900)).then(() => draftWithoutModel(input)),
+
+    sendTestEmail: () => Promise.reject(new Error('Sending needs the server. This is the demo, which runs in your browser.')),
 
     deleteEmailTemplate: (id) =>
       respond(() => {

@@ -8,6 +8,10 @@ import { actorOf, assertAllowed } from '../people/access';
 import type { PeopleService } from '../people/people.service';
 import type { RecordsRepository } from '../records/records.repository';
 import type { WorkspaceService } from '../workspace/workspace.service';
+import type { EmailDesign } from '../../../../src/contracts/emailDesign';
+import type { SaveEmailTemplate } from '../../../../src/contracts/sequences';
+import { renderEmailText } from '../../../../src/lib/emailDesign';
+import type { EmailTemplateRow } from '../../schema';
 import type { ConversationsRepository, EmailTemplatesRepository, InboundEmailsRepository, MailCursorsRepository, MessagesRepository } from './inbox.repository';
 import type { MailService } from './mail.service';
 
@@ -26,6 +30,7 @@ function toMessage(row: MessageRow): Message {
     fromName: row.fromName,
     fromEmail: row.fromEmail,
     body: row.body,
+    ...(row.html ? { html: row.html } : {}),
     sentAt: row.sentAt.toISOString(),
     // "Being sent right now" is still waiting as far as a person is concerned.
     ...(outgoing ? { status: row.status === 'sent' ? 'sent' : row.status === 'failed' ? 'failed' : 'queued' } : {}),
@@ -33,6 +38,10 @@ function toMessage(row: MessageRow): Message {
     // Never tried and not yet due: it is waiting for the time its sender chose.
     ...(outgoing && row.status === 'queued' && row.attempts === 0 && row.nextAttemptAt.getTime() > Date.now() ? { scheduledFor: row.nextAttemptAt.toISOString() } : {}),
   };
+}
+
+function toTemplate(row: EmailTemplateRow): EmailTemplate {
+  return { id: row.id, name: row.name, subject: row.subject, body: row.body, ...(row.design ? { design: row.design } : {}) };
 }
 
 /** The shared inbox: conversations, replies and the team's saved emails. */
@@ -148,15 +157,28 @@ export class InboxService {
 
   async listTemplates(ctx: Context): Promise<EmailTemplate[]> {
     const rows = await this.templates.findMany(ctx, {}, { sort: { field: 'createdAt', direction: 'asc' }, limit: 500 });
-    return rows.map((row) => ({ id: row.id, name: row.name, subject: row.subject, body: row.body }));
+    return rows.map(toTemplate);
   }
 
-  async saveTemplate(ctx: Context, input: { id?: string; name: string; subject: string; body: string }): Promise<EmailTemplate> {
+  async saveTemplate(ctx: Context, input: SaveEmailTemplate): Promise<EmailTemplate> {
     const name = input.name.trim();
-    if (!name) throw new ValidationError('Give the template a name.');
-    if (input.id && !(await this.templates.findById(ctx, input.id))) throw new NotFoundError('template', input.id);
-    const row = input.id ? await this.templates.update(ctx, input.id, { name, subject: input.subject, body: input.body }) : await this.templates.create(ctx, { id: id('tpl'), name, subject: input.subject, body: input.body });
-    return { id: row.id, name: row.name, subject: row.subject, body: row.body };
+    if (!name) throw new ValidationError('Give the email a name.');
+    const existing = input.id ? await this.templates.findById(ctx, input.id) : undefined;
+    if (input.id && !existing) throw new NotFoundError('template', input.id);
+    // Leaving `design` out keeps what is there; null makes it a plain email again.
+    const design = input.design === undefined ? (existing?.design ?? null) : input.design;
+    if (design && design.blocks.length === 0) throw new ValidationError('Add something to the email before saving it.');
+    // A designed email keeps its words as plain text too: for the inbox, for search, and for mail apps that will not show HTML.
+    const values = { name, subject: input.subject, body: design && input.design ? renderEmailText(design) : input.body, design };
+    return toTemplate(existing ? await this.templates.update(ctx, existing.id, values) : await this.templates.create(ctx, { id: id('tpl'), ...values }));
+  }
+
+  /** Sends the email to the person asking, so they can see it in their own mail app. */
+  async sendTest(ctx: Context, input: { subject: string; body: string; design?: EmailDesign }): Promise<{ to: string }> {
+    const me = (await this.people.users(ctx)).find((user) => user.id === ctx.userId);
+    if (!me?.email) throw new ValidationError('You need to be an active member with an email address to send a test.');
+    await this.mail.sendTest(ctx, me, input);
+    return { to: me.email };
   }
 
   async deleteTemplate(ctx: Context, templateId: string): Promise<void> {
