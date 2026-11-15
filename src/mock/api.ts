@@ -564,6 +564,9 @@ function logActivity(recordId: string, kind: 'note' | 'meeting', title: string, 
   createdActivity.set(recordId, [logged, ...(createdActivity.get(recordId) ?? [])]);
 }
 
+/** Deleted records, newest first, kept so they can be restored. */
+const bin: Array<{ record: CrmRecord; deletedAt: string }> = [];
+
 export const mockApi: CrmApi = {
   ...createInboxApi(respond, logEmail),
   ...createReportsApi({ respond, select, definition, labelOf: label }),
@@ -789,6 +792,34 @@ export const mockApi: CrmApi = {
       return { changed, unchanged, skipped: 0 };
     }),
 
+  listDeletedRecords: (query) =>
+    respond(() => {
+      assertAllowed('manageSettings', 'see deleted records');
+      const object = definition(query.objectId);
+      const all = bin.filter((entry) => entry.record.objectId === query.objectId);
+      return { total: all.length, records: all.slice((query.page - 1) * query.pageSize, query.page * query.pageSize).map((entry) => ({ id: entry.record.id, objectId: query.objectId, name: String(entry.record.properties[object.primaryProperty] ?? 'Unnamed'), deletedAt: entry.deletedAt, deletedBy: session.userId })) };
+    }),
+
+  restoreRecords: (ids) =>
+    respond(() => {
+      assertAllowed('manageSettings', 'restore deleted records');
+      const data = dataset();
+      const result = { restored: 0, skipped: [] as Array<{ id: string; reason: string }> };
+      for (const id of ids) {
+        const index = bin.findIndex((entry) => entry.record.id === id);
+        const entry = bin[index];
+        if (!entry) {
+          result.skipped.push({ id, reason: 'It is not among the deleted records.' });
+          continue;
+        }
+        bin.splice(index, 1);
+        data.byId.set(id, entry.record);
+        data.byObject.set(entry.record.objectId, [entry.record, ...(data.byObject.get(entry.record.objectId) ?? [])]);
+        result.restored += 1;
+      }
+      return result;
+    }),
+
   deleteRecords: (ids) =>
     respond(() => {
       const data = dataset();
@@ -803,6 +834,7 @@ export const mockApi: CrmApi = {
         const item = data.byId.get(id);
         if (!item) continue;
         data.byId.delete(id);
+        bin.unshift({ record: item, deletedAt: new Date().toISOString() });
         deleted += 1;
         const list = data.byObject.get(item.objectId);
         if (list) data.byObject.set(item.objectId, list.filter((candidate) => !doomed.has(candidate.id)));

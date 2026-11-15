@@ -307,7 +307,8 @@ CREATE TABLE "records" (
 	"properties" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"deleted_at" timestamp with time zone
+	"deleted_at" timestamp with time zone,
+	"deleted_by" text
 );
 
 --> statement-breakpoint

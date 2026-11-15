@@ -161,9 +161,27 @@ export class RecordsRepository extends DrizzleRepository<RecordRow> {
     await this.db.execute(sql`delete from deal_people where tenant_id = ${ctx.tenantId} and contact_id = ${fromId}`);
   }
 
-  async remove(ctx: Context, ids: string[]): Promise<number> {
+  /** Records that were deleted and can come back, newest first. Ones that went in a merge are left out. */
+  async deleted(ctx: Context, objectId: string, limit: number, offset: number): Promise<{ rows: Array<{ record: CrmRecord; deletedAt: string; deletedBy: string | null }>; total: number }> {
+    const where = sql`records.tenant_id = ${ctx.tenantId} and records.object_id = ${objectId} and records.deleted_at is not null and records.deleted_by is distinct from 'merge'`;
+    const rows = await this.rows<Raw & { deleted_at: string; deleted_by: string | null }>(sql`select ${COLUMNS}, to_char(records.deleted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as deleted_at, records.deleted_by from records where ${where} order by records.deleted_at desc, records.id limit ${limit} offset ${offset}`);
+    const [count] = await this.rows<{ total: number }>(sql`select count(*)::int as total from records where ${where}`);
+    return { rows: rows.map((row) => ({ record: toRecord(row), deletedAt: row.deleted_at, deletedBy: row.deleted_by })), total: count?.total ?? 0 };
+  }
+
+  /** One deleted record, if it can come back. */
+  async deletedOne(ctx: Context, id: string): Promise<CrmRecord | undefined> {
+    const rows = await this.rows<Raw>(sql`select ${COLUMNS} from records where records.tenant_id = ${ctx.tenantId} and records.id = ${id} and records.deleted_at is not null and records.deleted_by is distinct from 'merge'`);
+    return rows[0] ? toRecord(rows[0]) : undefined;
+  }
+
+  async bringBack(ctx: Context, id: string): Promise<void> {
+    await this.db.execute(sql`update records set deleted_at = null, deleted_by = null, updated_at = now() where tenant_id = ${ctx.tenantId} and id = ${id}`);
+  }
+
+  async remove(ctx: Context, ids: string[], by: string | null = null): Promise<number> {
     const list = sql.join(ids.map((id) => sql`${id}`), sql`, `);
-    const rows = await this.rows<{ id: string }>(sql`update records set deleted_at = now(), updated_at = now() where ${this.scope(ctx, sql`records.id in (${list})`)} returning records.id`);
+    const rows = await this.rows<{ id: string }>(sql`update records set deleted_at = now(), deleted_by = ${by}, updated_at = now() where ${this.scope(ctx, sql`records.id in (${list})`)} returning records.id`);
     return rows.length;
   }
 }

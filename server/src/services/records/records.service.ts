@@ -2,9 +2,9 @@ import { ConflictError, type Context, NotFoundError, ValidationError } from '@ma
 import { type SQL, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import type { ObjectDefinition, PropertyValue } from '../../../../src/contracts/metadata';
-import type { CreateRecord, CrmRecord, Duplicates, MergeRecords, ListQuery, ListResult, RecordDetail, Reference, RelatedGroup, SummaryQuery, SummaryRow, UpdateRecord, LabelRecords, LabelResult } from '../../../../src/contracts/records';
+import type { CreateRecord, CrmRecord, Duplicates, MergeRecords, ListQuery, ListResult, RecordDetail, Reference, RelatedGroup, SummaryQuery, SummaryRow, UpdateRecord, LabelRecords, LabelResult, DeletedList, DeletedQuery, RestoreResult } from '../../../../src/contracts/records';
 import { nextDue } from '../../../../src/lib/repeat';
-import { actorOf, assertCan, visibility } from '../people/access';
+import { actorOf, assertCan, visibility, assertAllowed } from '../people/access';
 import { compute, isEditable, problemWith } from '../../../../src/lib/rules';
 import type { WorkspaceService } from '../workspace/workspace.service';
 import type { RecordEvents } from './records.events';
@@ -208,7 +208,7 @@ export class RecordsService {
     const changed = Object.fromEntries(Object.entries(input.properties).filter(([key, value]) => JSON.stringify(keep.properties[key] ?? null) !== JSON.stringify(value ?? null)));
     return this.events.transaction(ctx, async () => {
       // The other record goes first, so a unique value moving across does not clash with itself.
-      await this.records.remove(ctx, [merged.id]);
+      await this.records.remove(ctx, [merged.id], 'merge');
       await this.validate(ctx, object, input.properties, keep.id);
       const updated = (await this.records.patch(ctx, keep.id, input.properties)) ?? keep;
       await this.records.repoint(ctx, merged.id, keep.id, references);
@@ -294,6 +294,44 @@ export class RecordsService {
     return this.records.reassign(ctx, fromId, toId);
   }
 
+  /** What has been deleted and can come back. For the people who run the workspace. */
+  async listDeleted(ctx: Context, input: DeletedQuery): Promise<DeletedList> {
+    assertAllowed(actorOf(ctx), 'manageSettings', 'see deleted records');
+    const object = await this.workspace.definition(ctx, input.objectId);
+    const { rows, total } = await this.records.deleted(ctx, object.id, input.pageSize, (input.page - 1) * input.pageSize);
+    return { total, records: rows.map((row) => ({ id: row.record.id, objectId: object.id, name: String(row.record.properties[object.primaryProperty] ?? 'Unnamed'), deletedAt: row.deletedAt, deletedBy: row.deletedBy })) };
+  }
+
+  /** Brings deleted records back as they were. One that would now clash with another record is left, with the reason. */
+  async restore(ctx: Context, ids: string[]): Promise<RestoreResult> {
+    assertAllowed(actorOf(ctx), 'manageSettings', 'restore deleted records');
+    const result: RestoreResult = { restored: 0, skipped: [] };
+    for (const id of ids) {
+      const record = await this.records.deletedOne(ctx, id);
+      if (!record) {
+        result.skipped.push({ id, reason: 'It is not among the deleted records.' });
+        continue;
+      }
+      try {
+        const object = await this.workspace.definition(ctx, record.objectId);
+        await this.events.transaction(ctx, async () => {
+          // Only what must be unique is checked: the record was valid when it was deleted, and rules added since should not keep it out.
+          for (const definition of object.properties) {
+            const value = record.properties[definition.id] ?? null;
+            if (!definition.unique || empty(value)) continue;
+            if ((await this.records.total(ctx, [sql`records.object_id = ${object.id}`, sql`records.properties->${definition.id}::text = ${JSON.stringify(value)}::jsonb`])) > 0) throw new ConflictError(`Another ${object.singular.toLowerCase()} now has ${definition.label.toLowerCase()} "${String(value)}".`);
+          }
+          await this.records.bringBack(ctx, record.id);
+          await this.events.created(ctx, record, 'restore');
+        });
+        result.restored += 1;
+      } catch (error) {
+        result.skipped.push({ id, reason: error instanceof Error ? error.message : 'It could not be restored.' });
+      }
+    }
+    return result;
+  }
+
   async remove(ctx: Context, ids: string[]): Promise<{ deleted: number }> {
     const actor = actorOf(ctx);
     const objects = await this.workspace.definitions(ctx);
@@ -302,7 +340,7 @@ export class RecordsService {
     for (const record of records) assertCan(actor, 'delete', record, objects.find((object) => object.id === record.objectId)?.singular.toLowerCase() ?? 'record');
     if (records.length === 0) return { deleted: 0 };
     return this.events.transaction(ctx, async () => {
-      const deleted = await this.records.remove(ctx, records.map((record) => record.id));
+      const deleted = await this.records.remove(ctx, records.map((record) => record.id), actor.signedInId);
       for (const record of records) await this.events.deleted(ctx, record);
       return { deleted };
     });

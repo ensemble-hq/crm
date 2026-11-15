@@ -9,7 +9,7 @@ import { emailPreferenceSchema, emailSettingsSchema, setEmailPreferenceSchema, u
 import { conversationDetailSchema, conversationListSchema, conversationQuerySchema, conversationSchema, emailHealthSchema, emailTemplateSchema, inboxCountsSchema, messageSchema, updateConversationSchema } from './inbox';
 import { stageRulesSchema } from './metadata';
 import { createObjectSchema, createPropertySchema, filterSchema, objectDefinitionSchema, saveViewSchema, updatePropertySchema, userSchema, viewDefinitionSchema } from './metadata';
-import { activitySchema, createActivitySchema, duplicatesQuerySchema, duplicatesSchema, mergeRecordsSchema, importRequestSchema, importResultSchema, notificationSchema, referenceSchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi, labelRecordsSchema, labelResultSchema } from './records';
+import { activitySchema, createActivitySchema, duplicatesQuerySchema, duplicatesSchema, mergeRecordsSchema, importRequestSchema, importResultSchema, notificationSchema, referenceSchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi, labelRecordsSchema, labelResultSchema, deletedQuerySchema, deletedListSchema, restoreResultSchema } from './records';
 import { workflowDetailSchema, workflowSchema, workflowSettingsSchema } from './workflows';
 import { dashboardSchema, reportDefinitionSchema, reportResultSchema, reportSettingsSchema } from './reports';
 import { convertLeadSchema, forecastSchema, lineItemSchema, dealPeopleSchema, dealPersonSchema } from './sales';
@@ -143,6 +143,24 @@ export const operations: Operation[] = [
     input: z.array(z.string()).min(1).max(500),
     output: z.object({ deleted: z.number().int() }),
     effect: 'destructive',
+  },
+  {
+    name: 'records.deleted',
+    method: 'listDeletedRecords',
+    title: 'List deleted records',
+    description: 'Returns the records of one object that were deleted and can be restored, newest first, with who deleted each and when. Records that went because they were merged into another are not listed. Only people who may change settings can call this.',
+    input: deletedQuerySchema,
+    output: deletedListSchema,
+    effect: 'read',
+  },
+  {
+    name: 'records.restore',
+    method: 'restoreRecords',
+    title: 'Restore deleted records',
+    description: 'Brings deleted records back exactly as they were, with their activity. A record that would now clash with another (the same email address, say) is left deleted and returned in `skipped` with the reason. Restoring does not set off workflows.',
+    input: z.array(z.string()).min(1).max(200),
+    output: restoreResultSchema,
+    effect: 'write',
   },
   {
     name: 'records.import',

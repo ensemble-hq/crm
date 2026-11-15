@@ -206,6 +206,16 @@ export type Workspace = {
   access: Access;
 };
 
+export const deletedQuerySchema = z.object({ objectId: z.string(), page: z.number().int().min(1), pageSize: z.number().int().min(1).max(100) });
+export type DeletedQuery = z.infer<typeof deletedQuerySchema>;
+export const deletedListSchema = z.object({
+  records: z.array(z.object({ id: z.string(), objectId: z.string(), name: z.string(), deletedAt: z.string(), /** The id of whoever deleted it, when that is known. */ deletedBy: z.string().nullable() })),
+  total: z.number().int(),
+});
+export type DeletedList = z.infer<typeof deletedListSchema>;
+export const restoreResultSchema = z.object({ restored: z.number().int(), skipped: z.array(z.object({ id: z.string(), reason: z.string() })) });
+export type RestoreResult = z.infer<typeof restoreResultSchema>;
+
 export interface CrmApi extends InboxApi, ReportsApi, SequencesApi, WorkflowsApi, CaptureApi, TeamApi, SalesApi, BriefApi, AssistantApi, AuditApi, PrivacyApi {
   getWorkspace(): Promise<Workspace>;
   listRecords(query: ListQuery): Promise<ListResult>;
@@ -219,6 +229,10 @@ export interface CrmApi extends InboxApi, ReportsApi, SequencesApi, WorkflowsApi
   /** Adds or removes choices of a several-choices field on many records. `skipped` counts records the caller may not edit. */
   labelRecords(input: LabelRecords): Promise<LabelResult>;
   deleteRecords(ids: string[]): Promise<{ deleted: number }>;
+  /** Records that were deleted and can be brought back, newest first. For the people who run the workspace. */
+  listDeletedRecords(query: DeletedQuery): Promise<DeletedList>;
+  /** Brings deleted records back as they were. */
+  restoreRecords(ids: string[]): Promise<RestoreResult>;
   importRecords(input: ImportRequest): Promise<ImportResult>;
   mergeRecords(input: MergeRecords): Promise<CrmRecord>;
   /** The signed-in user's notifications, newest first, with names for the records they are about. */

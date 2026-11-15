@@ -9,7 +9,8 @@ import { propertyValueSchema } from '../../src/contracts/metadata';
  */
 
 /** `workflow` marks a change a workflow made, which must not set off other workflows. */
-const origin = z.enum(['person', 'workflow']);
+/** `restore` marks a deleted record coming back, which is not a new record and sets nothing off. */
+const origin = z.enum(['person', 'workflow', 'restore']);
 
 export const recordCreated = defineEvent('record.created', { schema: z.object({ recordId: z.string(), objectId: z.string(), origin }) });
 

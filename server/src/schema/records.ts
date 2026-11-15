@@ -15,6 +15,8 @@ export const recordsTable = defineTable(
     createdAt: column.timestamp().notNull().defaultNow(),
     updatedAt: column.timestamp().notNull().defaultNow(),
     deletedAt: column.timestamp(),
+    /** Who deleted it. `merge` when it went because it was merged into another, which is not something to restore. */
+    deletedBy: column.text(),
   },
   { indexes: [index('records_object_idx').on('tenantId', 'objectId', 'createdAt')] },
 );

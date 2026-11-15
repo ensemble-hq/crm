@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import type { CrmRecord, Duplicates, ImportResult, ListResult, RecordDetail, RelatedGroup } from '../../src/contracts/records';
+import { sql } from 'drizzle-orm';
+import type { Activity, CrmRecord, DeletedList, Duplicates, ImportResult, ListResult, RecordDetail, RelatedGroup, RestoreResult } from '../../src/contracts/records';
 import { type Crm, FEMI, JONAS, MAYA, PRIYA, refusal, startCrm } from './harness';
 
 let crm: Crm;
@@ -199,5 +200,42 @@ describe('repeating tasks', () => {
     // Saving it again as done does not make another.
     await crm.call(MAYA, 'records.update', { id: task.id, properties: { status: 'done' } });
     expect(await mine()).toHaveLength(2);
+  });
+});
+
+describe('deleted records', () => {
+  it('can be listed and restored by an admin, as they were, without setting anything off', async () => {
+    const id = await crm.seed('contacts', { name: 'Gone Girl', email: 'gone@example.com', owner: JONAS });
+    await crm.call(JONAS, 'activity.create', { recordId: id, kind: 'note', title: 'Note', body: 'Remember me.' });
+    await crm.call(PRIYA, 'records.delete', [id]);
+    expect(await refusal(crm.call(MAYA, 'records.get', id))).toBeTruthy();
+    expect(await refusal(crm.call(JONAS, 'records.deleted', { objectId: 'contacts', page: 1, pageSize: 10 }))).toMatch(/see deleted records/);
+    const listed = await crm.call<DeletedList>(MAYA, 'records.deleted', { objectId: 'contacts', page: 1, pageSize: 10 });
+    expect(listed.records.find((record) => record.id === id)).toMatchObject({ name: 'Gone Girl', deletedBy: PRIYA });
+
+    const outboxBefore = await crm.rows<{ total: number }>(sql`select count(*)::int as total from mariachi_event_outbox where envelope::text like ${`%${id}%`} and envelope::text like '%"origin": "person"%'`);
+    expect(await refusal(crm.call(JONAS, 'records.restore', [id]))).toMatch(/restore deleted records/);
+    expect(await crm.call<RestoreResult>(MAYA, 'records.restore', [id, 'nope'])).toEqual({ restored: 1, skipped: [{ id: 'nope', reason: 'It is not among the deleted records.' }] });
+    const back = await crm.call<RecordDetail>(MAYA, 'records.get', id);
+    expect(back.record.properties).toMatchObject({ name: 'Gone Girl', email: 'gone@example.com' });
+    expect((await crm.call<Activity[]>(MAYA, 'activity.list', id)).some((activity) => activity.body === 'Remember me.')).toBe(true);
+    expect((await crm.call<DeletedList>(MAYA, 'records.deleted', { objectId: 'contacts', page: 1, pageSize: 10 })).records.some((record) => record.id === id)).toBe(false);
+    // Coming back is announced as a restore, which workflows ignore.
+    expect(await crm.rows<{ total: number }>(sql`select count(*)::int as total from mariachi_event_outbox where envelope::text like ${`%${id}%`} and envelope::text like '%"origin": "person"%'`)).toEqual(outboxBefore);
+  });
+
+  it('are left deleted when bringing them back would clash, and a merged record is not offered', async () => {
+    const first = await crm.seed('contacts', { name: 'Twin One', email: 'twin@example.com', owner: MAYA });
+    await crm.call(MAYA, 'records.delete', [first]);
+    const second = await crm.seed('contacts', { name: 'Twin Two', email: 'twin@example.com', owner: MAYA });
+    const result = await crm.call<RestoreResult>(MAYA, 'records.restore', [first]);
+    expect(result.restored).toBe(0);
+    expect(result.skipped[0]?.reason).toMatch(/now has email "twin@example.com"/);
+
+    const spare = await crm.seed('contacts', { name: 'Twin Spare', email: 'spare@example.com', owner: MAYA });
+    await crm.call(MAYA, 'records.merge', { keepId: second, mergeId: spare, properties: {} });
+    const listed = await crm.call<DeletedList>(MAYA, 'records.deleted', { objectId: 'contacts', page: 1, pageSize: 50 });
+    expect(listed.records.some((record) => record.id === spare)).toBe(false);
+    expect((await crm.call<RestoreResult>(MAYA, 'records.restore', [spare])).restored).toBe(0);
   });
 });
