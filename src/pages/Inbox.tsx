@@ -119,6 +119,18 @@ function MessageBubble({ message, onCancel }: { message: Message; onCancel: () =
           Not sent{message.problem ? `: ${message.problem}` : '.'}
         </span>
       ) : null}
+      {/* What the email service said became of it once it had gone. */}
+      {message.delivery === 'delivered' ? <span style={small}>Delivered</span> : null}
+      {message.delivery === 'bounced' ? (
+        <span className="m-field-error" role="alert">
+          Bounced{message.deliveryNote ? `: ${message.deliveryNote}` : '.'} This address will not be emailed again.
+        </span>
+      ) : null}
+      {message.delivery === 'complained' ? (
+        <span className="m-field-error" role="alert">
+          They marked this as spam. This address will not be emailed again.
+        </span>
+      ) : null}
     </article>
   );
 }

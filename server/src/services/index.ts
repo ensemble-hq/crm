@@ -155,6 +155,7 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     'inbox.cancelScheduled': (ctx, input) => inbox.cancelScheduled(ctx, input),
     'inbox.counts': (ctx) => inbox.counts(ctx),
     'inbox.health': (ctx) => inbox.health(ctx),
+    'email.report': (ctx) => inbox.report(ctx),
     'email.preference': (ctx, input) => rules.describe(ctx, input),
     'email.setPreference': (ctx, input) => rules.set(ctx, input),
     'email.settings': (ctx) => rules.getSettings(ctx),
@@ -266,6 +267,11 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     schema: { input: receiveEmailInput, output: z.object({ status: z.enum(['stored', 'duplicate']) }) },
     handler: async (ctx, input) => ({ status: await mail.receive(ctx, input.provider, input.providerMessageId, input.payload) }),
   });
+  // And for what the provider reports about mail it accepted: delivered, bounced, marked as spam.
+  communication.register(EMAIL_DELIVERY, {
+    schema: { input: emailDeliveryInput, output: z.object({ status: z.enum(['recorded', 'unchanged', 'unknown']) }) },
+    handler: async (ctx, input) => ({ status: await mail.delivery({ ...ctx, tenantId: TENANT_ID }, input) }),
+  });
   // Likewise for another system setting a workflow off: only the hooks route calls this, and the
   // address it was called at is what proves the caller may.
   communication.register(CALL_WORKFLOW, {
@@ -277,6 +283,16 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
 
 export const RECEIVE_EMAIL = 'mail.receive';
 export const CALL_WORKFLOW = 'workflows.called';
+export const EMAIL_DELIVERY = 'mail.delivery';
+
+export const emailDeliveryInput = z.object({
+  /** The id the provider returned when it accepted the message, or the message's own Message-ID header. One of the two. */
+  providerId: z.string().optional(),
+  messageId: z.string().optional(),
+  type: z.enum(['delivered', 'bounced', 'complained']),
+  reason: z.string().optional(),
+  at: z.string().optional(),
+});
 
 export const callWorkflowInput = z.object({
   token: z.string(),
@@ -292,6 +308,7 @@ export const receiveEmailInput = z.object({
     toEmail: z.string().optional(),
     subject: z.string(),
     text: z.string(),
+    html: z.string().optional(),
     messageId: z.string().optional(),
     inReplyTo: z.string().optional(),
     references: z.array(z.string()).optional(),

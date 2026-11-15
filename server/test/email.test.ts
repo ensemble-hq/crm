@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { beforeAll, describe, expect, it } from 'vitest';
-import type { ConversationDetail, ConversationList, EmailPreference, Message } from '../../src/contracts/inbox';
+import type { ConversationDetail, ConversationList, EmailPreference, EmailReport, Message } from '../../src/contracts/inbox';
 import type { CrmRecord, RecordDetail } from '../../src/contracts/records';
 import { type Crm, JONAS, MAYA, refusal, startCrm } from './harness';
 
@@ -190,5 +190,61 @@ describe('consent and opting out', () => {
     // Agreeing again brings back someone who had unsubscribed.
     expect(otto2).toMatchObject({ status: 'subscribed', consent: { text: 'Yes, email me news.', source: 'the "News" form' } });
     expect((await crm.call<EmailPreference>(MAYA, 'email.preference', 'nobox@example.com')).consent).toBeNull();
+  });
+});
+
+describe('what the email service reports back', () => {
+  let message: Message;
+  let conversationId: string;
+  const report = () => crm.call<EmailReport>(MAYA, 'email.report');
+  const providerIdOf = async (id: string) => (await crm.rows<{ provider_id: string }>(sql`select provider_id from messages where id = ${id}`))[0]?.provider_id ?? '';
+
+  it('marks a message delivered, once, and a later report that says less changes nothing', async () => {
+    const person = await contact('Dana Delivered', 'dana.delivered@example.com');
+    const sentTo = await crm.services.mail.compose(crm.system(), { contact: person, sender, subject: 'Checking delivery', body: 'Hello.' });
+    conversationId = sentTo.conversationId;
+    await crm.services.mail.sweep(crm.system());
+    const providerId = await providerIdOf(sentTo.messageId);
+    expect(await crm.services.mail.delivery(crm.system(), { providerId, type: 'delivered' })).toBe('recorded');
+    expect(await crm.services.mail.delivery(crm.system(), { providerId, type: 'delivered' })).toBe('unchanged');
+    expect(await crm.services.mail.delivery(crm.system(), { providerId: 'nobody-knows', type: 'bounced' })).toBe('unknown');
+    message = (await crm.call<ConversationDetail>(MAYA, 'inbox.get', conversationId)).messages[0] as Message;
+    expect(message).toMatchObject({ status: 'sent', delivery: 'delivered' });
+    expect((await crm.call<EmailPreference>(MAYA, 'email.preference', 'dana.delivered@example.com')).status).toBe('subscribed');
+  });
+
+  it('on a bounce, blocks the address, tells the sender and shows why', async () => {
+    const person = await contact('Bo Bounced', 'bo.later@example.com');
+    const { messageId, conversationId: thread } = await crm.services.mail.compose(crm.system(), { contact: person, sender, subject: 'Will bounce later', body: 'Hello.' });
+    await crm.services.mail.sweep(crm.system());
+    // Found by its Message-ID header this time, as some services report it.
+    expect(await crm.services.mail.delivery(crm.system(), { messageId: `<${messageId}@crm>`, type: 'bounced', reason: 'Mailbox full' })).toBe('recorded');
+    const [last] = (await crm.call<ConversationDetail>(MAYA, 'inbox.get', thread)).messages;
+    expect(last).toMatchObject({ delivery: 'bounced', deliveryNote: 'Mailbox full' });
+    expect(await crm.call<EmailPreference>(MAYA, 'email.preference', 'bo.later@example.com')).toMatchObject({ status: 'blocked', source: 'bounce', reason: 'Mailbox full' });
+    const notes = await crm.rows<{ text: string }>(sql`select message as text from notifications where user_id = ${MAYA} and message like '%bo.later@example.com bounced%'`);
+    expect(notes).toHaveLength(1);
+    // A delivery report arriving after the bounce does not undo it.
+    expect(await crm.services.mail.delivery(crm.system(), { messageId: `<${messageId}@crm>`, type: 'delivered' })).toBe('unchanged');
+  });
+
+  it('on a spam complaint, blocks the address even after it was delivered', async () => {
+    const providerId = await providerIdOf(message.id);
+    expect(await crm.services.mail.delivery(crm.system(), { providerId, type: 'complained' })).toBe('recorded');
+    expect((await crm.call<EmailPreference>(MAYA, 'email.preference', 'dana.delivered@example.com')).status).toBe('blocked');
+    expect(await refusal(crm.call(MAYA, 'inbox.reply', { conversationId, body: 'Are you there?' }))).toBeTruthy();
+  });
+
+  it('adds it all up, with each message that did not arrive', async () => {
+    const totals = await report();
+    expect(totals.sent).toBeGreaterThanOrEqual(2);
+    expect(totals.bounced).toBe(1);
+    expect(totals.complained).toBe(1);
+    expect(totals.failed).toBeGreaterThanOrEqual(1);
+    const kinds = totals.problems.map((problem) => `${problem.kind}:${problem.toEmail}`);
+    expect(kinds).toContain('bounced:bo.later@example.com');
+    expect(kinds).toContain('complained:dana.delivered@example.com');
+    expect(totals.problems.find((problem) => problem.toEmail === 'bo.later@example.com')?.reason).toBe('Mailbox full');
+    expect(totals.days.reduce((sum, day) => sum + day.sent, 0)).toBe(totals.sent);
   });
 });

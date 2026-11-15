@@ -1,7 +1,7 @@
 import type { Context } from '@mariachi/core';
 import { type DrizzleDb, DrizzleRepository } from '@mariachi/database-postgres';
 import { type SQL, and, sql } from 'drizzle-orm';
-import type { EmailHealth, InboxFolder } from '../../../../src/contracts/inbox';
+import type { EmailHealth, EmailReport, InboxFolder } from '../../../../src/contracts/inbox';
 import { type ConversationRow, type EmailTemplateRow, type InboundEmailRow, type InboundPayload, type MailCursorRow, type MessageRow, conversationsTable, emailTemplatesTable, inboundEmailsTable, mailCursorsTable, messagesTable } from '../../schema';
 
 const like = (needle: string) => `%${needle.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
@@ -88,6 +88,51 @@ export class MessagesRepository extends DrizzleRepository<MessageRow> {
       values (${message.id}, ${ctx.tenantId}, ${message.conversationId}, 'in', ${message.fromName}, ${message.fromEmail}, ${message.toEmail}, ${message.subject}, ${message.body}, ${message.html}, 'received', ${message.messageIdHeader}, ${message.sentAt.toISOString()}::timestamptz)
       on conflict (id) do nothing returning id`)) as unknown as unknown[];
     return rows.length > 0;
+  }
+
+  /** An outgoing message by the id the email service gave it, or by its Message-ID header. */
+  async sentAs(ctx: Context, providerId: string | undefined, header: string | undefined): Promise<MessageRow | undefined> {
+    if (providerId) {
+      const [found] = await this.findMany(ctx, { providerId, direction: 'out' }, { limit: 1 });
+      if (found) return found;
+    }
+    return header ? (await this.findMany(ctx, { messageIdHeader: header, direction: 'out' }, { limit: 1 }))[0] : undefined;
+  }
+
+  /** What became of the email sent in the last `days` days. */
+  async report(ctx: Context, days: number): Promise<EmailReport> {
+    const since = sql`now() - make_interval(days => ${days})`;
+    const mine = sql`tenant_id = ${ctx.tenantId} and direction = 'out' and sent_at >= ${since}`;
+    const [totals] = (await this.db.execute(sql`
+      select
+        count(*) filter (where status = 'sent')::int as sent,
+        count(*) filter (where delivery = 'delivered')::int as delivered,
+        count(*) filter (where delivery = 'bounced')::int as bounced,
+        count(*) filter (where delivery = 'complained')::int as complained,
+        count(*) filter (where status = 'failed')::int as failed,
+        count(*) filter (where status = 'sent' and purpose = 'automated')::int as "autoSent",
+        count(*) filter (where delivery = 'delivered' and purpose = 'automated')::int as "autoDelivered",
+        count(*) filter (where delivery = 'bounced' and purpose = 'automated')::int as "autoBounced",
+        count(*) filter (where delivery = 'complained' and purpose = 'automated')::int as "autoComplained"
+      from messages where ${mine}`)) as unknown as Array<Record<string, number>>;
+    const daily = (await this.db.execute(sql`
+      select to_char(date_trunc('day', sent_at), 'YYYY-MM-DD') as date, count(*) filter (where status = 'sent')::int as sent, count(*) filter (where status = 'failed' or delivery in ('bounced', 'complained'))::int as problems
+      from messages where ${mine} group by 1 order by 1`)) as unknown as Array<{ date: string; sent: number; problems: number }>;
+    const problems = (await this.db.execute(sql`
+      select id as "messageId", conversation_id as "conversationId", to_email as "toEmail", subject,
+             case when status = 'failed' then 'failed' else delivery end as kind,
+             coalesce(case when status = 'failed' then last_error else delivery_detail end, '') as reason,
+             to_char(coalesce(delivered_at, updated_at) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as at
+      from messages where ${mine} and (status = 'failed' or delivery in ('bounced', 'complained'))
+      order by coalesce(delivered_at, updated_at) desc limit 50`)) as unknown as EmailReport['problems'];
+    const n = (key: string) => totals?.[key] ?? 0;
+    return {
+      from: new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10),
+      sent: n('sent'), delivered: n('delivered'), bounced: n('bounced'), complained: n('complained'), failed: n('failed'),
+      automated: { sent: n('autoSent'), delivered: n('autoDelivered'), bounced: n('autoBounced'), complained: n('autoComplained') },
+      days: daily,
+      problems,
+    };
   }
 
   /**

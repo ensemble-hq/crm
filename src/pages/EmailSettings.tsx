@@ -1,8 +1,10 @@
-import { Mail } from 'lucide-react';
+import { Mail, MailWarning } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { type FormEvent, useEffect, useState } from 'react';
 import { api, useQuery } from '../api';
 import { useWorkspace } from '../app/workspace';
-import { ICON, cardTitle, small } from '../ui/styles';
+import { formatDateTime } from '../ui/PropertyValue';
+import { ICON, cardTitle, figure, medium, plainList, rowDivider, small } from '../ui/styles';
 
 /** The rules for email the CRM sends on its own: how often one person hears from you, and the address in the footer. */
 export function EmailSettingsCard() {
@@ -81,6 +83,63 @@ export function EmailSettingsCard() {
           </div>
         ) : null}
       </form>
+    </section>
+  );
+}
+
+const KINDS = { bounced: 'Bounced', complained: 'Marked as spam', failed: 'Not sent' } as const;
+const share = (part: number, whole: number) => (whole === 0 ? '–' : `${Math.round((part / whole) * 1000) / 10}%`);
+
+/** What became of the email sent in the last 30 days: how much arrived, and each message that did not, with why. */
+export function EmailReportCard() {
+  const report = useQuery(() => api.getEmailReport(), []);
+  const data = report.data;
+  // Only the server sends email.
+  if (!import.meta.env.VITE_API_URL || !data) return null;
+  const figures = [
+    { label: 'Sent', value: String(data.sent), note: `${data.automated.sent} by sequences and workflows` },
+    { label: 'Confirmed delivered', value: String(data.delivered), note: share(data.delivered, data.sent) },
+    { label: 'Bounced', value: String(data.bounced), note: share(data.bounced, data.sent) },
+    { label: 'Marked as spam', value: String(data.complained), note: share(data.complained, data.sent) },
+    { label: 'Not sent', value: String(data.failed), note: 'Never accepted' },
+  ];
+  return (
+    <section className="m-card" aria-label="Email delivery">
+      <div className="m-card-body m-stack" data-gap="3">
+        <h2 className="m-cluster" data-gap="2" style={cardTitle}>
+          <MailWarning size={ICON.nav} strokeWidth={ICON.strokeWidth} aria-hidden /> Delivery, last 30 days
+        </h2>
+        <p style={{ ...small, margin: 0 }}>What the email service reported after accepting each message. An address that bounces, or whose owner marks an email as spam, is blocked for everyone from then on.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 'var(--m-space-3)' }}>
+          {figures.map((item) => (
+            <div key={item.label} className="m-stack" data-gap="0">
+              <span style={small}>{item.label}</span>
+              <span style={figure}>{item.value}</span>
+              <span style={small}>{item.note}</span>
+            </div>
+          ))}
+        </div>
+        {data.problems.length === 0 ? (
+          <p style={{ ...small, margin: 0 }}>Nothing has bounced or failed.</p>
+        ) : (
+          <ul style={plainList} aria-label="Messages that did not arrive">
+            {data.problems.slice(0, 12).map((problem) => (
+              <li key={problem.messageId} className="m-cluster" data-justify="between" data-gap="3" style={{ flexWrap: 'nowrap', paddingBlock: 'var(--m-space-2)', ...rowDivider }}>
+                <span className="m-stack" data-gap="0" style={{ minInlineSize: 0 }}>
+                  <Link to={`/inbox/${problem.conversationId}`} style={{ ...medium, color: 'inherit', textDecoration: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {problem.toEmail || 'Address not recorded'}
+                  </Link>
+                  <span style={{ ...small, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {KINDS[problem.kind]}
+                    {problem.reason ? `: ${problem.reason}` : ''} · {problem.subject}
+                  </span>
+                </span>
+                <span style={{ ...small, flexShrink: 0 }}>{formatDateTime(problem.at)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </section>
   );
 }

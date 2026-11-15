@@ -213,6 +213,28 @@ export class MailService {
     }
   }
 
+  /**
+   * What the email service reports about a message after accepting it. Reported twice, it changes
+   * nothing the second time. A bounce or a spam complaint blocks the address for everyone and
+   * tells whoever sent the message.
+   */
+  async delivery(ctx: Context, event: { providerId?: string; messageId?: string; type: 'delivered' | 'bounced' | 'complained'; reason?: string; at?: string }): Promise<'recorded' | 'unchanged' | 'unknown'> {
+    const message = await this.messages.sentAs(ctx, event.providerId, event.messageId);
+    if (!message) return 'unknown';
+    // A complaint outranks a bounce, which outranks a delivery; news that says less than what is known is ignored.
+    const rank = { delivered: 1, bounced: 2, complained: 3 } as const;
+    if (message.delivery && rank[event.type] <= (rank[message.delivery as keyof typeof rank] ?? 0)) return 'unchanged';
+    const reason = event.type === 'complained' ? 'They marked it as spam.' : (event.reason?.trim().slice(0, 500) ?? '');
+    await this.transaction(ctx, async () => {
+      await this.messages.update(ctx, message.id, { delivery: event.type, deliveryDetail: reason || null, deliveredAt: event.at ? new Date(event.at) : new Date() });
+      if (event.type === 'delivered') return;
+      if (event.type === 'bounced') await this.rules.bounced(ctx, message.toEmail, reason || 'The mailbox refused it.');
+      else await this.rules.complained(ctx, message.toEmail);
+      if (message.senderId) await this.notifications.send(ctx, message.senderId, event.type === 'bounced' ? `Your email to ${message.toEmail} bounced${reason ? `: ${reason}` : '.'} They will not be emailed again.` : `${message.toEmail} marked your email as spam. They will not be emailed again.`, null);
+    });
+    return 'recorded';
+  }
+
   /** Finishes whatever the first path did not, and asks the provider what arrived since last time. */
   async sweep(ctx: Context): Promise<{ filed: number; sent: number; released: number; found: number }> {
     const waiting = await this.inbound.waiting(ctx, GRACE_SECONDS, 100);

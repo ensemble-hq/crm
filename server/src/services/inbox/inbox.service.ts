@@ -1,6 +1,6 @@
 import { ConflictError, type Context, NotFoundError, ValidationError } from '@mariachi/core';
 import { randomUUID } from 'node:crypto';
-import type { Conversation, ConversationDetail, ConversationList, ConversationQuery, EmailHealth, EmailTemplate, InboxCounts, Message, UpdateConversation } from '../../../../src/contracts/inbox';
+import type { Conversation, ConversationDetail, ConversationList, ConversationQuery, EmailHealth, EmailReport, EmailTemplate, InboxCounts, Message, UpdateConversation } from '../../../../src/contracts/inbox';
 import type { Reference } from '../../../../src/contracts/records';
 import type { ConversationRow, MessageRow } from '../../schema';
 import type { ActivityRepository } from '../activity/activity.repository';
@@ -35,6 +35,7 @@ function toMessage(row: MessageRow): Message {
     // "Being sent right now" is still waiting as far as a person is concerned.
     ...(outgoing ? { status: row.status === 'sent' ? 'sent' : row.status === 'failed' ? 'failed' : 'queued' } : {}),
     ...(outgoing && row.status !== 'sent' && row.lastError ? { problem: row.lastError } : {}),
+    ...(outgoing && (row.delivery === 'delivered' || row.delivery === 'bounced' || row.delivery === 'complained') ? { delivery: row.delivery, ...(row.deliveryDetail ? { deliveryNote: row.deliveryDetail } : {}) } : {}),
     // Never tried and not yet due: it is waiting for the time its sender chose.
     ...(outgoing && row.status === 'queued' && row.attempts === 0 && row.nextAttemptAt.getTime() > Date.now() ? { scheduledFor: row.nextAttemptAt.toISOString() } : {}),
   };
@@ -153,6 +154,10 @@ export class InboxService {
   async health(ctx: Context): Promise<EmailHealth> {
     const [numbers, cursors] = await Promise.all([this.inbound.health(ctx), this.cursors.findMany(ctx, {}, { sort: { field: 'sweptAt', direction: 'desc' }, limit: 1 })]);
     return { ...numbers, lastSweepAt: cursors[0]?.sweptAt.toISOString() ?? null };
+  }
+
+  report(ctx: Context): Promise<EmailReport> {
+    return this.messages.report(ctx, 30);
   }
 
   async listTemplates(ctx: Context): Promise<EmailTemplate[]> {

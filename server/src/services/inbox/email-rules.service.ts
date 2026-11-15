@@ -159,6 +159,11 @@ export class EmailRules {
     await this.write(ctx, email, 'blocked', 'bounce', reason, null);
   }
 
+  /** The recipient told their mail app this was spam. They are never emailed again unless an admin says otherwise. */
+  async complained(ctx: Context, email: string): Promise<void> {
+    await this.write(ctx, email, 'blocked', 'bounce', 'They marked an email from you as spam.', null);
+  }
+
   /** Someone agreed to be emailed, in these words. Agreeing again brings back someone who had unsubscribed, but not a blocked address. */
   async recordConsent(ctx: Context, email: string, text: string, source: string): Promise<void> {
     const address = clean(email);

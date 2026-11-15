@@ -41,6 +41,10 @@ export const messageSchema = z.object({
   status: z.enum(['queued', 'sent', 'failed']).optional(),
   /** Why it failed, in words, when it did. */
   problem: z.string().optional(),
+  /** What the email service reported after accepting it: it reached the mailbox, the mailbox refused it, or the recipient marked it as spam. Absent until the service says. */
+  delivery: z.enum(['delivered', 'bounced', 'complained']).optional(),
+  /** The service's reason for a bounce, in its words. */
+  deliveryNote: z.string().optional(),
   /** Set while an outgoing message is waiting for a time its sender chose. Until then it can be cancelled. */
   scheduledFor: z.string().optional(),
 });
@@ -110,6 +114,26 @@ export const emailHealthSchema = z.object({
 });
 export type EmailHealth = z.infer<typeof emailHealthSchema>;
 
+/** What became of the email sent in the last 30 days, and the messages that did not arrive. */
+export const emailReportSchema = z.object({
+  from: z.string(),
+  /** Handed to the email service. */
+  sent: z.number().int(),
+  /** Confirmed in the mailbox. Lower than `sent` when the service does not report every delivery. */
+  delivered: z.number().int(),
+  /** Refused by the mailbox: the address is blocked from then on. */
+  bounced: z.number().int(),
+  /** Marked as spam by the recipient: the address is blocked from then on. */
+  complained: z.number().int(),
+  /** Never accepted by the email service. */
+  failed: z.number().int(),
+  /** The same counts for email sent by sequences and workflows only. */
+  automated: z.object({ sent: z.number().int(), delivered: z.number().int(), bounced: z.number().int(), complained: z.number().int() }),
+  days: z.array(z.object({ date: z.string(), sent: z.number().int(), problems: z.number().int() })),
+  problems: z.array(z.object({ messageId: z.string(), conversationId: z.string(), toEmail: z.string(), subject: z.string(), kind: z.enum(['bounced', 'complained', 'failed']), reason: z.string(), at: z.string() })),
+});
+export type EmailReport = z.infer<typeof emailReportSchema>;
+
 /**
  * Whether an address may be emailed. Kept by address, not by contact, so it survives a contact being
  * merged or deleted and re-imported.
@@ -161,6 +185,8 @@ export interface InboxApi {
   listEmailTemplates(): Promise<EmailTemplate[]>;
   inboxCounts(): Promise<InboxCounts>;
   getEmailHealth(): Promise<EmailHealth>;
+  /** Delivery, bounces and spam complaints for the last 30 days. */
+  getEmailReport(): Promise<EmailReport>;
   getEmailPreference(email: string): Promise<EmailPreference>;
   /** Stops or resumes email to an address. Resuming needs a reason, and only an admin may undo a choice the recipient made. */
   setEmailPreference(input: z.infer<typeof setEmailPreferenceSchema>): Promise<EmailPreference>;

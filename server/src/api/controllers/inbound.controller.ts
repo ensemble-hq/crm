@@ -1,6 +1,6 @@
 import { BaseController } from '@mariachi/api-facade';
 import { z } from 'zod';
-import { CALL_WORKFLOW, RECEIVE_EMAIL, callWorkflowInput } from '../../services/index';
+import { CALL_WORKFLOW, EMAIL_DELIVERY, RECEIVE_EMAIL, callWorkflowInput, emailDeliveryInput } from '../../services/index';
 
 /**
  * Where an email provider delivers mail: `POST /api/inbound/email`, signed with the shared secret.
@@ -14,6 +14,7 @@ const delivery = z.object({
   to: z.string().optional(),
   subject: z.string().default(''),
   text: z.string().default(''),
+  html: z.string().optional(),
   messageId: z.string().optional(),
   inReplyTo: z.string().optional(),
   references: z.array(z.string()).optional(),
@@ -59,8 +60,11 @@ export class InboundController extends BaseController {
       return this.call(ctx, RECEIVE_EMAIL, {
         provider: this.provider,
         providerMessageId: mail.id,
-        payload: { fromEmail: mail.from.email, fromName: mail.from.name, toEmail: mail.to, subject: mail.subject, text: mail.text, messageId: mail.messageId, inReplyTo: mail.inReplyTo, references: mail.references, receivedAt: mail.receivedAt },
+        payload: { fromEmail: mail.from.email, fromName: mail.from.name, toEmail: mail.to, subject: mail.subject, text: mail.text, html: mail.html, messageId: mail.messageId, inReplyTo: mail.inReplyTo, references: mail.references, receivedAt: mail.receivedAt },
       });
     });
+
+    // What the provider says became of mail it accepted: `POST /api/inbound/email-events`, signed the same way. An event for a message this CRM did not send is answered `unknown`, not refused, so the provider does not keep retrying it.
+    this.post('/email-events', { auth: 'inbound', schema: { body: emailDeliveryInput, response: z.object({ status: z.enum(['recorded', 'unchanged', 'unknown']) }) }, summary: 'Receive a delivery report from the provider' }, (ctx, body) => this.call(ctx, EMAIL_DELIVERY, body));
   }
 }

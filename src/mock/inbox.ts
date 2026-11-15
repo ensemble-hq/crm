@@ -261,6 +261,8 @@ export function createInboxApi(respond: <T>(compute: () => T) => Promise<T>, log
       }),
 
     listEmailTemplates: () => respond(() => emailTemplates),
+    // The demo sends nothing, so there is nothing to report.
+    getEmailReport: () => respond(() => ({ from: MOCK_NOW.slice(0, 10), sent: 0, delivered: 0, bounced: 0, complained: 0, failed: 0, automated: { sent: 0, delivered: 0, bounced: 0, complained: 0 }, days: [], problems: [] })),
 
     // The demo sends no email, so there is nobody to stop emailing.
     getEmailPreference: (email) => respond(() => ({ email, status: 'subscribed' as const, source: 'none' as const, reason: null, changedAt: null, consent: null, sentThisWeek: 0, weeklyLimit: 3 })),

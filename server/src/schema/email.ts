@@ -98,6 +98,10 @@ export const messagesTable = defineTable(
     senderId: column.text(),
     attempts: column.integer().notNull().default(0),
     lastError: column.text(),
+    /** What the email service said became of it after accepting it: `delivered`, `bounced` or `complained`. Null until it says. */
+    delivery: column.text(),
+    deliveryDetail: column.text(),
+    deliveredAt: column.timestamp(),
     /** When a queued message may next be tried. */
     nextAttemptAt: column.timestamp().notNull().defaultNow(),
     sentAt: column.timestamp().notNull().defaultNow(),

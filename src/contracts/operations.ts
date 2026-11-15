@@ -6,7 +6,7 @@ import { designReplySchema, designRequestSchema, emailDesignSchema } from './ema
 import { briefSchema } from './brief';
 import { bookingPageSchema, bookingPageSettingsSchema, daySlotsSchema, formDetailSchema, formSchema, formSettingsSchema, meetingSchema, publicFormSchema } from './capture';
 import { emailPreferenceSchema, emailSettingsSchema, setEmailPreferenceSchema, unsubscribePageSchema } from './inbox';
-import { conversationDetailSchema, conversationListSchema, conversationQuerySchema, conversationSchema, emailHealthSchema, emailTemplateSchema, inboxCountsSchema, messageSchema, updateConversationSchema } from './inbox';
+import { conversationDetailSchema, conversationListSchema, conversationQuerySchema, conversationSchema, emailHealthSchema, emailReportSchema, emailTemplateSchema, inboxCountsSchema, messageSchema, updateConversationSchema } from './inbox';
 import { stageRulesSchema } from './metadata';
 import { createObjectSchema, createPropertySchema, filterSchema, objectDefinitionSchema, saveViewSchema, updatePropertySchema, userSchema, viewDefinitionSchema } from './metadata';
 import { activitySchema, createActivitySchema, duplicatesQuerySchema, duplicatesSchema, mergeRecordsSchema, importRequestSchema, importResultSchema, notificationSchema, referenceSchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi, labelRecordsSchema, labelResultSchema, deletedQuerySchema, deletedListSchema, restoreResultSchema } from './records';
@@ -415,6 +415,15 @@ export const operations: Operation[] = [
     description: 'Returns how many outgoing messages are waiting or failed, how many incoming messages are waiting to be filed or failed, and when the server last checked the email service for anything missed. All of these should be zero or small.',
     input: none,
     output: emailHealthSchema,
+    effect: 'read',
+  },
+  {
+    name: 'email.report',
+    method: 'getEmailReport',
+    title: 'See what became of sent email',
+    description: 'Returns, for the last 30 days, how many emails were sent, confirmed delivered, bounced, marked as spam or never accepted, the same for automated email alone, a count per day, and the latest messages that did not arrive with the reason. A bounced or complaining address is blocked automatically.',
+    input: none,
+    output: emailReportSchema,
     effect: 'read',
   },
   {

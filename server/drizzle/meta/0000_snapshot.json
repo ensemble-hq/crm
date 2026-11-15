@@ -1,6 +1,6 @@
 {
-  "id": "e06ef824-2199-4ef2-8bd9-ae0cdef937bc",
-  "prevId": "ab5d5650-619a-408d-a77c-ab8fa7b05a20",
+  "id": "78ee8769-7b40-4cbd-8332-14f0d557f4f9",
+  "prevId": "86e06918-2c3d-4168-943d-b328356d7f78",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1938,6 +1938,24 @@
         "last_error": {
           "name": "last_error",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "delivery": {
+          "name": "delivery",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "delivery_detail": {
+          "name": "delivery_detail",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "delivered_at": {
+          "name": "delivered_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
