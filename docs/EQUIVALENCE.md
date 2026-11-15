@@ -52,7 +52,7 @@ HubSpot's free CRM plus "Smart CRM" Starter ($20 per seat per month). Several ba
 | Show or require fields depending on another | Conditional property logic and options (Professional) | Conditions on a property: "ask for the loss reason when a deal is lost" | First release | Partly: simple rules yes, nested ones reviewed |
 | Hide a field from some people | Field-level permissions (Enterprise; not enforced through the API) | Field-level permissions, enforced everywhere including the API | Later | Yes |
 | Link records and say how they relate | Associations (Free), labels (Professional: 50 per pair) | Links between any objects, with labels | First release | Yes |
-| See who is involved in a deal | Buying groups (Professional) | Labelled contacts on the deal; the assistant suggests roles from the emails | First release | Partly |
+| See who is involved in a deal | Buying groups (Professional) | Labelled contacts on the deal (built); the assistant suggests roles from the emails (not yet) | First release | Partly |
 | Arrange the record page | Card and tab layout (Free), per-team layouts (Professional), conditional cards (Starter) | Record page layout per object; because each customer owns their code, any layout is possible by asking | First release (layout); By design (beyond) | No: layouts are set up fresh |
 | Choose what the create form asks | Create-form customization | "Ask when creating" per property | Mock | No |
 | Save a filtered list | Saved views (50 per user), board, calendar and report views (Beta) | Saved views with table and board; calendar view | Mock (table, board); First release (calendar, editing views) | Yes: filters and columns |

@@ -155,6 +155,12 @@ export class RecordsRepository extends DrizzleRepository<RecordRow> {
     return rows.length;
   }
 
+  /** After a merge: the parts the merged contact played in deals pass to the one kept, unless it is already on that deal. */
+  async repointDealPeople(ctx: Context, fromId: string, toId: string): Promise<void> {
+    await this.db.execute(sql`update deal_people set contact_id = ${toId}, updated_at = now() where tenant_id = ${ctx.tenantId} and contact_id = ${fromId} and deal_id not in (select deal_id from deal_people where tenant_id = ${ctx.tenantId} and contact_id = ${toId})`);
+    await this.db.execute(sql`delete from deal_people where tenant_id = ${ctx.tenantId} and contact_id = ${fromId}`);
+  }
+
   async remove(ctx: Context, ids: string[]): Promise<number> {
     const list = sql.join(ids.map((id) => sql`${id}`), sql`, `);
     const rows = await this.rows<{ id: string }>(sql`update records set deleted_at = now(), updated_at = now() where ${this.scope(ctx, sql`records.id in (${list})`)} returning records.id`);

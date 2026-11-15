@@ -11,7 +11,7 @@ import { createObjectSchema, createPropertySchema, filterSchema, objectDefinitio
 import { activitySchema, createActivitySchema, duplicatesQuerySchema, duplicatesSchema, mergeRecordsSchema, importRequestSchema, importResultSchema, notificationSchema, referenceSchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi } from './records';
 import { workflowDetailSchema, workflowSchema, workflowSettingsSchema } from './workflows';
 import { dashboardSchema, reportDefinitionSchema, reportResultSchema, reportSettingsSchema } from './reports';
-import { convertLeadSchema, forecastSchema, lineItemSchema } from './sales';
+import { convertLeadSchema, forecastSchema, lineItemSchema, dealPeopleSchema, dealPersonSchema } from './sales';
 import { enrollResultSchema, saveSequenceSchema, sequenceDetailSchema, sequenceSchema } from './sequences';
 import { agentSchema, createAgentKeySchema, createdAgentKeySchema, saveAgentSchema } from './team';
 import { accessSchema, deactivateMemberSchema, directorySchema, inviteMemberSchema, memberSchema, roleSchema, saveRoleSchema, saveTeamSchema, teamSchema, updateMemberSchema } from './team';
@@ -568,6 +568,24 @@ export const operations: Operation[] = [
     description: 'Replaces every line item on a deal with the ones given. Products come from the products object (records.list with objectId "products"); copy a product\'s name and price into the line, with its id as productId. With setAmount true, the deal\'s amount becomes the total.',
     input: z.object({ dealId: z.string(), items: z.array(lineItemSchema), setAmount: z.boolean() }),
     output: z.object({ items: z.array(lineItemSchema), total: z.number() }),
+    effect: 'write',
+  },
+  {
+    name: 'dealPeople.list',
+    method: 'listDealPeople',
+    title: 'List the people on a deal',
+    description: 'Returns the contacts involved in a deal beyond its main contact, each with the part they play: decision-maker, champion, budget-holder, influencer, legal, user, blocker or other. `references` gives their names.',
+    input: z.string().describe('The deal\'s id.'),
+    output: dealPeopleSchema,
+    effect: 'read',
+  },
+  {
+    name: 'dealPeople.save',
+    method: 'saveDealPeople',
+    title: 'Replace the people on a deal',
+    description: 'Replaces the list of contacts involved in a deal and the part each plays. Send the whole list; a contact can appear once. The deal then shows on each of those contacts\' records too.',
+    input: z.object({ dealId: z.string(), people: z.array(dealPersonSchema).max(25) }),
+    output: dealPeopleSchema,
     effect: 'write',
   },
   {

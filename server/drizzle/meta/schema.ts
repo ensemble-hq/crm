@@ -30,6 +30,7 @@ export const dashboardsTable = compiled.dashboardsTable;
 export const goalsTable = compiled.goalsTable;
 export const reportsTable = compiled.reportsTable;
 export const rolesTable = compiled.rolesTable;
+export const dealPeopleTable = compiled.dealPeopleTable;
 export const lineItemsTable = compiled.lineItemsTable;
 export const enrollmentsTable = compiled.enrollmentsTable;
 export const sequencesTable = compiled.sequencesTable;

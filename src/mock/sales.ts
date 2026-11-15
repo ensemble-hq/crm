@@ -1,12 +1,13 @@
 import type { Filter, PropertyValue } from '../contracts/metadata';
 import type { CrmRecord } from '../contracts/records';
-import type { LineItem, SalesApi } from '../contracts/sales';
+import type { DealPeople, DealPerson, LineItem, SalesApi } from '../contracts/sales';
 import { MOCK_TODAY, OPEN_STAGES } from './definitions';
 import { activeUsers, assertAllowed } from './team';
 
 /** Line items, lead conversion and the forecast, in memory. */
 
 const lineItems = new Map<string, LineItem[]>();
+const dealPeople = new Map<string, DealPerson[]>();
 const goals = new Map<string, number>([
   ['usr_maya', 2_200_000],
   ['usr_priya', 2_000_000],
@@ -47,11 +48,26 @@ export type SalesDeps = {
 
 /** The sales half of the mock API. */
 export function createSalesApi(deps: SalesDeps): SalesApi {
+  const withNames = (people: DealPerson[]): DealPeople => ({ people, references: Object.fromEntries(people.map((person) => [person.contactId, { objectId: 'contacts', label: String(deps.get(person.contactId).properties.name ?? 'Contact') }])) });
   return {
     listLineItems: (dealId) =>
       deps.respond(() => {
         deps.get(dealId);
         return lineItems.get(dealId) ?? [];
+      }),
+
+    listDealPeople: (dealId) =>
+      deps.respond(() => {
+        deps.get(dealId);
+        return withNames(dealPeople.get(dealId) ?? []);
+      }),
+
+    saveDealPeople: (input) =>
+      deps.respond(() => {
+        deps.assertCanEdit(deps.get(input.dealId));
+        if (new Set(input.people.map((person) => person.contactId)).size !== input.people.length) throw new Error('A contact can be on a deal once. Change their role instead of adding them again.');
+        dealPeople.set(input.dealId, input.people);
+        return withNames(input.people);
       }),
 
     saveLineItems: (input) =>

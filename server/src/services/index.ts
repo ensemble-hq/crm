@@ -30,7 +30,7 @@ import { RecordsRepository } from './records/records.repository';
 import { RecordsService } from './records/records.service';
 import { DashboardsRepository, GoalsRepository, ReportsRepository } from './reports/reports.repository';
 import { ReportsService } from './reports/reports.service';
-import { LineItemsRepository, SalesService } from './sales/sales.service';
+import { DealPeopleRepository, LineItemsRepository, SalesService } from './sales/sales.service';
 import { EnrollmentsRepository, SequencesRepository } from './sequences/sequences.repository';
 import { SequencesService } from './sequences/sequences.service';
 import { PrivacyService } from './privacy/privacy.service';
@@ -92,7 +92,7 @@ export function createServices(deps: ServiceDeps) {
   inbox.templateUsedBy = (ctx, templateId) => sequences.usingTemplate(ctx, templateId);
   const runner = new WorkflowRunner(workflowsRepository, runsRepository, recordsRepository, events, workspace, people, notifications, templates, mail, sequences, deps.secretsKey);
   const reports = new ReportsService(new ReportsRepository(deps.db), new DashboardsRepository(deps.db), new GoalsRepository(deps.db), records, recordsRepository, people, workspace, deps.email, notifications, deps.appOrigin);
-  const sales = new SalesService(new LineItemsRepository(deps.db), records, recordsRepository, events, activityRepository, workspace);
+  const sales = new SalesService(new LineItemsRepository(deps.db), records, recordsRepository, events, activityRepository, workspace, new DealPeopleRepository(deps.db));
   const capture = new CaptureService(new FormsRepository(deps.db), new SubmissionsRepository(deps.db), new BookingPagesRepository(deps.db), new MeetingsRepository(deps.db), recordsRepository, events, activityRepository, people, workspace, rules);
   const privacy = new PrivacyService(deps.db, recordsRepository, events, workspace);
   const importer = new ImportService(recordsRepository, events, workspace, people);
@@ -170,6 +170,8 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     },
     'lineItems.list': (ctx, input) => sales.listLineItems(ctx, input),
     'lineItems.save': (ctx, input) => sales.saveLineItems(ctx, input),
+    'dealPeople.list': (ctx, input) => sales.listDealPeople(ctx, input),
+    'dealPeople.save': (ctx, input) => sales.saveDealPeople(ctx, input),
     'leads.convert': (ctx, input) => sales.convertLead(ctx, input),
     'objects.create': (ctx, input) => settings.createObject(ctx, input),
     'properties.create': (ctx, input) => settings.createProperty(ctx, input),

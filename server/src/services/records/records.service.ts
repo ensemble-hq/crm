@@ -106,7 +106,10 @@ export class RecordsService {
     for (const object of objects) {
       const pointing = object.properties.filter((candidate) => candidate.type === 'reference' && candidate.referenceObjectId === record.objectId);
       if (pointing.length === 0 || groups.some((group) => group.objectId === object.id)) continue;
-      const where = [sql`records.object_id = ${object.id}`, ...this.visible(ctx), sql`(${sql.join(pointing.map((reference) => sql`${propertyText(reference.id)} = ${id}`), sql` or `)})`];
+      const links = pointing.map((reference) => sql`${propertyText(reference.id)} = ${id}`);
+      // A contact is also on the deals where they were given a part to play.
+      if (object.lineItems && record.objectId === 'contacts') links.push(sql`records.id in (select deal_id from deal_people where tenant_id = ${ctx.tenantId} and contact_id = ${id})`);
+      const where = [sql`records.object_id = ${object.id}`, ...this.visible(ctx), sql`(${sql.join(links, sql` or `)})`];
       const [records, total] = await Promise.all([this.records.select(ctx, where, sql`records.created_at desc, records.id`, RELATED_LIMIT, 0), this.records.total(ctx, where)]);
       groups.push({ objectId: object.id, total, records });
     }
@@ -190,6 +193,7 @@ export class RecordsService {
       await this.validate(ctx, object, input.properties, keep.id);
       const updated = (await this.records.patch(ctx, keep.id, input.properties)) ?? keep;
       await this.records.repoint(ctx, merged.id, keep.id, references);
+      await this.records.repointDealPeople(ctx, merged.id, keep.id);
       await this.events.changed(ctx, updated, changed);
       await this.events.deleted(ctx, merged);
       return updated;

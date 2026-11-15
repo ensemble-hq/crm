@@ -141,3 +141,23 @@ describe('duplicates and merging', () => {
     expect(activity.map((item) => item.body ?? item.title)).toEqual(expect.arrayContaining(['On the other', 'Merged with Other']));
   });
 });
+
+describe('people on a deal', () => {
+  it('keeps who is involved and their part, and shows the deal on each of them', async () => {
+    const make = async (objectId: string, properties: Record<string, unknown>) => (await crm.call<CrmRecord>(MAYA, 'records.create', { objectId, properties })).id;
+    const deal = await make('deals', { name: 'Many voices', stage: 'qualified', owner: MAYA });
+    const boss = await make('contacts', { name: 'Dana Decider', email: 'dana@voices.example', owner: MAYA });
+    const fan = await make('contacts', { name: 'Chen Champion', email: 'chen@voices.example', owner: MAYA });
+    const save = (people: Array<{ contactId: string; role: string }>) => crm.call<{ people: Array<{ contactId: string; role: string }>; references: Record<string, { label: string }> }>(MAYA, 'dealPeople.save', { dealId: deal, people });
+    expect(await refusal(save([{ contactId: boss, role: 'champion' }, { contactId: boss, role: 'blocker' }]))).toMatch(/once/);
+    expect(await refusal(save([{ contactId: deal, role: 'champion' }]))).toMatch(/Only contacts/);
+    const saved = await save([{ contactId: boss, role: 'decision-maker' }, { contactId: fan, role: 'champion' }]);
+    expect(saved.people.map((person) => person.role)).toEqual(['decision-maker', 'champion']);
+    expect(saved.references[fan]?.label).toBe('Chen Champion');
+    const dealsOf = async (contactId: string) => (await crm.call<Array<{ objectId: string; records: CrmRecord[] }>>(MAYA, 'records.related', contactId)).find((group) => group.objectId === 'deals')?.records.map((record) => record.id);
+    expect(await dealsOf(fan)).toEqual([deal]);
+    // Someone deleted drops off the list; the others stay.
+    await crm.call(MAYA, 'records.delete', [fan]);
+    expect((await crm.call<{ people: unknown[] }>(MAYA, 'dealPeople.list', deal)).people).toEqual([{ contactId: boss, role: 'decision-maker' }]);
+  });
+});

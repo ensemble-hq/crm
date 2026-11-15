@@ -3,8 +3,8 @@ import { type DrizzleDb, DrizzleRepository } from '@mariachi/database-postgres';
 import { randomUUID } from 'node:crypto';
 import type { ObjectDefinition, PropertyValue } from '../../../../src/contracts/metadata';
 import type { CrmRecord } from '../../../../src/contracts/records';
-import type { ConvertLead, LineItem } from '../../../../src/contracts/sales';
-import { type LineItemRow, lineItemsTable } from '../../schema';
+import type { ConvertLead, DealPeople, DealPerson, LineItem } from '../../../../src/contracts/sales';
+import { type DealPersonRow, type LineItemRow, dealPeopleTable, lineItemsTable } from '../../schema';
 import type { ActivityRepository } from '../activity/activity.repository';
 import { actorOf, assertCan } from '../people/access';
 import type { RecordEvents } from '../records/records.events';
@@ -21,6 +21,12 @@ export class LineItemsRepository extends DrizzleRepository<LineItemRow> {
   }
 }
 
+export class DealPeopleRepository extends DrizzleRepository<DealPersonRow> {
+  constructor(db: DrizzleDb) {
+    super(dealPeopleTable, db);
+  }
+}
+
 function lineTotal(item: Pick<LineItem, 'quantity' | 'unitPrice' | 'discountPercent'>): number {
   return Math.round(item.quantity * item.unitPrice * (1 - item.discountPercent / 100) * 100) / 100;
 }
@@ -34,6 +40,7 @@ export class SalesService {
     private readonly events: RecordEvents,
     private readonly activities: ActivityRepository,
     private readonly workspace: WorkspaceService,
+    private readonly dealPeople: DealPeopleRepository,
   ) {}
 
   async listLineItems(ctx: Context, dealId: string): Promise<LineItem[]> {
@@ -54,6 +61,40 @@ export class SalesService {
       if (input.setAmount) await this.records.update(ctx, { id: deal.id, properties: { amount: Math.round(total) } });
     });
     return { items: await this.listLineItems(ctx, deal.id), total };
+  }
+
+  /** The people on a deal. Someone the caller may not see, or who has since been deleted, is left out. */
+  async listDealPeople(ctx: Context, dealId: string): Promise<DealPeople> {
+    await this.records.find(ctx, dealId);
+    const rows = await this.dealPeople.findMany(ctx, { dealId }, { sort: { field: 'position', direction: 'asc' }, limit: 100 });
+    const contacts = await this.workspace.definition(ctx, 'contacts');
+    const people: DealPerson[] = [];
+    const references: DealPeople['references'] = {};
+    for (const row of rows) {
+      const contact = await this.records.find(ctx, row.contactId).catch(() => undefined);
+      if (!contact) continue;
+      people.push({ contactId: row.contactId, role: row.role as DealPerson['role'] });
+      references[contact.id] = { objectId: contact.objectId, label: String(contact.properties[contacts.primaryProperty] ?? contact.id) };
+    }
+    return { people, references };
+  }
+
+  /** Replaces the people on a deal. */
+  async saveDealPeople(ctx: Context, input: { dealId: string; people: DealPerson[] }): Promise<DealPeople> {
+    const deal = await this.records.find(ctx, input.dealId);
+    assertCan(actorOf(ctx), 'edit', deal, 'deal');
+    const seen = new Set<string>();
+    for (const person of input.people) {
+      if (seen.has(person.contactId)) throw new ValidationError('A contact can be on a deal once. Change their role instead of adding them again.');
+      seen.add(person.contactId);
+      const contact = await this.records.find(ctx, person.contactId);
+      if (contact.objectId !== 'contacts') throw new ValidationError('Only contacts can be people on a deal.');
+    }
+    await this.events.transaction(ctx, async () => {
+      await this.dealPeople.deleteWhere(ctx, { dealId: deal.id });
+      for (const [position, person] of input.people.entries()) await this.dealPeople.create(ctx, { id: id('dp'), dealId: deal.id, contactId: person.contactId, role: person.role, position });
+    });
+    return this.listDealPeople(ctx, deal.id);
   }
 
   /** Adds a record made as part of a larger step, announcing it like any other. Only the fields the object really has are kept. */

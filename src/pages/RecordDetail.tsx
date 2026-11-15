@@ -12,6 +12,7 @@ import { PropertyValue, formatDate, formatDateTime } from '../ui/PropertyValue';
 import { ConvertLeadDialog } from './ConvertLeadDialog';
 import { CreateRecordDialog } from './CreateRecordDialog';
 import { EmailPreference } from '../ui/EmailPreference';
+import { DealPeople } from './DealPeople';
 import { LineItems } from './LineItems';
 import { RecordBrief } from './RecordBrief';
 import { RecordProperties } from './RecordProperties';
@@ -398,6 +399,7 @@ export function RecordDetail() {
                   }}
                 />
               ) : null}
+              {object.lineItems ? <DealPeople deal={record} onSaved={touch} /> : null}
               <Timeline recordId={record.id} onAddTask={taskObject && taskObject.id !== object.id ? () => setAddingTask(true) : undefined} />
             </div>
           </div>

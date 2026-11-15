@@ -97,6 +97,7 @@ export class PrivacyService {
       const consents = email ? await gone(sql`delete from consents where tenant_id = ${tenant} and email = ${email} returning id`) : 0;
       // Copies kept for safety and history: mail as it arrived, notifications about them, what workflows did to them, and events not yet or already sent.
       let other = await gone(sql`delete from notifications where tenant_id = ${tenant} and record_id = ${id} returning id`);
+      other += await gone(sql`delete from deal_people where tenant_id = ${tenant} and contact_id = ${id} returning id`);
       other += await gone(sql`delete from workflow_runs where tenant_id = ${tenant} and record_id = ${id} returning id`);
       other += await gone(sql`delete from mariachi_event_outbox where envelope->'payload'->>'recordId' = ${id} returning id`);
       if (email) other += await gone(sql`delete from inbound_emails where tenant_id = ${tenant} and lower(payload->>'fromEmail') = ${email} returning id`);
