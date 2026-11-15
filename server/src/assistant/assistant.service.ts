@@ -416,7 +416,7 @@ export class AssistantService {
  * says it can by setting `streamsToolCalls` and putting `toolCalls` on its last chunk.
  */
 function streamsWithTools(adapter: AIAdapter): adapter is AIAdapter & Required<Pick<AIAdapter, 'stream'>> {
-  return typeof adapter.stream === 'function' && (adapter as { streamsToolCalls?: boolean }).streamsToolCalls === true;
+  return typeof adapter.stream === 'function' && adapter.streamsToolCalls === true;
 }
 
 /** One round of the model, streamed: `onText` gets the words in small batches as they arrive, and the whole answer comes back at the end. */
@@ -435,7 +435,7 @@ async function streamed(adapter: AIAdapter & Required<Pick<AIAdapter, 'stream'>>
     }
     if (chunk.done) {
       usage = chunk.usage ?? usage;
-      toolCalls = (chunk as { toolCalls?: ToolCall[] }).toolCalls;
+      toolCalls = chunk.toolCalls;
     }
   }
   return { content, toolCalls, usage: { ...usage, totalTokens: usage.inputTokens + usage.outputTokens } };
