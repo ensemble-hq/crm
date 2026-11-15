@@ -3,11 +3,11 @@ import { sql } from 'drizzle-orm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { DesignReply, EmailDesign } from '../../src/contracts/emailDesign';
 import type { ConversationDetail, ConversationList, EmailTemplate } from '../../src/contracts/inbox';
-import type { CrmRecord } from '../../src/contracts/records';
+import type { CrmRecord, JudgeResult, Judgement } from '../../src/contracts/records';
 import type { Sequence } from '../../src/contracts/sequences';
 import { LOOKS } from '../../src/lib/emailDesign';
 import { registerModelProvider } from '../src/assistant/providers';
-import { type Crm, JONAS, MAYA, refusal, startCrm } from './harness';
+import { type Crm, FEMI, JONAS, MAYA, refusal, startCrm } from './harness';
 
 let crm: Crm;
 const theme = LOOKS[0]!.theme;
@@ -29,7 +29,8 @@ const scripted = {
     heard.push(messages);
     const answer = answers.shift() ?? 'I have nothing.';
     const base = { usage: { inputTokens: 200, outputTokens: 50, totalTokens: 250 }, model: 'scripted', latencyMs: 1 };
-    return typeof answer === 'string' ? { ...base, content: answer } : { ...base, content: '', toolCalls: [{ id: `c${heard.length}`, name: 'write_email', arguments: answer }] };
+    if (typeof answer === 'string') return { ...base, content: answer };
+    return '__answer' in answer ? { ...base, content: '', toolCalls: [{ id: `c${heard.length}`, name: 'answer', arguments: answer.__answer }] } : { ...base, content: '', toolCalls: [{ id: `c${heard.length}`, name: 'write_email', arguments: answer }] };
   },
 } as unknown as AIAdapter;
 
@@ -145,5 +146,62 @@ describe('designing with the connected model', () => {
     expect(reply.design.blocks[0]).toMatchObject({ id: 'hello', text: 'Hi {{firstName}}, the plan.' });
     expect(reply.design.blocks.slice(1)).toEqual(design.blocks.slice(1));
     expect(await refusal(crm.call(MAYA, 'templates.design', { prompt: 'Shorter', design, blockId: 'gone' }))).toMatch(/no longer there/);
+  });
+});
+
+describe('a field the model fills in', () => {
+  let lead: string;
+  const value = async () => (await crm.call<{ record: CrmRecord }>(MAYA, 'records.get', lead)).record.properties.buyingIntent;
+  // The stand-in answers `answer` calls from this list.
+  const judging = (list: Array<Record<string, unknown> | string>) => {
+    answers = list.map((item) => (typeof item === 'string' ? item : { __answer: item })) as typeof answers;
+  };
+
+  beforeAll(async () => {
+    lead = await crm.seed('leads', { name: 'Judy Judged', email: 'judy@example.com', companyName: 'Acme', owner: JONAS, status: 'new' });
+    await crm.call(JONAS, 'activity.create', { recordId: lead, kind: 'call', title: 'Discovery call', body: 'Asked for pricing for 40 seats and a start date in March.' });
+  });
+
+  it('is set up on a number, a choice or text, and on nothing that is worked out another way', async () => {
+    expect(await refusal(crm.call(MAYA, 'properties.create', { objectId: 'leads', label: 'When to call', type: 'date', group: 'About', judged: 'When to call them' }))).toMatch(/a number, a choice or a text field/);
+    expect(await refusal(crm.call(MAYA, 'properties.create', { objectId: 'leads', label: 'Both', type: 'number', group: 'About', formula: '1 + 1', judged: 'How keen' }))).toMatch(/choose one/);
+    await crm.call(MAYA, 'properties.create', { objectId: 'leads', label: 'Buying intent', type: 'number', group: 'About', judged: 'How likely they are to buy this quarter' });
+    // Nobody can type into it.
+    await crm.call(MAYA, 'records.update', { id: lead, properties: { buyingIntent: 99 } });
+    expect((await value()) ?? null).toBeNull();
+  });
+
+  it('is filled in from the record and its history, with the reason kept', async () => {
+    judging([{ value: 82.4, reason: 'They asked for pricing for 40 seats and named a start date.' }]);
+    const result = await crm.call<JudgeResult>(JONAS, 'records.judge', { objectId: 'leads', propertyId: 'buyingIntent', ids: [lead, 'lead_nope'] });
+    expect(result.judged).toEqual([{ id: lead, value: 82, reason: 'They asked for pricing for 40 seats and named a start date.' }]);
+    expect(result.skipped.map((item) => item.id)).toEqual(['lead_nope']);
+    expect(await value()).toBe(82);
+    const asked = heard[heard.length - 1]?.find((message) => message.role === 'user')?.content ?? '';
+    expect(asked).toContain('How likely they are to buy this quarter');
+    expect(asked).toContain('Company: Acme');
+    expect(asked).toContain('Asked for pricing for 40 seats');
+    expect(await crm.call<Judgement[]>(MAYA, 'records.judgements', lead)).toMatchObject([{ propertyId: 'buyingIntent', reason: 'They asked for pricing for 40 seats and named a start date.', model: 'scripted' }]);
+  });
+
+  it('leaves the field alone when the model answers badly twice, or the person may not change the record', async () => {
+    judging([{ value: 140, reason: 'Too keen.' }, { value: 'lots', reason: 'Still wrong.' }]);
+    const bad = await crm.call<JudgeResult>(JONAS, 'records.judge', { objectId: 'leads', propertyId: 'buyingIntent', ids: [lead] });
+    expect(bad.judged).toEqual([]);
+    expect(bad.skipped[0]?.reason).toMatch(/did not give a value that fits/);
+    expect(await value()).toBe(82);
+
+    judging([{ value: 10, reason: 'Not for you to change.' }]);
+    const denied = await crm.call<JudgeResult>(FEMI, 'records.judge', { objectId: 'leads', propertyId: 'buyingIntent', ids: [lead] });
+    expect(denied.judged).toEqual([]);
+    expect(await value()).toBe(82);
+    expect(await refusal(crm.call(MAYA, 'records.judge', { objectId: 'leads', propertyId: 'name', ids: [lead] }))).toMatch(/not a field the model fills in/);
+  });
+
+  it('can say it cannot tell', async () => {
+    judging([{ value: null, reason: 'There is no history to go on.' }]);
+    const result = await crm.call<JudgeResult>(JONAS, 'records.judge', { objectId: 'leads', propertyId: 'buyingIntent', ids: [lead] });
+    expect(result.judged[0]).toMatchObject({ value: null });
+    expect((await value()) ?? null).toBeNull();
   });
 });

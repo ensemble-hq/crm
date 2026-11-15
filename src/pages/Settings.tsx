@@ -133,7 +133,7 @@ function OptionsEditor({ options, onChange }: { options: Option[]; onChange: (op
   );
 }
 
-type PropertyDraft = { label: string; type: PropertyType; group: string; options: Option[]; referenceObjectId: string; onCreate: boolean; required: boolean; unique: boolean; addToViews: boolean; formula: string; scoring?: ScoreRule[]; showWhen?: Filter; requiredWhen?: Filter };
+type PropertyDraft = { label: string; type: PropertyType; group: string; options: Option[]; referenceObjectId: string; onCreate: boolean; required: boolean; unique: boolean; addToViews: boolean; formula: string; scoring?: ScoreRule[]; judged?: string; showWhen?: Filter; requiredWhen?: Filter };
 
 /** Create a property, or edit one. A property's type is fixed once it exists, because data already uses it. */
 function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectDefinition; editing: PropertyDefinition | 'new'; onClose: () => void; onSaved: () => void }) {
@@ -152,6 +152,7 @@ function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectD
     addToViews: false,
     formula: existing?.formula ?? '',
     scoring: existing?.scoring,
+    judged: existing?.judged,
     showWhen: existing?.showWhen,
     requiredWhen: existing?.requiredWhen,
   });
@@ -163,6 +164,9 @@ function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectD
   const computable = ['text', 'number', 'currency', 'date', 'boolean'].includes(draft.type);
   // A number is typed, worked out by a formula, or a score: one of the three.
   const scored = draft.type === 'number' && draft.scoring !== undefined && !draft.formula.trim();
+  // Or the model fills it in: a number, a choice or text that nothing else works out.
+  const judgeable = ['number', 'text', 'select'].includes(draft.type) && !draft.formula.trim() && !scored;
+  const judged = judgeable && draft.judged !== undefined ? draft.judged.trim() : '';
   let formulaProblem: string | undefined;
   if (draft.formula.trim()) {
     try {
@@ -181,7 +185,7 @@ function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectD
     setError(undefined);
     try {
       if (existing) {
-        await api.updateProperty({ objectId: object.id, propertyId: existing.id, label: draft.label, group: draft.group, onCreate: draft.onCreate, required: draft.required, unique: draft.unique, ...(live ? { formula: draft.formula.trim() || null, scoring: scored ? (draft.scoring ?? null) : null, showWhen: draft.showWhen ?? null, requiredWhen: draft.requiredWhen ?? null } : {}), options: hasOptions(existing.type) ? draft.options : undefined });
+        await api.updateProperty({ objectId: object.id, propertyId: existing.id, label: draft.label, group: draft.group, onCreate: draft.onCreate, required: draft.required, unique: draft.unique, ...(live ? { formula: draft.formula.trim() || null, scoring: scored ? (draft.scoring ?? null) : null, judged: judged || null, showWhen: draft.showWhen ?? null, requiredWhen: draft.requiredWhen ?? null } : {}), options: hasOptions(existing.type) ? draft.options : undefined });
       } else {
         await api.createProperty({
           objectId: object.id,
@@ -194,7 +198,7 @@ function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectD
           required: draft.required,
           unique: draft.unique,
           addToViews: draft.addToViews,
-          ...(live ? { formula: draft.formula.trim() || undefined, scoring: scored ? draft.scoring : undefined, showWhen: draft.showWhen, requiredWhen: draft.requiredWhen } : {}),
+          ...(live ? { formula: draft.formula.trim() || undefined, scoring: scored ? draft.scoring : undefined, judged: judged || undefined, showWhen: draft.showWhen, requiredWhen: draft.requiredWhen } : {}),
         });
       }
       onSaved();
@@ -286,7 +290,22 @@ function PropertyDialog({ object, editing, onClose, onSaved }: { object: ObjectD
           )}
         </div>
       ) : null}
-      {live && draft.type === 'number' && !draft.formula.trim() ? (
+      {live && judgeable ? (
+        <div className="m-field">
+          <label className="m-field" data-layout="inline">
+            <input className="m-checkbox" type="checkbox" checked={draft.judged !== undefined} onChange={(event) => set({ judged: event.target.checked ? '' : undefined })} /> Let the model fill it in
+          </label>
+          {draft.judged !== undefined ? (
+            <>
+              <textarea className="m-input" rows={3} aria-label="What the model should work out" placeholder={draft.type === 'number' ? 'How likely this lead is to buy in the next quarter, from how they have responded and how well they fit' : draft.type === 'select' ? 'Which of these best describes how the last conversation went' : 'What this customer cares about most, in a sentence'} value={draft.judged} onChange={(event) => set({ judged: event.target.value })} />
+              <p className="m-field-hint">
+                The connected model reads the {object.singular.toLowerCase()} and its recent history and gives {draft.type === 'number' ? 'a score from 0 to 100' : draft.type === 'select' ? 'one of the choices' : 'a sentence or two'}, with its reason. It is asked when someone presses "Ask the model" on a record, not on its own, so you decide what it costs.
+              </p>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+      {live && draft.type === 'number' && !draft.formula.trim() && draft.judged === undefined ? (
         <div className="m-field">
           <label className="m-field" data-layout="inline">
             <input className="m-checkbox" type="checkbox" checked={draft.scoring !== undefined} onChange={(event) => set({ scoring: event.target.checked ? [] : undefined })} /> Use it as a score

@@ -318,6 +318,18 @@ CREATE TABLE "people" (
 );
 
 --> statement-breakpoint
+CREATE TABLE "judgements" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"record_id" text NOT NULL,
+	"property_id" text NOT NULL,
+	"reason" text NOT NULL,
+	"model" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
 CREATE TABLE "records" (
 	"id" text PRIMARY KEY NOT NULL,
 	"tenant_id" text NOT NULL,
@@ -520,6 +532,8 @@ CREATE INDEX "notifications_user_idx" ON "notifications" USING btree ("tenant_id
 CREATE INDEX "objects_tenant_id_idx" ON "objects" USING btree ("tenant_id");
 --> statement-breakpoint
 CREATE INDEX "people_tenant_id_idx" ON "people" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX "judgements_record_idx" ON "judgements" USING btree ("tenant_id","record_id");
 --> statement-breakpoint
 CREATE INDEX "records_object_idx" ON "records" USING btree ("tenant_id","object_id","created_at");
 --> statement-breakpoint

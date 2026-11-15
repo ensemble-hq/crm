@@ -10,7 +10,7 @@ import { emailPreferenceSchema, emailSettingsSchema, setEmailPreferenceSchema, u
 import { conversationDetailSchema, conversationListSchema, conversationQuerySchema, conversationSchema, emailHealthSchema, emailReportSchema, emailTemplateSchema, inboxCountsSchema, messageSchema, updateConversationSchema } from './inbox';
 import { stageRulesSchema } from './metadata';
 import { createObjectSchema, createPropertySchema, filterSchema, objectDefinitionSchema, saveViewSchema, updatePropertySchema, userSchema, viewDefinitionSchema } from './metadata';
-import { activitySchema, createActivitySchema, duplicatesQuerySchema, duplicatesSchema, mergeRecordsSchema, importRequestSchema, importResultSchema, notificationSchema, referenceSchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi, labelRecordsSchema, labelResultSchema, deletedQuerySchema, deletedListSchema, restoreResultSchema } from './records';
+import { activitySchema, createActivitySchema, duplicatesQuerySchema, duplicatesSchema, mergeRecordsSchema, importRequestSchema, importResultSchema, notificationSchema, referenceSchema, createRecordSchema, listQuerySchema, listResultSchema, recordDetailSchema, recordSchema, relatedGroupSchema, summaryQuerySchema, summaryRowSchema, updateRecordSchema, type CrmApi, labelRecordsSchema, labelResultSchema, deletedQuerySchema, deletedListSchema, restoreResultSchema, judgeRecordsSchema, judgeResultSchema, judgementSchema } from './records';
 import { workflowDetailSchema, workflowSchema, workflowSettingsSchema } from './workflows';
 import { dashboardSchema, reportDefinitionSchema, reportResultSchema, reportSettingsSchema } from './reports';
 import { convertLeadSchema, forecastSchema, lineItemSchema, dealPeopleSchema, dealPersonSchema } from './sales';
@@ -144,6 +144,25 @@ export const operations: Operation[] = [
     input: z.array(z.string()).min(1).max(500),
     output: z.object({ deleted: z.number().int() }),
     effect: 'destructive',
+  },
+  {
+    name: 'records.judge',
+    method: 'judgeRecords',
+    title: 'Have the model fill in a field',
+    description: 'Asks the connected model to fill in one judged field (a property with `judged` set: a score from 0 to 100, a choice, or a sentence) on up to 25 records, from each record and its recent history. Stores the value and the reason for it. Records the caller may not change are skipped. This uses the model once per record.',
+    input: judgeRecordsSchema,
+    output: judgeResultSchema,
+    effect: 'write',
+    slow: true,
+  },
+  {
+    name: 'records.judgements',
+    method: 'listJudgements',
+    title: 'See why the model filled in a field as it did',
+    description: 'Returns, for one record, the reason the model gave for each judged field, which model it was and when.',
+    input: recordId,
+    output: z.array(judgementSchema),
+    effect: 'read',
   },
   {
     name: 'records.deleted',

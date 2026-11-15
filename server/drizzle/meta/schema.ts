@@ -26,6 +26,7 @@ export const filesTable = compiled.filesTable;
 export const notificationsTable = compiled.notificationsTable;
 export const objectsTable = compiled.objectsTable;
 export const peopleTable = compiled.peopleTable;
+export const judgementsTable = compiled.judgementsTable;
 export const recordsTable = compiled.recordsTable;
 export const dashboardsTable = compiled.dashboardsTable;
 export const goalsTable = compiled.goalsTable;

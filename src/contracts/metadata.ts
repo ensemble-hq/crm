@@ -58,6 +58,8 @@ export const propertyDefinitionSchema = z.object({
   formula: z.string().optional(),
   /** For a number: a score. It is the sum of the points of every rule the record meets, worked out again whenever the record changes. */
   scoring: z.array(z.lazy(() => scoreRuleSchema)).optional(),
+  /** Filled in by the connected model, not typed: what the team wants the field to say, in their words. For a number it is a score from 0 to 100, for a choice one of the options, for text a sentence or two. The model is asked when someone asks for it, never on its own. */
+  judged: z.string().optional(),
   /** Only shown when the record meets this condition. */
   showWhen: z.lazy(() => filterSchema).optional(),
   /** Cannot be left empty when the record meets this condition. */
@@ -164,6 +166,7 @@ export const createPropertySchema = z.object({
   addToViews: z.boolean().optional(),
   formula: z.string().optional(),
   scoring: z.array(z.lazy(() => scoreRuleSchema)).max(50).optional(),
+  judged: z.string().max(2000).optional(),
   showWhen: z.lazy(() => filterSchema).optional(),
   requiredWhen: z.lazy(() => filterSchema).optional(),
 });
@@ -182,6 +185,7 @@ export const updatePropertySchema = z.object({
   /** Null removes it. */
   formula: z.string().nullable().optional(),
   scoring: z.array(z.lazy(() => scoreRuleSchema)).max(50).nullable().optional(),
+  judged: z.string().max(2000).nullable().optional(),
   showWhen: z.lazy(() => filterSchema).nullable().optional(),
   requiredWhen: z.lazy(() => filterSchema).nullable().optional(),
 });

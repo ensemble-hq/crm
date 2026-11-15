@@ -1,6 +1,6 @@
-import { Pencil } from 'lucide-react';
+import { Pencil, Sparkles } from 'lucide-react';
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
-import { api } from '../api';
+import { api, useQuery } from '../api';
 import type { ObjectDefinition, PropertyDefinition, PropertyValue as Value } from '../contracts/metadata';
 import type { CrmRecord, Reference } from '../contracts/records';
 import { PropertyInput } from '../ui/PropertyInput';
@@ -192,9 +192,48 @@ function PropertyRow({
         <dd style={{ margin: 0, textAlign: 'end', minInlineSize: 0, overflowWrap: 'anywhere', opacity: saving ? 0.6 : 1 }}>{control}</dd>
       </div>
       {property.scoring ? <ScoreReasons property={property} object={object} record={record} /> : null}
+      {property.judged !== undefined ? <Judged property={property} record={record} onSaved={onSaved} /> : null}
       {error ? (
         <p className="m-field-error" role="alert" style={{ margin: 0, textAlign: 'end' }}>
           {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Under a field the model fills in: a way to ask it, and the reason it gave last time. */
+function Judged({ property, record, onSaved }: { property: PropertyDefinition; record: CrmRecord; onSaved: () => void }) {
+  const [version, setVersion] = useState(0);
+  const reasons = useQuery(() => api.listJudgements(record.id), [record.id, version]);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string>();
+  const last = reasons.data?.find((item) => item.propertyId === property.id);
+
+  async function ask() {
+    setBusy(true);
+    setProblem(undefined);
+    try {
+      const result = await api.judgeRecords({ objectId: record.objectId, propertyId: property.id, ids: [record.id] });
+      if (result.skipped[0]) setProblem(result.skipped[0].reason);
+      setVersion((value) => value + 1);
+      onSaved();
+    } catch (cause) {
+      setProblem(cause instanceof Error ? cause.message : 'The model could not be asked.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="m-stack" data-gap="1" style={{ alignItems: 'flex-end' }}>
+      {last ? <p style={{ ...small, margin: 0, textAlign: 'end' }}>{last.reason}</p> : null}
+      <button type="button" className="m-button" data-variant="ghost" data-size="sm" disabled={busy} title={property.judged} onClick={() => void ask()}>
+        <Sparkles size={ICON.inline} strokeWidth={ICON.strokeWidth} aria-hidden /> {busy ? 'Asking the model…' : last ? 'Ask the model again' : 'Ask the model'}
+      </button>
+      {problem ? (
+        <p className="m-field-error" role="alert" style={{ margin: 0, textAlign: 'end' }}>
+          {problem}
         </p>
       ) : null}
     </div>

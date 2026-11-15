@@ -6,10 +6,11 @@ import { z } from 'zod';
 import type { AssistantEvent, AssistantReply, AssistantSettings, AssistantTurn, AssistantUsage, SaveAssistantSettings } from '../../../src/contracts/assistant';
 import type { DesignReply, DesignRequest } from '../../../src/contracts/emailDesign';
 import type { FileContent } from '../../../src/contracts/files';
-import type { ObjectDefinition } from '../../../src/contracts/metadata';
+import type { ObjectDefinition, PropertyValue } from '../../../src/contracts/metadata';
 import { designEmail } from './email-designer';
 import type { Operation } from '../../../src/contracts/operations';
-import type { ListResult, RecordDetail, Workspace } from '../../../src/contracts/records';
+import type { Activity, JudgeRecords, JudgeResult, ListResult, RecordDetail, Workspace } from '../../../src/contracts/records';
+import { judge } from './judge';
 import { and, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { type AssistantSettingsRow, type AssistantTurnRow, assistantSettingsTable, assistantTurnsTable } from '../schema';
@@ -84,6 +85,8 @@ export class AssistantService {
     private readonly call: Call,
     private readonly turns: AssistantTurnsRepository,
     private readonly push?: Push,
+    /** Stores what the model worked out for a field. Given by the records service, which checks the caller may change the record. */
+    private readonly keepJudged?: (ctx: Context, recordId: string, propertyId: string, value: PropertyValue, reason: string, model: string) => Promise<void>,
   ) {}
 
   private describe(row: AssistantSettingsRow | null): AssistantSettings {
@@ -158,6 +161,48 @@ export class AssistantService {
           error: failure ?? null,
         })
         .catch((error: unknown) => ctx.logger.error({ error }, 'An assistant turn could not be recorded'));
+    }
+  }
+
+  /** Has the model fill in one judged field on some records. Each record is read as the person asking, so nobody learns more than they could see. */
+  async judgeRecords(ctx: Context, input: JudgeRecords): Promise<JudgeResult> {
+    const started = Date.now();
+    const used = { provider: '', model: '', inputTokens: 0, outputTokens: 0, rounds: 0 };
+    const result: JudgeResult = { judged: [], skipped: [] };
+    let failure: string | undefined;
+    let label = input.propertyId;
+    try {
+      const workspace = (await this.call(ctx, 'workspace.get', undefined)) as Workspace;
+      const object = workspace.objects.find((item) => item.id === input.objectId);
+      const property = object?.properties.find((item) => item.id === input.propertyId);
+      if (!object || !property) throw new ValidationError('That field does not exist.');
+      if (!property.judged) throw new ValidationError(`${property.label} is not a field the model fills in. Turn that on in Settings first.`);
+      label = property.label;
+      const { adapter, model, provider } = await this.adapter(ctx);
+      Object.assign(used, { provider, model });
+      for (const id of [...new Set(input.ids)]) {
+        try {
+          const detail = (await this.call(ctx, 'records.get', id)) as RecordDetail;
+          if (detail.record.objectId !== object.id) throw new ValidationError(`It is not a ${object.singular.toLowerCase()}.`);
+          const activities = (await this.call(ctx, 'activity.list', id)) as Activity[];
+          const answer = await judge({ adapter, model }, { object, property, record: detail.record, activities, today: new Date().toISOString().slice(0, 10) });
+          used.inputTokens += answer.inputTokens;
+          used.outputTokens += answer.outputTokens;
+          used.rounds += 1;
+          await this.keepJudged?.(ctx, id, property.id, answer.value, answer.reason, model);
+          result.judged.push({ id, value: answer.value, reason: answer.reason });
+        } catch (error) {
+          result.skipped.push({ id, reason: error instanceof Error ? error.message : 'It could not be judged.' });
+        }
+      }
+      return result;
+    } catch (error) {
+      failure = error instanceof Error ? error.message : String(error);
+      throw error;
+    } finally {
+      await this.turns
+        .create(ctx, { id: `turn_${randomUUID().replace(/-/g, '').slice(0, 12)}`, userId: ctx.userId ?? actorOf(ctx).signedInId, question: `Fill in ${label} on ${input.ids.length} ${input.ids.length === 1 ? 'record' : 'records'}`.slice(0, 500), ...used, lookups: result.judged.length, plannedSteps: 0, durationMs: Date.now() - started, error: failure ?? null })
+        .catch((error: unknown) => ctx.logger.error({ error }, 'A judgement could not be recorded'));
     }
   }
 

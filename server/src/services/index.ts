@@ -118,7 +118,7 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
   const { files, people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences, settings, sales, capture, agents, audit, rules, privacy } = createServices(deps);
 
   // The assistant reaches the CRM the way everything else does: through the operations, as the person asking.
-  const assistant = new AssistantService(new AssistantSettingsRepository(deps.db), createEncryption({ adapter: 'local', keys: { primary: deps.secretsKey } }), operations, (ctx, operation, input) => communication.call(ctx, operation, input), new AssistantTurnsRepository(deps.db), deps.push);
+  const assistant = new AssistantService(new AssistantSettingsRepository(deps.db), createEncryption({ adapter: 'local', keys: { primary: deps.secretsKey } }), operations, (ctx, operation, input) => communication.call(ctx, operation, input), new AssistantTurnsRepository(deps.db), deps.push, (ctx, recordId, propertyId, value, reason, model) => records.setJudged(ctx, recordId, propertyId, value, reason, model));
 
   const handlers: Record<string, Handler> = {
     'workspace.get': (ctx) => workspace.get(ctx),
@@ -130,6 +130,8 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     'records.update': (ctx, input) => records.update(ctx, input),
     'records.label': (ctx, input) => records.label(ctx, input),
     'records.delete': (ctx, input) => records.remove(ctx, input),
+    'records.judge': (ctx, input) => assistant.judgeRecords(ctx, input),
+    'records.judgements': (ctx, input) => records.judgements(ctx, input),
     'records.deleted': (ctx, input) => records.listDeleted(ctx, input),
     'records.restore': (ctx, input) => records.restore(ctx, input),
     'records.import': (ctx, input) => importer.run(ctx, input),

@@ -799,6 +799,10 @@ export const mockApi: CrmApi = {
       return { changed, unchanged, skipped: 0 };
     }),
 
+  // The demo has no model to ask.
+  judgeRecords: () => Promise.reject(new Error('This needs a model, which the demo does not have. On your own workspace, connect one in Settings.')),
+  listJudgements: () => respond(() => []),
+
   listDeletedRecords: (query) =>
     respond(() => {
       assertAllowed('manageSettings', 'see deleted records');

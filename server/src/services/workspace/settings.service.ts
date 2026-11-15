@@ -40,6 +40,14 @@ function checkCondition(object: ObjectDefinition, condition: Filter | null | und
 }
 
 /** Checks a score's rules: only a number can be a score, it is not also a formula, and each rule reads a field that exists and is not the score itself. */
+/** A field the model fills in has to be one it can answer for: a number, a choice or text, and not also worked out some other way. */
+function checkJudged(property: { type: string; formula?: string; scoring?: unknown; options?: unknown[] }, judged: string | null | undefined): void {
+  if (!judged?.trim()) return;
+  if (!['number', 'text', 'select'].includes(property.type)) throw new ValidationError('The model can fill in a number, a choice or a text field.');
+  if (property.formula || property.scoring) throw new ValidationError('A field is worked out by a formula, by rules, or by the model: choose one.');
+  if (property.type === 'select' && (property.options ?? []).length === 0) throw new ValidationError('Give the field its choices before asking the model to pick one.');
+}
+
 function checkScoring(object: ObjectDefinition, property: { id: string; type: string; formula?: string }, scoring: ScoreRule[] | null | undefined): void {
   if (!scoring) return;
   if (property.type !== 'number') throw new ValidationError('Only a number can be a score.');
@@ -113,6 +121,7 @@ export class SettingsService {
       checkCondition(definition, input.requiredWhen, id);
       if (input.formula) checkFormula(definition, id, input.formula);
       checkScoring(definition, { id, type: input.type, formula: input.formula?.trim() || undefined }, input.scoring);
+      checkJudged({ type: input.type, formula: input.formula?.trim() || undefined, scoring: input.scoring, options: input.options }, input.judged);
       definition.properties.push({
         id,
         label: input.label.trim(),
@@ -125,6 +134,7 @@ export class SettingsService {
         unique: input.unique,
         formula: input.formula?.trim() || undefined,
         scoring: input.scoring,
+        judged: input.judged?.trim() || undefined,
         showWhen: input.showWhen,
         requiredWhen: input.requiredWhen,
         custom: true,
@@ -153,6 +163,10 @@ export class SettingsService {
       if (input.scoring !== undefined) {
         checkScoring(definition, found, input.scoring);
         found.scoring = input.scoring ?? undefined;
+      }
+      if (input.judged !== undefined) {
+        checkJudged(found, input.judged);
+        found.judged = input.judged?.trim() || undefined;
       }
       if (input.showWhen !== undefined) {
         checkCondition(definition, input.showWhen, found.id);

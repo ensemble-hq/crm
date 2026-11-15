@@ -21,3 +21,20 @@ export const recordsTable = defineTable(
   { indexes: [index('records_object_idx').on('tenantId', 'objectId', 'createdAt')] },
 );
 export type RecordRow = InferEntity<typeof recordsTable>;
+
+/** Why a field the model fills in says what it says on a record. One row per record and field, replaced each time the model is asked again. */
+export const judgementsTable = defineTable(
+  'judgements',
+  {
+    id: column.text().primaryKey(),
+    tenantId: column.text().notNull(),
+    recordId: column.text().notNull(),
+    propertyId: column.text().notNull(),
+    reason: column.text().notNull(),
+    model: column.text().notNull(),
+    createdAt: column.timestamp().notNull().defaultNow(),
+    updatedAt: column.timestamp().notNull().defaultNow(),
+  },
+  { indexes: [index('judgements_record_idx').on('tenantId', 'recordId')] },
+);
+export type JudgementRow = InferEntity<typeof judgementsTable>;

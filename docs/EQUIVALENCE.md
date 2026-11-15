@@ -91,7 +91,7 @@ HubSpot's Sales Hub (Professional $100 per seat per month, Enterprise $150). Mos
 | Guide reps through a call | Playbooks (Professional: 5) | Checklists on a record, plus the meeting prep brief | Later | Partly: text yes |
 | Share collateral and see who read it | Documents (Starter) | Tracked documents | Later | Yes: files; not view history |
 | Send a video | 1-to-1 video (Professional) | A third-party recorder; the link is logged | Not planned | n/a |
-| Score deals and accounts | Predictive deal score (Starter), lead scoring (Professional: 5 scores) | Scores from rules you set, with the reasons shown, on any object, as many as you like (built); AI fields for scores a model judges (not yet) | First release | No: scores are recomputed |
+| Score deals and accounts | Predictive deal score (Starter), lead scoring (Professional: 5 scores) | Scores from rules you set, with the reasons shown, on any object, as many as you like; and fields the connected model fills in (a score, a choice or a sentence) with its reason kept (both built) | First release | No: scores are recomputed |
 | See where a deal stands | Deal summaries, deal progression (Professional, Beta) | The record summary and suggested field updates, on every record | First release | n/a |
 | Forecast the quarter | Forecasting (Professional; by team hierarchy Enterprise) | Forecast with categories and rep submissions; the assistant adds its own forecast with reasons | First release | Partly: categories on open deals |
 | Set and track targets | Goals (Starter revenue only; custom Enterprise) | Goals on any number you can report on | First release | Partly |

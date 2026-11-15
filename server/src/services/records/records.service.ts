@@ -2,7 +2,7 @@ import { ConflictError, type Context, NotFoundError, ValidationError } from '@ma
 import { type SQL, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import type { ObjectDefinition, PropertyValue } from '../../../../src/contracts/metadata';
-import type { CreateRecord, CrmRecord, Duplicates, MergeRecords, ListQuery, ListResult, RecordDetail, Reference, RelatedGroup, SummaryQuery, SummaryRow, UpdateRecord, LabelRecords, LabelResult, DeletedList, DeletedQuery, RestoreResult } from '../../../../src/contracts/records';
+import type { CreateRecord, CrmRecord, Duplicates, MergeRecords, ListQuery, ListResult, RecordDetail, Reference, RelatedGroup, SummaryQuery, SummaryRow, UpdateRecord, LabelRecords, LabelResult, DeletedList, DeletedQuery, Judgement, RestoreResult } from '../../../../src/contracts/records';
 import { nextDue } from '../../../../src/lib/repeat';
 import { actorOf, assertCan, visibility, assertAllowed } from '../people/access';
 import { compute, isEditable, problemWith } from '../../../../src/lib/rules';
@@ -13,6 +13,12 @@ import type { RecordsRepository } from './records.repository';
 
 /** How many linked records a record page shows per object before "see all". */
 const RELATED_LIMIT = 5;
+
+/** The values given, without any for a field the model fills in. */
+function typedOnly(object: ObjectDefinition, values: Record<string, PropertyValue>): Record<string, PropertyValue> {
+  const judged = new Set(object.properties.filter((property) => property.judged !== undefined).map((property) => property.id));
+  return judged.size === 0 ? values : Object.fromEntries(Object.entries(values).filter(([key]) => !judged.has(key)));
+}
 
 function empty(value: PropertyValue | undefined): boolean {
   return value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0);
@@ -143,6 +149,8 @@ export class RecordsService {
 
   async create(ctx: Context, input: CreateRecord): Promise<CrmRecord> {
     const object = await this.workspace.definition(ctx, input.objectId);
+    // What the model fills in is never typed: a value sent for such a field is dropped.
+    input = { ...input, properties: typedOnly(object, input.properties) };
     await this.validate(ctx, object, input.properties, undefined);
     const typed = { ...input.properties, createdAt: new Date().toISOString().slice(0, 10) };
     // Computed fields are worked out from what was typed, then the whole record is checked against the object's rules.
@@ -160,6 +168,7 @@ export class RecordsService {
     const record = await this.find(ctx, input.id);
     const object = await this.workspace.definition(ctx, record.objectId);
     assertCan(actorOf(ctx), 'edit', record, object.singular.toLowerCase());
+    input = { ...input, properties: typedOnly(object, input.properties) };
     await this.validate(ctx, object, input.properties, record.id);
     // Only what really changed is announced, so saving a form untouched sets nothing off.
     const after = { ...record.properties, ...input.properties };
@@ -292,6 +301,26 @@ export class RecordsService {
 
   reassign(ctx: Context, fromId: string, toId: string): Promise<number> {
     return this.records.reassign(ctx, fromId, toId);
+  }
+
+  /** Stores what the model worked out for a field, and why. The caller must be allowed to change the record. */
+  async setJudged(ctx: Context, recordId: string, propertyId: string, value: PropertyValue, reason: string, model: string): Promise<void> {
+    const record = await this.records.one(ctx, recordId, ...this.visible(ctx));
+    if (!record) throw new NotFoundError('record', recordId);
+    const object = await this.workspace.definition(ctx, record.objectId);
+    assertCan(actorOf(ctx), 'edit', record, object.singular.toLowerCase());
+    await this.events.transaction(ctx, async () => {
+      const before = record.properties[propertyId] ?? null;
+      const updated = (await this.records.patch(ctx, record.id, { [propertyId]: value })) ?? record;
+      await this.records.saveJudgement(ctx, record.id, propertyId, reason, model);
+      if (JSON.stringify(before) !== JSON.stringify(value ?? null)) await this.events.changed(ctx, updated, { [propertyId]: value });
+    });
+  }
+
+  async judgements(ctx: Context, recordId: string): Promise<Judgement[]> {
+    const record = await this.records.one(ctx, recordId, ...this.visible(ctx));
+    if (!record) throw new NotFoundError('record', recordId);
+    return this.records.judgements(ctx, recordId);
   }
 
   /** What has been deleted and can come back. For the people who run the workspace. */

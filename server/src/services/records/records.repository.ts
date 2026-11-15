@@ -161,6 +161,16 @@ export class RecordsRepository extends DrizzleRepository<RecordRow> {
     await this.db.execute(sql`delete from deal_people where tenant_id = ${ctx.tenantId} and contact_id = ${fromId}`);
   }
 
+  async saveJudgement(ctx: Context, recordId: string, propertyId: string, reason: string, model: string): Promise<void> {
+    await this.db.execute(sql`
+      insert into judgements (id, tenant_id, record_id, property_id, reason, model) values (${`${recordId}:${propertyId}`}, ${ctx.tenantId}, ${recordId}, ${propertyId}, ${reason}, ${model})
+      on conflict (id) do update set reason = excluded.reason, model = excluded.model, updated_at = now()`);
+  }
+
+  async judgements(ctx: Context, recordId: string): Promise<Array<{ propertyId: string; reason: string; model: string; at: string }>> {
+    return this.rows(sql`select property_id as "propertyId", reason, model, to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as at from judgements where tenant_id = ${ctx.tenantId} and record_id = ${recordId}`);
+  }
+
   /** Records that were deleted and can come back, newest first. Ones that went in a merge are left out. */
   async deleted(ctx: Context, objectId: string, limit: number, offset: number): Promise<{ rows: Array<{ record: CrmRecord; deletedAt: string; deletedBy: string | null }>; total: number }> {
     const where = sql`records.tenant_id = ${ctx.tenantId} and records.object_id = ${objectId} and records.deleted_at is not null and records.deleted_by is distinct from 'merge'`;

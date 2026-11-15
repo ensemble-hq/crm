@@ -207,6 +207,19 @@ export type Workspace = {
   access: Access;
 };
 
+/** Asking the model to fill in a judged field on some records. */
+export const judgeRecordsSchema = z.object({ objectId: z.string(), propertyId: z.string(), ids: z.array(z.string()).min(1).max(25) });
+export type JudgeRecords = z.infer<typeof judgeRecordsSchema>;
+export const judgeResultSchema = z.object({
+  judged: z.array(z.object({ id: z.string(), value: propertyValueSchema, reason: z.string() })),
+  /** Records left alone, each with why: not found, not yours to change, or the model could not be reached. */
+  skipped: z.array(z.object({ id: z.string(), reason: z.string() })),
+});
+export type JudgeResult = z.infer<typeof judgeResultSchema>;
+/** Why a judged field on a record says what it says. */
+export const judgementSchema = z.object({ propertyId: z.string(), reason: z.string(), model: z.string(), at: z.string() });
+export type Judgement = z.infer<typeof judgementSchema>;
+
 export const deletedQuerySchema = z.object({ objectId: z.string(), page: z.number().int().min(1), pageSize: z.number().int().min(1).max(100) });
 export type DeletedQuery = z.infer<typeof deletedQuerySchema>;
 export const deletedListSchema = z.object({
@@ -232,6 +245,10 @@ export interface CrmApi extends InboxApi, ReportsApi, SequencesApi, WorkflowsApi
   deleteRecords(ids: string[]): Promise<{ deleted: number }>;
   /** Records that were deleted and can be brought back, newest first. For the people who run the workspace. */
   listDeletedRecords(query: DeletedQuery): Promise<DeletedList>;
+  /** Asks the connected model to fill in a judged field on up to 25 records, and keeps its reason for each. */
+  judgeRecords(input: JudgeRecords): Promise<JudgeResult>;
+  /** The model's reasons for the judged fields on a record. */
+  listJudgements(recordId: string): Promise<Judgement[]>;
   /** Brings deleted records back as they were. */
   restoreRecords(ids: string[]): Promise<RestoreResult>;
   importRecords(input: ImportRequest): Promise<ImportResult>;

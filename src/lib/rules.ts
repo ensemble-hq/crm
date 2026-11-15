@@ -40,7 +40,7 @@ export function isShown(property: PropertyDefinition, values: Record<string, Pro
 }
 
 /** Whether a field is worked out from the record's other fields: by a formula, or as a score. */
-export const isComputed = (property: PropertyDefinition) => Boolean(property.formula) || property.scoring !== undefined;
+export const isComputed = (property: PropertyDefinition) => Boolean(property.formula) || property.scoring !== undefined || property.judged !== undefined;
 
 /** Whether a person may type into a field: not one the system sets, and not one that is worked out. */
 export const isEditable = (property: PropertyDefinition) => !property.system && !isComputed(property);
