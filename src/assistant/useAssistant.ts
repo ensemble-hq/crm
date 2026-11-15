@@ -36,7 +36,7 @@ export function useAssistant(environment: { page: () => PageContext; navigate: (
   const model = useQuery(() => api.getAssistantSettings(), [workspace.revision]);
   const onModel = model.data?.configured === true;
   /** The conversation as the model needs it: who said what, in order. */
-  const transcript = useRef<Array<{ role: 'user' | 'assistant'; text: string }>>([]);
+  const transcript = useRef<Array<{ role: 'user' | 'assistant'; text: string; fileIds?: string[] }>>([]);
   const busy = useRef(false);
   const sequence = useRef(0);
   const plans = useRef(new Map<string, PlanRun>());
@@ -131,7 +131,7 @@ export function useAssistant(environment: { page: () => PageContext; navigate: (
     (text: string, attachments: Attachment[] = []) => {
       const trimmed = text.trim();
       if (busy.current || (!trimmed && attachments.length === 0)) return;
-      const shown = trimmed || `Import ${attachments[0]?.name ?? 'this file'}`;
+      const shown = trimmed || `${attachments[0]?.rows ? 'Import' : 'Look at'} ${attachments[0]?.name ?? 'this file'}`;
       setMessages((previous) => [...previous, { id: nextId('msg'), role: 'user', text: shown, attachments }]);
 
       void turn(async (messageId) => {
@@ -189,11 +189,24 @@ export function useAssistant(environment: { page: () => PageContext; navigate: (
           },
         };
         // A file is still handled by the scripted import flow, which works against the real operations.
-        if (!onModel || attachments.length > 0) {
+        // A spreadsheet to import is still handled by the scripted import flow, which works against the real operations.
+        if (!onModel || attachments.some((attachment) => attachment.rows)) {
           await respond({ text: trimmed, attachments }, context);
           return;
         }
-        transcript.current.push({ role: 'user', text: trimmed });
+        // Any other file is uploaded and handed to the model with the message.
+        const fileIds: string[] = [];
+        for (const attachment of attachments) {
+          if (!attachment.file) continue;
+          const content = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = () => reject(new Error(`"${attachment.name}" could not be read.`));
+            reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
+            reader.readAsDataURL(attachment.file as File);
+          });
+          fileIds.push((await api.uploadFile({ name: attachment.name, contentType: attachment.file.type || 'application/octet-stream', content })).id);
+        }
+        transcript.current.push({ role: 'user', text: trimmed || `Look at ${attachments[0]?.name ?? 'this file'}.`, ...(fileIds.length > 0 ? { fileIds } : {}) });
         const said: string[] = [];
         await respondFromServer(transcript.current, { ...context, say: async (paragraph) => void (said.push(paragraph), await context.say(paragraph)) });
         transcript.current.push({ role: 'assistant', text: said.join('\n\n') || '(showed something beside the conversation)' });

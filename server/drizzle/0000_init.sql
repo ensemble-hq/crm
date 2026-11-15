@@ -249,6 +249,7 @@ CREATE TABLE "messages" (
 	"subject" text DEFAULT '' NOT NULL,
 	"body" text NOT NULL,
 	"html" text,
+	"attachments" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"status" text NOT NULL,
 	"message_id_header" text,
 	"provider_id" text,
@@ -261,6 +262,19 @@ CREATE TABLE "messages" (
 	"delivered_at" timestamp with time zone,
 	"next_attempt_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"sent_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
+CREATE TABLE "files" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"name" text NOT NULL,
+	"content_type" text NOT NULL,
+	"size" integer NOT NULL,
+	"key" text NOT NULL,
+	"uploaded_by" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -498,6 +512,8 @@ CREATE INDEX "messages_conversation_idx" ON "messages" USING btree ("tenant_id",
 CREATE INDEX "messages_header_idx" ON "messages" USING btree ("tenant_id","message_id_header");
 --> statement-breakpoint
 CREATE INDEX "messages_outgoing_idx" ON "messages" USING btree ("tenant_id","status","next_attempt_at");
+--> statement-breakpoint
+CREATE INDEX "files_tenant_id_idx" ON "files" USING btree ("tenant_id");
 --> statement-breakpoint
 CREATE INDEX "notifications_user_idx" ON "notifications" USING btree ("tenant_id","user_id","created_at");
 --> statement-breakpoint

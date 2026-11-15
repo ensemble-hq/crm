@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { beforeAll, describe, expect, it } from 'vitest';
+import type { FileContent, FileInfo } from '../../src/contracts/files';
 import type { ConversationDetail, ConversationList, EmailPreference, EmailReport, Message } from '../../src/contracts/inbox';
 import type { CrmRecord, RecordDetail } from '../../src/contracts/records';
 import { type Crm, JONAS, MAYA, refusal, startCrm } from './harness';
@@ -246,5 +247,47 @@ describe('what the email service reports back', () => {
     expect(kinds).toContain('complained:dana.delivered@example.com');
     expect(totals.problems.find((problem) => problem.toEmail === 'bo.later@example.com')?.reason).toBe('Mailbox full');
     expect(totals.days.reduce((sum, day) => sum + day.sent, 0)).toBe(totals.sent);
+  });
+});
+
+describe('files with email', () => {
+  const b64 = (text: string) => Buffer.from(text).toString('base64');
+  let file: FileInfo;
+
+  it('are uploaded once and fetched back byte for byte', async () => {
+    file = await crm.call<FileInfo>(JONAS, 'files.upload', { name: 'pricing.txt', contentType: 'text/plain', content: b64('Ten seats: 500 a month.') });
+    expect(file).toMatchObject({ name: 'pricing.txt', contentType: 'text/plain', size: 23 });
+    const back = await crm.call<FileContent>(MAYA, 'files.download', file.id);
+    expect(Buffer.from(back.content, 'base64').toString()).toBe('Ten seats: 500 a month.');
+    expect(await refusal(crm.call(MAYA, 'files.download', 'file_nope'))).toBeTruthy();
+  });
+
+  it('are refused when empty, too large, or the kind that runs', async () => {
+    expect(await refusal(crm.call(MAYA, 'files.upload', { name: 'empty.txt', contentType: 'text/plain', content: '' }))).toMatch(/is empty/);
+    expect(await refusal(crm.call(MAYA, 'files.upload', { name: 'setup.exe', contentType: 'application/octet-stream', content: b64('MZ') }))).toMatch(/runs when opened/);
+    expect(await refusal(crm.call(MAYA, 'files.upload', { name: 'big.bin', contentType: 'application/octet-stream', content: Buffer.alloc(8 * 1024 * 1024 + 1).toString('base64') }))).toMatch(/larger than 8 MB/);
+  });
+
+  it('go out with a reply, and the conversation lists them', async () => {
+    await arrive('files-1', 'filer@example.com', 'Can you send pricing?');
+    const conversation = await conversationWith('Can you send pricing?');
+    expect(await refusal(crm.call(MAYA, 'inbox.reply', { conversationId: conversation?.id, body: 'Here.', attachmentIds: ['file_gone'] }))).toMatch(/no longer there/);
+    const reply = await crm.call<Message>(MAYA, 'inbox.reply', { conversationId: conversation?.id, body: 'Here it is.', attachmentIds: [file.id] });
+    expect(reply.attachments).toEqual([file]);
+    await crm.services.mail.sweep(crm.system());
+    const [sent] = await crm.rows<{ attachments: Array<{ name: string; size: number }> }>(sql`select payload->'attachments' as attachments from dev_mail where direction = 'out' and payload->>'toEmail' = 'filer@example.com'`);
+    expect(sent?.attachments).toEqual([{ name: 'pricing.txt', contentType: 'text/plain', size: 23 }]);
+  });
+
+  it('are kept when they arrive, and one that cannot be kept is named instead of losing the email', async () => {
+    await arrive('files-2', 'filer@example.com', 'Signed contract', { attachments: [{ name: 'contract.pdf', contentType: 'application/pdf', content: b64('%PDF-1.7 pretend') }, { name: 'run-me.exe', contentType: 'application/octet-stream', content: b64('MZ') }] });
+    const conversation = await conversationWith('Signed contract');
+    const detail = await crm.call<ConversationDetail>(MAYA, 'inbox.get', conversation?.id);
+    const message = detail.messages[detail.messages.length - 1];
+    expect(message?.attachments).toHaveLength(1);
+    expect(message?.attachments?.[0]).toMatchObject({ name: 'contract.pdf', contentType: 'application/pdf', size: 16 });
+    expect(message?.body).toContain('[Not kept: run-me.exe]');
+    const back = await crm.call<FileContent>(MAYA, 'files.download', message?.attachments?.[0]?.id);
+    expect(Buffer.from(back.content, 'base64').toString()).toBe('%PDF-1.7 pretend');
   });
 });

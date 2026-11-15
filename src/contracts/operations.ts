@@ -3,6 +3,7 @@ import { assistantReplySchema, assistantSettingsSchema, assistantTurnSchema, ass
 import { auditCheckSchema, auditPageSchema, auditQuerySchema } from './audit';
 import { erasureSchema, personalDataSchema } from './privacy';
 import { designReplySchema, designRequestSchema, emailDesignSchema } from './emailDesign';
+import { MAX_ATTACHMENTS, fileContentSchema, fileInfoSchema, uploadFileSchema } from './files';
 import { briefSchema } from './brief';
 import { bookingPageSchema, bookingPageSettingsSchema, daySlotsSchema, formDetailSchema, formSchema, formSettingsSchema, meetingSchema, publicFormSchema } from './capture';
 import { emailPreferenceSchema, emailSettingsSchema, setEmailPreferenceSchema, unsubscribePageSchema } from './inbox';
@@ -386,7 +387,7 @@ export const operations: Operation[] = [
     method: 'sendReply',
     title: 'Send a reply by email',
     description: 'Sends an email to the conversation\'s contact, from you, on the same thread. This really sends: ask the person before calling it, and show them the text. The message is queued and sent within seconds; inbox.get shows whether it went. With `sendAt` it is kept and sent at that time instead, and can be cancelled until then with inbox.cancelScheduled.',
-    input: z.object({ conversationId: z.string(), body: z.string(), sendAt: z.string().datetime().optional().describe('To send later: the moment to send it, as an ISO date and time with a time zone. Leave out to send now.') }),
+    input: z.object({ conversationId: z.string(), body: z.string(), sendAt: z.string().datetime().optional().describe('To send later: the moment to send it, as an ISO date and time with a time zone. Leave out to send now.'), attachmentIds: z.array(z.string()).max(MAX_ATTACHMENTS).optional().describe('Files to send with it, by the ids files.upload returned.') }),
     output: messageSchema,
     effect: 'send',
   },
@@ -424,6 +425,25 @@ export const operations: Operation[] = [
     description: 'Returns, for the last 30 days, how many emails were sent, confirmed delivered, bounced, marked as spam or never accepted, the same for automated email alone, a count per day, and the latest messages that did not arrive with the reason. A bounced or complaining address is blocked automatically.',
     input: none,
     output: emailReportSchema,
+    effect: 'read',
+  },
+  {
+    name: 'files.upload',
+    method: 'uploadFile',
+    title: 'Upload a file',
+    description: 'Stores a file (up to 8 MB) and returns its id. Attach it to an email with inbox.reply, or hand it to the assistant. `content` is the bytes of the file, base64 encoded. Files that run when opened are refused.',
+    input: uploadFileSchema,
+    output: fileInfoSchema,
+    effect: 'write',
+    large: true,
+  },
+  {
+    name: 'files.download',
+    method: 'downloadFile',
+    title: 'Get a file',
+    description: 'Returns a stored file by id: its name, type, size and its bytes, base64 encoded. Use it for the attachments listed on a message.',
+    input: z.string().describe('The id of the file.'),
+    output: fileContentSchema,
     effect: 'read',
   },
   {

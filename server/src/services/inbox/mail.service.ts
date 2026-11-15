@@ -1,9 +1,11 @@
-import type { Context } from '@mariachi/core';
+import { type Context, ValidationError } from '@mariachi/core';
 import type { Outbox } from '@mariachi/events/outbox';
 import { randomUUID } from 'node:crypto';
 import type { PropertyValue } from '../../../../src/contracts/metadata';
 import type { EmailDesign } from '../../../../src/contracts/emailDesign';
+import { type FileInfo, MAX_ATTACHMENTS } from '../../../../src/contracts/files';
 import type { CrmRecord } from '../../../../src/contracts/records';
+import type { FilesService } from '../files/files.service';
 import { type Fill, renderEmailHtml, renderEmailText, sampleFill } from '../../../../src/lib/emailDesign';
 import { type EmailProvider, PermanentSendError } from '../../email';
 import { emailQueued, emailReceived } from '../../events';
@@ -50,6 +52,7 @@ export class MailService {
     private readonly recordEvents: RecordEvents,
     private readonly transaction: <T>(ctx: Context, fn: () => Promise<T>) => Promise<T>,
     private readonly rules: EmailRules,
+    private readonly files: FilesService,
   ) {}
 
   /** Told, inside the filing transaction, that a contact has written in. Sequences use it to stop. */
@@ -77,6 +80,17 @@ export class MailService {
           (await this.messages.conversationOf(ctx, [mail.inReplyTo, ...(mail.references ?? [])].filter((header): header is string => Boolean(header)))) ??
           (await this.conversations.bySubject(ctx, contact.id, stripPrefixes(mail.subject))) ??
           (await this.startConversation(ctx, contact, mail.subject));
+        // A file that cannot be kept (too large, or the kind that runs) is left out and named, rather than losing the whole email.
+        const attachments: FileInfo[] = [];
+        const dropped: string[] = [];
+        for (const file of (mail.attachments ?? []).slice(0, 20)) {
+          try {
+            attachments.push(await this.files.store(ctx, { name: file.name, contentType: file.contentType, data: Buffer.from(file.content, 'base64'), uploadedBy: null }));
+          } catch {
+            dropped.push(file.name);
+          }
+        }
+        const text = dropped.length > 0 ? `${mail.text}\n\n[Not kept: ${dropped.join(', ')}]` : mail.text;
         const added = await this.messages.addIncoming(ctx, {
           id: `msg_${arrival.id}`,
           conversationId,
@@ -84,8 +98,9 @@ export class MailService {
           fromEmail: mail.fromEmail,
           toEmail: mail.toEmail ?? '',
           subject: mail.subject,
-          body: mail.text,
+          body: text,
           html: mail.html ?? null,
+          attachments,
           messageIdHeader: mail.messageId ?? null,
           sentAt: mail.receivedAt ? new Date(mail.receivedAt) : arrival.receivedAt,
         });
@@ -119,7 +134,7 @@ export class MailService {
   }
 
   /** Stores an outgoing message as queued. Call it inside the transaction of whatever caused the send. */
-  async queue(ctx: Context, input: { conversationId: string; sender: { id: string; name: string; email: string }; toEmail: string; subject: string; body: string; design?: EmailDesign | null; fill?: Fill; purpose?: Purpose; sendAt?: Date }): Promise<string> {
+  async queue(ctx: Context, input: { conversationId: string; sender: { id: string; name: string; email: string }; toEmail: string; subject: string; body: string; design?: EmailDesign | null; fill?: Fill; purpose?: Purpose; sendAt?: Date; attachmentIds?: string[] }): Promise<string> {
     const purpose = input.purpose ?? 'conversation';
     // Refused here if the address has opted out or had its share this week, before anything is stored.
     await this.rules.check(ctx, input.toEmail, purpose);
@@ -127,6 +142,7 @@ export class MailService {
     const words = input.design ? renderEmailText(input.design, input.fill) : input.body;
     const body = purpose === 'automated' ? `${words}${await this.rules.footer(ctx, input.toEmail)}` : words;
     const html = input.design ? renderEmailHtml(input.design, { subject: input.subject, fill: input.fill, ...(purpose === 'automated' ? { footer: await this.rules.footerParts(ctx, input.toEmail) } : {}) }) : null;
+    const attachments = await this.attached(ctx, input.attachmentIds ?? []);
     const messageId = id('msg');
     await this.messages.create(ctx, {
       id: messageId,
@@ -138,6 +154,7 @@ export class MailService {
       subject: input.subject,
       body,
       html,
+      attachments,
       purpose,
       status: 'queued',
       messageIdHeader: `<${messageId}@crm>`,
@@ -151,6 +168,15 @@ export class MailService {
     await this.conversations.refresh(ctx, input.conversationId, { unread: false });
     await this.outbox.add(ctx, emailQueued, { messageId });
     return messageId;
+  }
+
+  /** The files named, checked: each must exist, and an email carries only so many. */
+  private async attached(ctx: Context, ids: string[]): Promise<FileInfo[]> {
+    if (ids.length === 0) return [];
+    if (ids.length > MAX_ATTACHMENTS) throw new ValidationError(`An email can carry up to ${MAX_ATTACHMENTS} files.`);
+    const found = await this.files.info(ctx, [...new Set(ids)]);
+    if (found.length !== new Set(ids).size) throw new ValidationError('One of the attached files is no longer there. Attach it again.');
+    return found;
   }
 
   /** Starts a new conversation with a contact by sending them an email: what a workflow's "send an email" does. */
@@ -193,8 +219,9 @@ export class MailService {
     }
     try {
       const previous = await this.messages.findMany(ctx, { conversationId: message.conversationId, direction: 'in' }, { sort: { field: 'sentAt', direction: 'desc' }, limit: 1 });
+      const attachments = await Promise.all((message.attachments ?? []).map(async (file) => ({ name: file.name, contentType: file.contentType, content: (await this.files.read(ctx, file.id)).data })));
       const sent = await this.provider.send(
-        { fromName: message.fromName, fromEmail: message.fromEmail, toEmail: message.toEmail, subject: message.subject, text: message.body, ...(message.html ? { html: message.html } : {}), messageId: message.messageIdHeader ?? `<${message.id}@crm>`, inReplyTo: previous[0]?.messageIdHeader ?? undefined, ...(purpose === 'automated' ? { unsubscribeUrl: this.rules.oneClickUrl(message.toEmail) } : {}) },
+        { fromName: message.fromName, fromEmail: message.fromEmail, toEmail: message.toEmail, subject: message.subject, text: message.body, ...(message.html ? { html: message.html } : {}), ...(attachments.length > 0 ? { attachments } : {}), messageId: message.messageIdHeader ?? `<${message.id}@crm>`, inReplyTo: previous[0]?.messageIdHeader ?? undefined, ...(purpose === 'automated' ? { unsubscribeUrl: this.rules.oneClickUrl(message.toEmail) } : {}) },
         { idempotencyKey: message.id },
       );
       await this.messages.update(ctx, message.id, { status: 'sent', providerId: sent.providerId, lastError: null, sentAt: new Date() });

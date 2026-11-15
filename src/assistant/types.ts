@@ -18,6 +18,8 @@ export type Attachment = {
   size: number;
   /** Parsed rows when the file is a CSV; the first row is the header. */
   rows?: string[][];
+  /** The file itself, when it is not a CSV to import: on a model it is uploaded and given to the assistant to read. */
+  file?: File;
 };
 
 export type ChatMessage = {

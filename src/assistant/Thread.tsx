@@ -6,7 +6,7 @@ import type { Attachment, ChatMessage } from './types';
 
 export async function readAttachment(file: File): Promise<Attachment> {
   const isCsv = /\.csv$/i.test(file.name) || file.type === 'text/csv';
-  return { name: file.name, size: file.size, rows: isCsv ? parseCsv(await file.text()) : undefined };
+  return { name: file.name, size: file.size, rows: isCsv ? parseCsv(await file.text()) : undefined, ...(isCsv ? {} : { file }) };
 }
 
 function AttachmentChip({ attachment, onRemove }: { attachment: Attachment; onRemove?: () => void }) {
@@ -78,7 +78,7 @@ export function Composer({
         <input
           ref={file}
           type="file"
-          accept=".csv,text/csv"
+          accept={import.meta.env.VITE_API_URL ? undefined : '.csv,text/csv'}
           hidden
           onChange={async (event) => {
             const picked = event.target.files?.[0];

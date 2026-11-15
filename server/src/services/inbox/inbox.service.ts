@@ -31,6 +31,7 @@ function toMessage(row: MessageRow): Message {
     fromEmail: row.fromEmail,
     body: row.body,
     ...(row.html ? { html: row.html } : {}),
+    ...(row.attachments && row.attachments.length > 0 ? { attachments: row.attachments } : {}),
     sentAt: row.sentAt.toISOString(),
     // "Being sent right now" is still waiting as far as a person is concerned.
     ...(outgoing ? { status: row.status === 'sent' ? 'sent' : row.status === 'failed' ? 'failed' : 'queued' } : {}),
@@ -110,7 +111,7 @@ export class InboxService {
   }
 
   /** Sends a reply on the thread. It is stored as queued here; the worker sends it. */
-  async reply(ctx: Context, input: { conversationId: string; body: string; sendAt?: string }): Promise<Message> {
+  async reply(ctx: Context, input: { conversationId: string; body: string; sendAt?: string; attachmentIds?: string[] }): Promise<Message> {
     const body = input.body.trim();
     if (!body) throw new ValidationError('Write something before sending.');
     const sendAt = input.sendAt ? new Date(input.sendAt) : undefined;
@@ -123,7 +124,7 @@ export class InboxService {
     const toEmail = typeof contact?.properties.email === 'string' ? contact.properties.email : '';
     if (!toEmail) throw new ValidationError('This contact has no email address.');
     const messageId = await this.transaction(ctx, async () => {
-      const queued = await this.mail.queue(ctx, { conversationId: conversation.id, sender: me, toEmail, subject: /^re:/i.test(conversation.subject) ? conversation.subject : `Re: ${conversation.subject}`, body, sendAt });
+      const queued = await this.mail.queue(ctx, { conversationId: conversation.id, sender: me, toEmail, subject: /^re:/i.test(conversation.subject) ? conversation.subject : `Re: ${conversation.subject}`, body, sendAt, attachmentIds: input.attachmentIds });
       // Replying to something in the shared queue takes it.
       if (conversation.assigneeId === null) await this.conversations.update(ctx, conversation.id, { assigneeId: me.id });
       for (const recordId of [conversation.contactId, conversation.dealId]) {

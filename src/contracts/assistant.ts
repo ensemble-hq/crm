@@ -42,7 +42,8 @@ export type SaveAssistantSettings = z.infer<typeof saveAssistantSettingsSchema>;
 
 export const assistantTurnSchema = z.object({
   /** The conversation so far, oldest first, ending with what the person just said. */
-  messages: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string() })).min(1).max(60),
+  /** `fileIds` are files the person attached to what they said, uploaded with `files.upload`. The assistant reads the ones that are text (CSV, plain text, JSON, Markdown). */
+  messages: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string(), fileIds: z.array(z.string()).max(5).optional() })).min(1).max(60),
   /** Where the person is, so "this" and "these" mean something. */
   page: z.object({ path: z.string(), objectId: z.string().optional(), recordId: z.string().optional() }),
   /** A name for this turn chosen by the app. With it, each event is also pushed over the live connection as it happens, so the answer builds up on screen. */

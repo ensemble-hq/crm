@@ -7,3 +7,4 @@ dist
 
 # Server settings for this machine
 server/.env
+.data

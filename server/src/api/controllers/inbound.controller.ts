@@ -15,6 +15,8 @@ const delivery = z.object({
   subject: z.string().default(''),
   text: z.string().default(''),
   html: z.string().optional(),
+  /** Files that came with it: each with its name, type and bytes, base64 encoded. */
+  attachments: z.array(z.object({ name: z.string(), contentType: z.string().default('application/octet-stream'), content: z.string() })).max(20).optional(),
   messageId: z.string().optional(),
   inReplyTo: z.string().optional(),
   references: z.array(z.string()).optional(),
@@ -55,12 +57,12 @@ export class InboundController extends BaseController {
       return undefined;
     });
 
-    this.post('/email', { auth: 'inbound', schema: { body: delivery, response: z.object({ status: z.enum(['stored', 'duplicate']) }) }, summary: 'Receive an email from the provider' }, (ctx, body) => {
+    this.post('/email', { auth: 'inbound', bodyLimitBytes: 40 * 1024 * 1024, schema: { body: delivery, response: z.object({ status: z.enum(['stored', 'duplicate']) }) }, summary: 'Receive an email from the provider' }, (ctx, body) => {
       const mail = body as z.infer<typeof delivery>;
       return this.call(ctx, RECEIVE_EMAIL, {
         provider: this.provider,
         providerMessageId: mail.id,
-        payload: { fromEmail: mail.from.email, fromName: mail.from.name, toEmail: mail.to, subject: mail.subject, text: mail.text, html: mail.html, messageId: mail.messageId, inReplyTo: mail.inReplyTo, references: mail.references, receivedAt: mail.receivedAt },
+        payload: { fromEmail: mail.from.email, fromName: mail.from.name, toEmail: mail.to, subject: mail.subject, text: mail.text, html: mail.html, attachments: mail.attachments, messageId: mail.messageId, inReplyTo: mail.inReplyTo, references: mail.references, receivedAt: mail.receivedAt },
       });
     });
 

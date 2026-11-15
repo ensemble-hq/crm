@@ -2,6 +2,8 @@ import { Archive, Building2, Handshake, Inbox as InboxIcon, MailOpen, RotateCcw,
 import { type CSSProperties, type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, useQuery } from '../api';
+import { type FileInfo, MAX_ATTACHMENTS } from '../contracts/files';
+import { AttachButton, FileChips } from '../ui/Attachments';
 import { Page } from '../app/Page';
 import { useWorkspace } from '../app/workspace';
 import { draftReply } from '../assistant/mock-engine';
@@ -98,6 +100,7 @@ function MessageBubble({ message, onCancel }: { message: Message; onCancel: () =
       >
         {message.html && designed ? <iframe title={`Email from ${message.fromName}`} sandbox="" srcDoc={message.html} style={{ display: 'block', inlineSize: 'min(600px, 70vw)', blockSize: 460, border: 0, borderRadius: 'var(--m-radius-md)', background: 'var(--m-color-bg-surface)' }} /> : message.body}
       </div>
+      <FileChips files={message.attachments ?? []} />
       {message.html ? (
         <button type="button" className="m-button" data-variant="ghost" data-size="sm" onClick={() => setDesigned(!designed)}>
           {designed ? 'Show the words only' : 'Show it as designed'}
@@ -145,6 +148,7 @@ function Thread({ conversationId, onChanged }: { conversationId: string; onChang
   const [sendError, setSendError] = useState<string>();
   // Empty until the person asks to send later; then the local date and time they picked.
   const [later, setLater] = useState<string>();
+  const [attached, setAttached] = useState<FileInfo[]>([]);
   const end = useRef<HTMLDivElement>(null);
   const conversation = data?.conversation.id === conversationId ? data.conversation : undefined;
   const messages = conversation ? (data?.messages ?? []) : [];
@@ -213,8 +217,9 @@ function Thread({ conversationId, onChanged }: { conversationId: string; onChang
     setSendError(undefined);
     try {
       // The picker gives a local date and time; it is sent on as the moment that is everywhere.
-      await api.sendReply({ conversationId, body: reply, ...(later ? { sendAt: new Date(later).toISOString() } : {}) });
+      await api.sendReply({ conversationId, body: reply, ...(later ? { sendAt: new Date(later).toISOString() } : {}), ...(attached.length > 0 ? { attachmentIds: attached.map((file) => file.id) } : {}) });
       setReply('');
+      setAttached([]);
       setLater(undefined);
       reload();
       onChanged();
@@ -297,6 +302,7 @@ function Thread({ conversationId, onChanged }: { conversationId: string; onChang
           Reply to {contactName}
         </label>
         <textarea className="m-input" id="conversation-reply" rows={reply ? 7 : 3} placeholder={`Reply to ${contactName}…`} value={reply} onChange={(event) => setReply(event.target.value)} />
+        <FileChips files={attached} onRemove={(id) => setAttached(attached.filter((file) => file.id !== id))} />
         {sendError ? (
           <p className="m-field-error" role="alert" style={{ margin: 0 }}>
             {sendError}
@@ -304,6 +310,7 @@ function Thread({ conversationId, onChanged }: { conversationId: string; onChang
         ) : null}
         <div className="m-cluster" data-justify="between" data-gap="2">
           <div className="m-cluster" data-gap="2">
+            <AttachButton room={MAX_ATTACHMENTS - attached.length} onAdded={(files) => setAttached([...attached, ...files])} onProblem={setSendError} />
             <button
               type="button"
               className="m-button"

@@ -14,6 +14,7 @@ import type {
   SummaryQuery,
   SummaryRow,
 } from '../contracts/records';
+import type { FileContent } from '../contracts/files';
 import { nextDue } from '../lib/repeat';
 import { compute } from '../lib/rules';
 import { MOCK_NOW, MOCK_TODAY, objects, users } from './definitions';
@@ -564,11 +565,17 @@ function logActivity(recordId: string, kind: 'note' | 'meeting', title: string, 
   createdActivity.set(recordId, [logged, ...(createdActivity.get(recordId) ?? [])]);
 }
 
+/** Files added in this browser session. */
+export const uploads = new Map<string, FileContent>();
+
 /** Deleted records, newest first, kept so they can be restored. */
 const bin: Array<{ record: CrmRecord; deletedAt: string }> = [];
 
 export const mockApi: CrmApi = {
-  ...createInboxApi(respond, logEmail),
+  ...createInboxApi(respond, logEmail, (id) => {
+    const file = uploads.get(id);
+    return file ? { id: file.id, name: file.name, contentType: file.contentType, size: file.size } : undefined;
+  }),
   ...createReportsApi({ respond, select, definition, labelOf: label }),
   ...createSequencesApi(respond),
   ...createWorkflowsApi(workflowDeps),
@@ -818,6 +825,22 @@ export const mockApi: CrmApi = {
         result.restored += 1;
       }
       return result;
+    }),
+
+  // The demo keeps files in memory: enough to attach, see and save them again.
+  uploadFile: (input) =>
+    respond(() => {
+      if (!input.content) throw new Error(`"${input.name}" is empty.`);
+      const file = { id: `file_demo_${uploads.size + 1}`, name: input.name, contentType: input.contentType || 'application/octet-stream', size: Math.floor((input.content.length * 3) / 4), content: input.content };
+      uploads.set(file.id, file);
+      const { content: _content, ...info } = file;
+      return info;
+    }),
+  downloadFile: (id) =>
+    respond(() => {
+      const file = uploads.get(id);
+      if (!file) throw new Error('That file is no longer there.');
+      return file;
     }),
 
   deleteRecords: (ids) =>

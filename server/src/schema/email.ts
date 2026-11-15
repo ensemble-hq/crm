@@ -1,5 +1,6 @@
 import { column, defineTable, index, type InferEntity } from '@mariachi/database';
 import type { EmailDesign } from '../../../src/contracts/emailDesign';
+import type { FileInfo } from '../../../src/contracts/files';
 
 /** What an email provider hands over, in one shape whichever provider it is. */
 export type InboundPayload = {
@@ -8,6 +9,8 @@ export type InboundPayload = {
   toEmail?: string;
   subject: string;
   text: string;
+  /** Files that came with it, base64 encoded. They are moved to the file store when the email is filed. */
+  attachments?: Array<{ name: string; contentType: string; content: string }>;
   /** The HTML version, when the email had one. Shown in a sandbox, never trusted. */
   html?: string;
   /** The email's own Message-ID header, and the ones it answers. Used to find its thread. */
@@ -86,6 +89,8 @@ export const messagesTable = defineTable(
     body: column.text().notNull(),
     /** The designed version, when there is one. `body` is always the plain text. */
     html: column.text(),
+    /** The files sent with it. The bytes are in the file store. */
+    attachments: column.json().$type<FileInfo[]>().notNull().defaultSql("'[]'::jsonb"),
     /** In: `received`. Out: `queued`, `sending`, `sent` or `failed`. */
     status: column.text().notNull(),
     /** The Message-ID header, so a reply can be matched to its thread. */

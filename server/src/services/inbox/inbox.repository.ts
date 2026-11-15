@@ -1,6 +1,7 @@
 import type { Context } from '@mariachi/core';
 import { type DrizzleDb, DrizzleRepository } from '@mariachi/database-postgres';
 import { type SQL, and, sql } from 'drizzle-orm';
+import type { FileInfo } from '../../../../src/contracts/files';
 import type { EmailHealth, EmailReport, InboxFolder } from '../../../../src/contracts/inbox';
 import { type ConversationRow, type EmailTemplateRow, type InboundEmailRow, type InboundPayload, type MailCursorRow, type MessageRow, conversationsTable, emailTemplatesTable, inboundEmailsTable, mailCursorsTable, messagesTable } from '../../schema';
 
@@ -82,10 +83,10 @@ export class MessagesRepository extends DrizzleRepository<MessageRow> {
   }
 
   /** Adds an incoming message unless it is already there. True if it was added. */
-  async addIncoming(ctx: Context, message: { id: string; conversationId: string; fromName: string; fromEmail: string; toEmail: string; subject: string; body: string; html: string | null; messageIdHeader: string | null; sentAt: Date }): Promise<boolean> {
+  async addIncoming(ctx: Context, message: { id: string; conversationId: string; fromName: string; fromEmail: string; toEmail: string; subject: string; body: string; html: string | null; attachments: FileInfo[]; messageIdHeader: string | null; sentAt: Date }): Promise<boolean> {
     const rows = (await this.db.execute(sql`
-      insert into messages (id, tenant_id, conversation_id, direction, from_name, from_email, to_email, subject, body, html, status, message_id_header, sent_at)
-      values (${message.id}, ${ctx.tenantId}, ${message.conversationId}, 'in', ${message.fromName}, ${message.fromEmail}, ${message.toEmail}, ${message.subject}, ${message.body}, ${message.html}, 'received', ${message.messageIdHeader}, ${message.sentAt.toISOString()}::timestamptz)
+      insert into messages (id, tenant_id, conversation_id, direction, from_name, from_email, to_email, subject, body, html, attachments, status, message_id_header, sent_at)
+      values (${message.id}, ${ctx.tenantId}, ${message.conversationId}, 'in', ${message.fromName}, ${message.fromEmail}, ${message.toEmail}, ${message.subject}, ${message.body}, ${message.html}, ${JSON.stringify(message.attachments)}::jsonb, 'received', ${message.messageIdHeader}, ${message.sentAt.toISOString()}::timestamptz)
       on conflict (id) do nothing returning id`)) as unknown as unknown[];
     return rows.length > 0;
   }

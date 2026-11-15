@@ -35,6 +35,7 @@
     "@mariachi/lifecycle": "link:../../mariachi/packages/lifecycle",
     "@mariachi/rate-limit": "link:../../mariachi/packages/rate-limit",
     "@mariachi/realtime": "link:../../mariachi/packages/realtime",
+    "@mariachi/storage": "link:../../mariachi/packages/storage",
     "@xyflow/react": "^12.12.1",
     "drizzle-orm": "link:../../mariachi/packages/database-postgres/node_modules/drizzle-orm",
     "lucide-react": "^0.460.0",

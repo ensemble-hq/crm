@@ -1,4 +1,5 @@
 import type { Conversation, ConversationQuery, EmailTemplate, InboxApi, Message } from '../contracts/inbox';
+import type { FileInfo } from '../contracts/files';
 import type { CrmRecord, Reference } from '../contracts/records';
 import { MOCK_NOW, OPEN_STAGES, users } from './definitions';
 import { dataset, mulberry32 } from './generate';
@@ -184,7 +185,7 @@ export const emailTemplates: EmailTemplate[] = [
 let sequence = 0;
 
 /** The inbox half of the mock API. `respond` adds latency; `logEmail` writes the sent email onto a record's timeline. */
-export function createInboxApi(respond: <T>(compute: () => T) => Promise<T>, logEmail: (recordId: string, subject: string, body: string) => void): InboxApi {
+export function createInboxApi(respond: <T>(compute: () => T) => Promise<T>, logEmail: (recordId: string, subject: string, body: string) => void, filesById: (id: string) => FileInfo | undefined = () => undefined): InboxApi {
   return {
     listConversations: (query) =>
       respond(() => {
@@ -230,6 +231,7 @@ export function createInboxApi(respond: <T>(compute: () => T) => Promise<T>, log
           fromEmail: me?.email ?? '',
           body,
           sentAt: new Date().toISOString(),
+          ...(input.attachmentIds?.length ? { attachments: input.attachmentIds.flatMap((fileId) => { const file = filesById(fileId); return file ? [file] : []; }) } : {}),
           ...(input.sendAt ? { status: 'queued' as const, scheduledFor: input.sendAt } : {}),
         };
         const list = inbox().messages.get(conversation.id) ?? [];

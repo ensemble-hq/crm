@@ -5,6 +5,7 @@ import type { Encryption } from '@mariachi/encryption';
 import { z } from 'zod';
 import type { AssistantEvent, AssistantReply, AssistantSettings, AssistantTurn, AssistantUsage, SaveAssistantSettings } from '../../../src/contracts/assistant';
 import type { DesignReply, DesignRequest } from '../../../src/contracts/emailDesign';
+import type { FileContent } from '../../../src/contracts/files';
 import type { ObjectDefinition } from '../../../src/contracts/metadata';
 import { designEmail } from './email-designer';
 import type { Operation } from '../../../src/contracts/operations';
@@ -30,6 +31,8 @@ const SETTINGS_ID = 'assistant';
 const MAX_ROUNDS = 8;
 /** A tool result longer than this is cut, and the model is told so, so one large list cannot fill its context. */
 const MAX_RESULT_CHARS = 14_000;
+/** How much of an attached text file the model is given. */
+const MAX_FILE_CHARS = 60_000;
 
 export class AssistantSettingsRepository extends DrizzleRepository<AssistantSettingsRow> {
   constructor(db: DrizzleDb) {
@@ -244,7 +247,8 @@ export class AssistantService {
       `The CRM's objects and fields (id:type, options in brackets):\n${describeShape(workspace.objects)}`,
     ].join('\n\n');
 
-    const messages: AIMessage[] = [{ role: 'system', content: system }, ...input.messages.map((message) => ({ role: message.role, content: message.text }))];
+    const messages: AIMessage[] = [{ role: 'system', content: system }];
+    for (const message of input.messages) messages.push({ role: message.role, content: message.fileIds?.length ? `${message.text}${await this.attached(ctx, message.fileIds)}` : message.text });
     let tokens = 0;
 
     for (let round = 0; round < MAX_ROUNDS; round += 1) {
@@ -295,6 +299,26 @@ export class AssistantService {
     if (!events.some((event) => event.type === 'say')) events.push({ type: 'say', text: steps.length > 0 ? 'I have put a plan beside this conversation. Nothing has been changed yet; run it when you are happy with it.' : 'I looked into it but have nothing to add.' });
     await flush();
     return { events, model, tokens };
+  }
+
+  /** What the person attached, as words the model can read. Text files are given in full (up to a limit); anything else is named, with a note that it cannot be read here. */
+  private async attached(ctx: Context, fileIds: string[]): Promise<string> {
+    const parts: string[] = [];
+    for (const fileId of fileIds) {
+      try {
+        const file = (await this.call(ctx, 'files.download', fileId)) as FileContent;
+        const readable = /^text\/|json|csv|xml|markdown|yaml/i.test(file.contentType) || /\.(csv|tsv|txt|md|json|xml|ya?ml|log)$/i.test(file.name);
+        if (!readable) {
+          parts.push(`[Attached file "${file.name}" (${file.contentType}, ${file.size} bytes). It is not text, so you cannot read what is in it. Say so if the request depends on it.]`);
+          continue;
+        }
+        const text = Buffer.from(file.content, 'base64').toString('utf8');
+        parts.push(`[Attached file "${file.name}"${text.length > MAX_FILE_CHARS ? `, cut at ${MAX_FILE_CHARS} of its ${text.length} characters` : ''}]\n${text.slice(0, MAX_FILE_CHARS)}\n[End of "${file.name}"]`);
+      } catch {
+        parts.push('[A file was attached but is no longer there.]');
+      }
+    }
+    return parts.length > 0 ? `\n\n${parts.join('\n\n')}` : '';
   }
 
   /** The tools that put something beside the conversation. Each returns to the model a short note of what the person now sees. */

@@ -22,6 +22,7 @@ export const emailTemplatesTable = compiled.emailTemplatesTable;
 export const inboundEmailsTable = compiled.inboundEmailsTable;
 export const mailCursorsTable = compiled.mailCursorsTable;
 export const messagesTable = compiled.messagesTable;
+export const filesTable = compiled.filesTable;
 export const notificationsTable = compiled.notificationsTable;
 export const objectsTable = compiled.objectsTable;
 export const peopleTable = compiled.peopleTable;

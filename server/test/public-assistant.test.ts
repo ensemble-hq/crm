@@ -122,11 +122,12 @@ describe('booking pages', () => {
 
 describe('the assistant', () => {
   // A stand-in model that follows a script: look something up, then show it and ask for two changes, then finish.
-  const seen: { tools: string[]; system: string } = { tools: [], system: '' };
+  const seen: { tools: string[]; system: string; user: string } = { tools: [], system: '', user: '' };
   const scripted: AIAdapter = {
     async generate(messages: AIMessage[], config) {
       seen.tools = (config?.tools ?? []).map((tool) => tool.name);
       seen.system = messages.find((message) => message.role === 'system')?.content ?? '';
+      seen.user = messages.find((message) => message.role === 'user')?.content ?? '';
       const results = messages.filter((message) => message.role === 'tool');
       const usage = { inputTokens: 100, outputTokens: 10, totalTokens: 110 };
       const base = { usage, model: 'scripted', latencyMs: 1 };
@@ -203,5 +204,15 @@ describe('the assistant', () => {
     expect(all.byPerson.map((row) => row.userId).sort()).toEqual(['usr_aiko', MAYA].sort());
     const own = await crm.call<AssistantUsage>('usr_aiko', 'assistant.usage');
     expect(own.byPerson.map((row) => row.userId)).toEqual(['usr_aiko']);
+  });
+
+  it('reads a text file handed to it, and says so when a file is not text', async () => {
+    const b64 = (text: string) => Buffer.from(text).toString('base64');
+    const notes = await crm.call<{ id: string }>(MAYA, 'files.upload', { name: 'call-notes.md', contentType: 'text/markdown', content: b64('They want 40 seats by March.') });
+    const picture = await crm.call<{ id: string }>(MAYA, 'files.upload', { name: 'whiteboard.png', contentType: 'image/png', content: b64('not really a png') });
+    await crm.call<AssistantReply>(MAYA, 'assistant.turn', { messages: [{ role: 'user', text: `What did they ask for? deal id ${deal}`, fileIds: [notes.id, picture.id, 'file_gone'] }], page: { path: '/deals' } });
+    expect(seen.user).toContain('[Attached file "call-notes.md"]\nThey want 40 seats by March.\n[End of "call-notes.md"]');
+    expect(seen.user).toContain('"whiteboard.png" (image/png, 16 bytes). It is not text');
+    expect(seen.user).toContain('no longer there');
   });
 });

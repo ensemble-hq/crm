@@ -25,7 +25,7 @@ export class DevEmailProvider implements EmailProvider {
       if (tries <= 2) throw new Error('The email service did not answer.');
     }
     // The key is the row's id: sending the same message again changes nothing.
-    await this.db.execute(sql`insert into dev_mail (id, direction, payload, sequence) values (${`out_${options.idempotencyKey}`}, 'out', ${JSON.stringify(message)}::jsonb, (select coalesce(max(sequence), 0) + 1 from dev_mail)) on conflict (id) do nothing`);
+    await this.db.execute(sql`insert into dev_mail (id, direction, payload, sequence) values (${`out_${options.idempotencyKey}`}, 'out', ${JSON.stringify({ ...message, attachments: (message.attachments ?? []).map((file) => ({ name: file.name, contentType: file.contentType, size: file.content.length })) })}::jsonb, (select coalesce(max(sequence), 0) + 1 from dev_mail)) on conflict (id) do nothing`);
     return { providerId: `dev_${options.idempotencyKey}` };
   }
 

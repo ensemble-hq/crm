@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { emailDesignSchema } from './emailDesign';
+import { fileInfoSchema } from './files';
 import { referenceSchema } from './records';
 
 /**
@@ -36,6 +37,8 @@ export const messageSchema = z.object({
   body: z.string(),
   /** The designed version, when the message has one. `body` is always there as plain text. */
   html: z.string().optional(),
+  /** Files sent with it. Fetch one with `files.download`. */
+  attachments: z.array(fileInfoSchema).optional(),
   sentAt: z.string(),
   /** Where an outgoing message has got to. Absent on incoming ones. `queued` is waiting to go or being retried. */
   status: z.enum(['queued', 'sent', 'failed']).optional(),
@@ -179,7 +182,8 @@ export interface InboxApi {
   updateConversation(input: UpdateConversation): Promise<Conversation>;
   /** Sends a reply on the thread, and logs it on the contact and the deal. */
   /** With `sendAt`, the reply is kept and sent at that time instead of now. */
-  sendReply(input: { conversationId: string; body: string; sendAt?: string }): Promise<Message>;
+  /** `attachmentIds` are files uploaded with `uploadFile`. */
+  sendReply(input: { conversationId: string; body: string; sendAt?: string; attachmentIds?: string[] }): Promise<Message>;
   /** Takes back a reply that is waiting for its time. Refused once it has gone or is going. */
   cancelScheduledReply(messageId: string): Promise<void>;
   listEmailTemplates(): Promise<EmailTemplate[]>;

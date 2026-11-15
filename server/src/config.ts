@@ -22,6 +22,14 @@ const crmSchema = z.object({
   secretsKey: z.string().min(32).default('dev-only-secrets-key-change-me-0123456789'),
   /** Where people reach the app, for links in email such as unsubscribe. */
   appOrigin: z.string().url().default('http://localhost:5185'),
+  /** Where files are kept: a folder on this machine, an S3-compatible bucket, or memory (tests). See `files.ts`. */
+  filesStore: z.enum(['local', 's3', 'memory']).default('local'),
+  filesDir: z.string().default('.data/files'),
+  filesBucket: z.string().optional(),
+  filesRegion: z.string().optional(),
+  filesEndpoint: z.string().optional(),
+  filesAccessKeyId: z.string().optional(),
+  filesSecretAccessKey: z.string().optional(),
   /** Apply pending migrations when the server starts, as a hosted instance does. */
   migrateOnStart: z.boolean().default(true),
 });
@@ -39,6 +47,13 @@ registerConfigSection(CRM_CONFIG, {
     sweepSeconds: optional(read('EMAIL_SWEEP_SECONDS')) === undefined ? undefined : Number(read('EMAIL_SWEEP_SECONDS')),
     secretsKey: optional(read('CRM_SECRETS_KEY')),
     appOrigin: optional(read('APP_ORIGIN')),
+    filesStore: optional(read('FILES_STORE')),
+    filesDir: optional(read('FILES_DIR')),
+    filesBucket: optional(read('FILES_BUCKET')),
+    filesRegion: optional(read('FILES_REGION')),
+    filesEndpoint: optional(read('FILES_ENDPOINT')),
+    filesAccessKeyId: optional(read('FILES_ACCESS_KEY_ID')),
+    filesSecretAccessKey: optional(read('FILES_SECRET_ACCESS_KEY')),
     migrateOnStart: optional(read('MIGRATE_ON_START')) === undefined ? undefined : read('MIGRATE_ON_START') === 'true',
   }),
 });

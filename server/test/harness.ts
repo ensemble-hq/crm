@@ -1,4 +1,5 @@
 import { installAuditAppendOnly } from '@mariachi/audit/postgres';
+import { createStorage } from '@mariachi/storage';
 import { createCommunication } from '@mariachi/communication';
 import type { Context, Logger } from '@mariachi/core';
 import { type PostgresDatabase, createPostgresDatabase, runMigrations } from '@mariachi/database-postgres';
@@ -63,7 +64,7 @@ export async function startCrm() {
   }
 
   const email = new DevEmailProvider(db);
-  const deps = { db, transaction: database.transaction, source: 'test', email, secretsKey: 'test-secrets-key-0123456789-0123456789', appOrigin: 'http://crm.test' };
+  const deps = { db, transaction: database.transaction, source: 'test', email, files: createStorage({ adapter: 'memory' }), secretsKey: 'test-secrets-key-0123456789-0123456789', appOrigin: 'http://crm.test' };
   const communication = createCommunication({}, { logger: quiet });
   registerServices(communication, deps);
   const services = createServices(deps);

@@ -61,7 +61,7 @@ async function play(event: AssistantEvent, ctx: EngineContext): Promise<void> {
  * not played yet (or everything, if the connection was down) is played from it. Each event is
  * played once, in order.
  */
-export async function respondFromServer(history: Array<{ role: 'user' | 'assistant'; text: string }>, ctx: EngineContext): Promise<void> {
+export async function respondFromServer(history: Array<{ role: 'user' | 'assistant'; text: string; fileIds?: string[] }>, ctx: EngineContext): Promise<void> {
   const turnId = `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   const arrived = new Map<number, AssistantEvent>();
   let played = 0;
