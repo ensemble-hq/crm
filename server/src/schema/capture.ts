@@ -49,7 +49,9 @@ export const meetingsTable = defineTable(
     bookingPageId: column.text().notNull(),
     contactId: column.text().notNull(),
     hostId: column.text().notNull(),
-    /** Local date and time, `2026-11-17T10:30`. */
+    /** Anyone else from the team in the meeting. */
+    otherHostIds: column.json().$type<string[]>().notNull().defaultSql("'[]'::jsonb"),
+    /** The moment it starts, as an instant: `2026-11-17T10:30:00.000Z`. */
     startsAt: column.text().notNull(),
     durationMinutes: column.integer().notNull(),
     createdAt: column.timestamp().notNull().defaultNow(),

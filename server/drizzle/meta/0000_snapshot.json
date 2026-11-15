@@ -1,6 +1,6 @@
 {
-  "id": "90eaefa2-dac3-45a9-8a44-d7344cbc69e9",
-  "prevId": "7410708a-8133-4e7b-a4b1-fcd5e10d746f",
+  "id": "e06ef824-2199-4ef2-8bd9-ae0cdef937bc",
+  "prevId": "ab5d5650-619a-408d-a77c-ab8fa7b05a20",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -891,6 +891,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "other_host_ids": {
+          "name": "other_host_ids",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
         },
         "starts_at": {
           "name": "starts_at",

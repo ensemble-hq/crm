@@ -1,10 +1,11 @@
 import { CalendarDays, Check, ExternalLink, Pencil, Plus, Trash2 } from 'lucide-react';
-import { type CSSProperties, type FormEvent, useState } from 'react';
+import { type CSSProperties, type FormEvent, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, useQuery } from '../api';
 import { Page } from '../app/Page';
 import { useWorkspace } from '../app/workspace';
 import type { BookingPage, BookingPageSettings } from '../contracts/capture';
+import { myTimeZone, timeZones, zoneName, zonedParts } from '../lib/zones';
 import { Modal } from '../ui/Modal';
 import { UserChip } from '../ui/PropertyValue';
 import { ICON, cardTitle, figure, medium, plainList, rowDivider, small } from '../ui/styles';
@@ -42,7 +43,10 @@ function BookingPageDialog({ page, onClose, onSaved }: { page: BookingPage | 'ne
     days: existing?.days ?? [1, 2, 3, 4, 5],
     fromHour: existing?.fromHour ?? 9,
     toHour: existing?.toHour ?? 17,
+    timeZone: existing?.timeZone ?? myTimeZone(),
+    attendance: existing?.attendance ?? 'turn',
   });
+  const zones = useMemo(() => timeZones(), []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const set = (changes: Partial<BookingPageSettings>) => setDraft((previous) => ({ ...previous, ...changes }));
@@ -95,7 +99,18 @@ function BookingPageDialog({ page, onClose, onSaved }: { page: BookingPage | 'ne
             </label>
           ))}
         </div>
-        {draft.hostIds.length > 1 ? <p className="m-field-hint">With several people, each booking goes to whoever is free and next in turn.</p> : null}
+        {draft.hostIds.length > 1 ? (
+          <div className="m-stack" data-gap="1" role="radiogroup" aria-label="Who takes each booking">
+            <label className="m-field" data-layout="inline">
+              <input className="m-radio" type="radio" name="booking-attendance" checked={draft.attendance === 'turn'} onChange={() => set({ attendance: 'turn' })} />
+              They take turns: each booking goes to whoever is free and next
+            </label>
+            <label className="m-field" data-layout="inline">
+              <input className="m-radio" type="radio" name="booking-attendance" checked={draft.attendance === 'all'} onChange={() => set({ attendance: 'all' })} />
+              Everyone attends: only times when all of them are free are offered
+            </label>
+          </div>
+        ) : null}
       </fieldset>
       <fieldset className="m-stack" data-gap="1" style={{ border: 0, padding: 0, margin: 0 }}>
         <legend className="m-field-label">Days</legend>
@@ -133,6 +148,19 @@ function BookingPageDialog({ page, onClose, onSaved }: { page: BookingPage | 'ne
             ))}
           </select>
         </div>
+      </div>
+      <div className="m-field">
+        <label className="m-field-label" htmlFor="booking-zone">
+          Those hours are in
+        </label>
+        <select className="m-select" id="booking-zone" value={draft.timeZone} onChange={(event) => set({ timeZone: event.target.value })}>
+          {(zones.includes(draft.timeZone) ? zones : [draft.timeZone, ...zones]).map((zone) => (
+            <option key={zone} value={zone}>
+              {zone.replace(/_/g, ' ')}
+            </option>
+          ))}
+        </select>
+        <p className="m-field-hint">People booking see the times on their own clock, wherever they are.</p>
       </div>
     </Modal>
   );
@@ -174,8 +202,8 @@ export function Meetings() {
                 <div className="m-stack" data-gap="0" style={{ flex: 1, minInlineSize: 0 }}>
                   <span style={medium}>{page.name}</span>
                   <span style={small}>
-                    {page.durationMinutes} minutes · {describeDays(page.days)}, {hour(page.fromHour)} to {hour(page.toHour)} ·{' '}
-                    {page.hostIds.length === 1 ? (workspace.user(page.hostIds[0])?.name ?? 'One person') : `${page.hostIds.length} people, in turn`}
+                    {page.durationMinutes} minutes · {describeDays(page.days)}, {hour(page.fromHour)} to {hour(page.toHour)} {zoneName(page.timeZone)} time ·{' '}
+                    {page.hostIds.length === 1 ? (workspace.user(page.hostIds[0])?.name ?? 'One person') : `${page.hostIds.length} people, ${page.attendance === 'all' ? 'all together' : 'in turn'}`}
                   </span>
                 </div>
                 <span style={{ fontVariantNumeric: 'tabular-nums' }}>{page.booked} booked</span>
@@ -199,7 +227,8 @@ export function Meetings() {
             {meetings.data && meetings.data.meetings.length === 0 ? <p style={{ ...small, margin: 0 }}>Nothing is booked.</p> : null}
             <ul className="m-stack" data-gap="0" style={plainList}>
               {(meetings.data?.meetings ?? []).slice(0, 14).map((meeting, index) => {
-                const [date = '', time = ''] = meeting.startsAt.split('T');
+                // Shown on the reader's own clock.
+                const { date, time } = zonedParts(meeting.startsAt, myTimeZone());
                 return (
                   <li key={meeting.id} className="m-cluster" data-gap="4" style={{ flexWrap: 'nowrap', paddingBlock: 'var(--m-space-2)', ...(index === 0 ? {} : rowDivider) }}>
                     <span style={{ inlineSize: 168, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
@@ -213,7 +242,11 @@ export function Meetings() {
                         {pages.data?.find((page) => page.id === meeting.bookingPageId)?.name ?? 'A meeting'} · {meeting.durationMinutes} minutes
                       </span>
                     </div>
-                    <UserChip userId={meeting.hostId} />
+                    <span className="m-cluster" data-gap="1" style={{ flexWrap: 'nowrap' }}>
+                      {[meeting.hostId, ...meeting.otherHostIds].map((userId) => (
+                        <UserChip key={userId} userId={userId} />
+                      ))}
+                    </span>
                   </li>
                 );
               })}
@@ -251,7 +284,16 @@ export function PublicBooking() {
   const [booked, setBooked] = useState<{ date: string; time: string }>();
 
   const page = slots.data?.page;
-  const days = slots.data?.days ?? [];
+  const zone = useMemo(() => myTimeZone(), []);
+  // The page's times are instants; here they are sorted into days on the visitor's own clock.
+  const days = useMemo(() => {
+    const byDate = new Map<string, Array<{ time: string; start: string }>>();
+    for (const start of (slots.data?.days ?? []).flatMap((day) => day.starts)) {
+      const local = zonedParts(start, zone);
+      byDate.set(local.date, [...(byDate.get(local.date) ?? []), { time: local.time, start }]);
+    }
+    return [...byDate.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, times]) => ({ date, times: times.sort((a, b) => a.start.localeCompare(b.start)) }));
+  }, [slots.data, zone]);
   const chosenDay = days.find((day) => day.date === date) ?? days[0];
 
   async function book(event: FormEvent) {
@@ -260,7 +302,9 @@ export function PublicBooking() {
     setBusy(true);
     setError(undefined);
     try {
-      await api.bookMeeting({ bookingPageId: pageId, startsAt: `${chosenDay.date}T${time}`, name, email });
+      const start = chosenDay.times.find((slot) => slot.time === time)?.start;
+      if (!start) return;
+      await api.bookMeeting({ bookingPageId: pageId, startsAt: start, name, email });
       setBooked({ date: chosenDay.date, time });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The booking did not go through. Please try again.');
@@ -294,7 +338,7 @@ export function PublicBooking() {
         <div className="m-stack" data-gap="1">
           <h1 style={{ fontSize: 'var(--m-font-size-xl)', fontWeight: 'var(--m-font-weight-medium)', margin: 0 }}>You are booked</h1>
           <p style={{ margin: 0 }}>
-            {page.name}, {longDayFormat.format(new Date(`${booked.date}T00:00:00Z`))} at {clock(booked.time)}.
+            {page.name}, {longDayFormat.format(new Date(`${booked.date}T00:00:00Z`))} at {clock(booked.time)} ({zoneName(zone)} time).
           </p>
           <p style={{ ...small, margin: 0 }}>In the finished product a calendar invitation would be on its way to {email}.</p>
         </div>
@@ -306,7 +350,9 @@ export function PublicBooking() {
     <PublicPage>
       <div className="m-stack" data-gap="1">
         <h1 style={{ fontSize: 'var(--m-font-size-xl)', fontWeight: 'var(--m-font-weight-medium)', margin: 0 }}>{page.name}</h1>
-        <span style={small}>{page.durationMinutes} minutes</span>
+        <span style={small}>
+          {page.durationMinutes} minutes{page.attendance === 'all' && page.hostIds.length > 1 ? ` with ${page.hostIds.length} of the team` : ''} · times shown for {zoneName(zone)}
+        </span>
       </div>
       {days.length === 0 ? <p style={{ margin: 0 }}>There are no free times in the coming weeks.</p> : null}
       <fieldset className="m-stack" data-gap="2" style={{ border: 0, padding: 0, margin: 0 }}>
@@ -335,8 +381,8 @@ export function PublicBooking() {
           <legend className="m-field-label">Time</legend>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))', gap: 'var(--m-space-1)' } as CSSProperties}>
             {chosenDay.times.map((slot) => (
-              <button key={slot} type="button" className="m-button" data-size="sm" data-variant={slot === time ? 'primary' : undefined} aria-pressed={slot === time} onClick={() => setTime(slot)}>
-                {clock(slot)}
+              <button key={slot.start} type="button" className="m-button" data-size="sm" data-variant={slot.time === time ? 'primary' : undefined} aria-pressed={slot.time === time} onClick={() => setTime(slot.time)}>
+                {clock(slot.time)}
               </button>
             ))}
           </div>

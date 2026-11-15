@@ -52,6 +52,10 @@ export const bookingPageSettingsSchema = z.object({
   /** The first and last hour a meeting can start, on the 24-hour clock. */
   fromHour: z.number().int().min(0).max(23),
   toHour: z.number().int().min(1).max(24),
+  /** The time zone those hours are in, such as `Europe/London`. Visitors see the times on their own clock. */
+  timeZone: z.string().default('UTC'),
+  /** With several people: `turn` gives each booking to one of them in turn; `all` books everyone into the same meeting. */
+  attendance: z.enum(['turn', 'all']).default('turn'),
 });
 export type BookingPageSettings = z.infer<typeof bookingPageSettingsSchema>;
 
@@ -62,14 +66,18 @@ export const meetingSchema = z.object({
   id: z.string(),
   bookingPageId: z.string(),
   contactId: z.string(),
+  /** Who leads it. */
   hostId: z.string(),
-  /** Local date and time, `2026-11-17T10:30`. */
+  /** Anyone else from the team who is in it, when the page books everyone together. */
+  otherHostIds: z.array(z.string()),
+  /** The moment it starts, as an instant: `2026-11-17T10:30:00.000Z`. Show it on the reader's own clock. */
   startsAt: z.string(),
   durationMinutes: z.number().int(),
 });
 export type Meeting = z.infer<typeof meetingSchema>;
 
-export const daySlotsSchema = z.object({ date: z.string(), times: z.array(z.string()) });
+/** One day's free times. `date` and `times` are on the page's own clock; `starts` are the same times as instants, in the same order. */
+export const daySlotsSchema = z.object({ date: z.string(), times: z.array(z.string()), starts: z.array(z.string()) });
 export type DaySlots = z.infer<typeof daySlotsSchema>;
 
 export interface CaptureApi {
@@ -89,7 +97,7 @@ export interface CaptureApi {
   deleteBookingPage(id: string): Promise<void>;
   /** The free times on a booking page for the coming days. */
   listSlots(bookingPageId: string): Promise<{ page: BookingPage; days: DaySlots[] }>;
-  /** What the public page calls. Books the time and logs the meeting on the contact. */
+  /** What the public page calls. Books the time and logs the meeting on the contact. `startsAt` is one of the instants from `listSlots`, or a day and time on the page's own clock (`2026-11-17T10:30`). */
   bookMeeting(input: { bookingPageId: string; startsAt: string; name: string; email: string }): Promise<Meeting>;
   /** Meetings from now on, soonest first. */
   listMeetings(): Promise<{ meetings: Meeting[]; references: Record<string, z.infer<typeof referenceSchema>> }>;

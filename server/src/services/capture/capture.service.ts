@@ -1,4 +1,6 @@
 import { ConflictError, type Context, NotFoundError, ValidationError } from '@mariachi/core';
+import { canOffer, freeHosts, requestedStart, slotsFor } from '../../../../src/lib/booking';
+import { isTimeZone, zoneName, zonedParts } from '../../../../src/lib/zones';
 import { type DrizzleDb, DrizzleRepository } from '@mariachi/database-postgres';
 import { and, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
@@ -64,34 +66,10 @@ export class MeetingsRepository extends DrizzleRepository<MeetingRow> {
     return new Map(rows.map((row) => [row.booking_page_id, row.total]));
   }
 
-  /** Meetings these people have from a date on. */
-  async of(ctx: Context, hostIds: string[], from: string): Promise<MeetingRow[]> {
-    return hostIds.length === 0 ? [] : this.findMany(ctx, [{ field: 'hostId', op: 'in', value: hostIds }, { field: 'startsAt', op: 'gte', value: from }], { limit: 5_000 });
+  /** Every meeting from a moment on. Whoever leads or sits in is worked out from these. */
+  async from(ctx: Context, from: string): Promise<MeetingRow[]> {
+    return this.findMany(ctx, [{ field: 'startsAt', op: 'gte', value: from }], { limit: 5_000 });
   }
-}
-
-/** The hosts free at a time: those with no meeting overlapping it. */
-function freeHosts(hostIds: string[], durationMinutes: number, startsAt: string, meetings: MeetingRow[]): string[] {
-  const start = Date.parse(startsAt);
-  const end = start + durationMinutes * 60_000;
-  return hostIds.filter((hostId) => !meetings.some((meeting) => meeting.hostId === hostId && Date.parse(meeting.startsAt) < end && Date.parse(meeting.startsAt) + meeting.durationMinutes * 60_000 > start));
-}
-
-/** The free times on a page for its next eight open days, starting tomorrow. */
-function slotsFor(page: BookingPageSettings, meetings: MeetingRow[], today: string): DaySlots[] {
-  const days: DaySlots[] = [];
-  for (let offset = 1; days.length < 8 && offset < 40; offset += 1) {
-    const day = new Date(Date.parse(today) + offset * DAY);
-    const date = day.toISOString().slice(0, 10);
-    if (!page.days.includes(day.getUTCDay() || 7)) continue;
-    const times: string[] = [];
-    for (let minutes = page.fromHour * 60; minutes + page.durationMinutes <= page.toHour * 60; minutes += page.durationMinutes) {
-      const time = `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
-      if (freeHosts(page.hostIds, page.durationMinutes, `${date}T${time}`, meetings).length > 0) times.push(time);
-    }
-    if (times.length > 0) days.push({ date, times });
-  }
-  return days;
 }
 
 /**
@@ -237,7 +215,7 @@ export class CaptureService {
   // Booking pages
 
   private toPage(row: BookingPageRow, counts: Map<string, number>): BookingPage {
-    return { id: row.id, ...row.settings, booked: counts.get(row.id) ?? 0 };
+    return { id: row.id, ...settingsOf(row), booked: counts.get(row.id) ?? 0 };
   }
 
   private async page(ctx: Context, pageId: string): Promise<BookingPageRow> {
@@ -255,6 +233,7 @@ export class CaptureService {
     assertAllowed(actorOf(ctx), 'manageSettings', 'change booking pages');
     const { id: pageId, ...settings } = input;
     if (settings.toHour <= settings.fromHour) throw new ValidationError('The last start time has to be after the first.');
+    if (!isTimeZone(settings.timeZone)) throw new ValidationError(`"${settings.timeZone}" is not a time zone. Use a name such as Europe/London.`);
     const users = await this.people.users(ctx);
     if (settings.hostIds.some((hostId) => !users.some((user) => user.id === hostId))) throw new ValidationError('Everyone who can be booked has to be an active member.');
     if (pageId) {
@@ -275,39 +254,51 @@ export class CaptureService {
   /** The free times on a booking page for the coming days. Open to anyone with the link. */
   async slots(ctx: Context, pageId: string): Promise<{ page: BookingPage; days: DaySlots[] }> {
     const row = await this.page(ctx, pageId);
-    const today = new Date().toISOString().slice(0, 10);
-    const [meetings, counts] = await Promise.all([this.meetings.of(ctx, row.settings.hostIds, today), this.meetings.counts(ctx)]);
-    return { page: this.toPage(row, counts), days: slotsFor(row.settings, meetings, today) };
+    const now = new Date();
+    const [meetings, counts] = await Promise.all([this.meetings.from(ctx, new Date(now.getTime() - DAY).toISOString()), this.meetings.counts(ctx)]);
+    return { page: this.toPage(row, counts), days: slotsFor(settingsOf(row), meetings, now) };
   }
 
   /** What the public page calls. The time must be one the page is offering right now, checked while the hosts' calendars are held. */
   async book(ctx: Context, input: { bookingPageId: string; startsAt: string; name: string; email: string }): Promise<Meeting> {
     const row = await this.page(ctx, input.bookingPageId);
-    const page = row.settings;
+    const page = settingsOf(row);
     const name = input.name.trim().slice(0, 200);
     const email = input.email.trim().toLowerCase();
     if (name === '' || !EMAIL.test(email)) throw new ValidationError('Enter your name and a valid email address.');
-    const today = new Date().toISOString().slice(0, 10);
-    const [date = '', time = ''] = input.startsAt.split('T');
+    const now = new Date();
+    const startsAt = requestedStart(page, input.startsAt);
     return this.events.transaction(ctx, async () => {
       await this.pages.lockHosts(ctx, page.hostIds);
-      const meetings = await this.meetings.of(ctx, page.hostIds, today);
-      const offered = slotsFor(page, meetings, today).find((day) => day.date === date)?.times.includes(time) ?? false;
-      const free = offered ? freeHosts(page.hostIds, page.durationMinutes, input.startsAt, meetings) : [];
-      if (free.length === 0) throw new ConflictError('That time has just been taken. Please choose another.');
-      // Among the hosts who are free, the booking goes to whoever is next in turn.
-      const hostId = free[(await this.pages.takeTurn(ctx, row.id)) % free.length] as string;
+      const meetings = await this.meetings.from(ctx, new Date(now.getTime() - DAY).toISOString());
+      const offered = startsAt !== undefined && slotsFor(page, meetings, now).some((day) => day.starts.includes(startsAt));
+      const free = offered ? freeHosts(page.hostIds, page.durationMinutes, startsAt, meetings) : [];
+      if (!offered || !canOffer(page, free)) throw new ConflictError('That time has just been taken. Please choose another.');
+      // Taking turns: among the hosts who are free, the booking goes to whoever is next. All together: the first person on the page leads and the rest sit in.
+      const hostId = (page.attendance === 'all' ? page.hostIds[0] : free[(await this.pages.takeTurn(ctx, row.id)) % free.length]) as string;
+      const otherHostIds = page.attendance === 'all' ? page.hostIds.filter((other) => other !== hostId) : [];
       const { record } = await this.upsertContact(ctx, { name, email });
-      const meeting = await this.meetings.create(ctx, { id: id('mtg'), bookingPageId: row.id, contactId: record.id, hostId, startsAt: input.startsAt, durationMinutes: page.durationMinutes });
-      const host = (await this.people.users(ctx)).find((user) => user.id === hostId)?.name ?? 'the team';
-      await this.activities.create(ctx, { id: id('act'), recordId: record.id, kind: 'meeting', title: `Meeting booked: ${page.name}`, body: `With ${host} on ${input.startsAt.replace('T', ' at ')}, for ${page.durationMinutes} minutes.`, actorId: hostId });
-      return { id: meeting.id, bookingPageId: meeting.bookingPageId, contactId: meeting.contactId, hostId: meeting.hostId, startsAt: meeting.startsAt, durationMinutes: meeting.durationMinutes };
+      const meeting = await this.meetings.create(ctx, { id: id('mtg'), bookingPageId: row.id, contactId: record.id, hostId, otherHostIds, startsAt, durationMinutes: page.durationMinutes });
+      const users = await this.people.users(ctx);
+      const names = [hostId, ...otherHostIds].map((userId) => users.find((user) => user.id === userId)?.name ?? 'someone on the team');
+      const local = zonedParts(startsAt, page.timeZone);
+      await this.activities.create(ctx, { id: id('act'), recordId: record.id, kind: 'meeting', title: `Meeting booked: ${page.name}`, body: `With ${names.join(' and ')} on ${local.date} at ${local.time} (${zoneName(page.timeZone)} time), for ${page.durationMinutes} minutes.`, actorId: hostId });
+      return toMeeting(meeting);
     });
   }
 
-  /** Meetings from today on, soonest first. */
+  /** Meetings from now on, soonest first. */
   async listMeetings(ctx: Context): Promise<{ meetings: Meeting[]; references: Record<string, Reference> }> {
-    const rows = await this.meetings.findMany(ctx, [{ field: 'startsAt', op: 'gte', value: new Date().toISOString().slice(0, 10) }], { sort: { field: 'startsAt', direction: 'asc' }, limit: 500 });
-    return { meetings: rows.map((row) => ({ id: row.id, bookingPageId: row.bookingPageId, contactId: row.contactId, hostId: row.hostId, startsAt: row.startsAt, durationMinutes: row.durationMinutes })), references: await this.references(ctx, rows.map((row) => row.contactId)) };
+    const rows = await this.meetings.findMany(ctx, [{ field: 'startsAt', op: 'gte', value: new Date().toISOString() }], { sort: { field: 'startsAt', direction: 'asc' }, limit: 500 });
+    return { meetings: rows.map(toMeeting), references: await this.references(ctx, rows.map((row) => row.contactId)) };
   }
+}
+
+function toMeeting(row: MeetingRow): Meeting {
+  return { id: row.id, bookingPageId: row.bookingPageId, contactId: row.contactId, hostId: row.hostId, otherHostIds: row.otherHostIds ?? [], startsAt: row.startsAt, durationMinutes: row.durationMinutes };
+}
+
+/** A page's settings, with the two that older pages were saved without. */
+function settingsOf(row: BookingPageRow): BookingPageSettings {
+  return { ...row.settings, timeZone: row.settings.timeZone ?? 'UTC', attendance: row.settings.attendance ?? 'turn' };
 }

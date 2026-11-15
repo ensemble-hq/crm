@@ -5,7 +5,7 @@ import type { AssistantReply, AssistantSettings, AssistantUsage } from '../../sr
 import type { DaySlots, Meeting, PublicForm } from '../../src/contracts/capture';
 import type { RecordDetail } from '../../src/contracts/records';
 import { registerModelProvider } from '../src/assistant/providers';
-import { type Crm, JONAS, MAYA, PRIYA, refusal, startCrm } from './harness';
+import { type Crm, AIKO, JONAS, MAYA, PRIYA, refusal, startCrm } from './harness';
 
 let crm: Crm;
 
@@ -57,6 +57,7 @@ describe('public forms', () => {
 
 describe('booking pages', () => {
   let slot: string;
+  let newYork = '';
   const book = (pageId: string, startsAt: string, index: number) => crm.visit<Meeting>('booking.book', { bookingPageId: pageId, startsAt, name: `Visitor ${index}`, email: `visitor${index}@book.example` });
 
   beforeAll(async () => {
@@ -77,6 +78,37 @@ describe('booking pages', () => {
 
   it('refuse a time the page is not offering', async () => {
     expect(await refusal(book('intro-call', `${slot.slice(0, 10)}T03:00`, 99))).toMatch(/just been taken/);
+  });
+
+  it('are offered in the page\'s time zone and booked as an instant', async () => {
+    await crm.call(MAYA, 'booking.savePage', { name: 'New York call', hostIds: [AIKO], durationMinutes: 60, days: [1, 2, 3, 4, 5, 6, 7], fromHour: 9, toHour: 10, timeZone: 'America/New_York' });
+    expect(await refusal(crm.call(MAYA, 'booking.savePage', { name: 'Nowhere', hostIds: [AIKO], durationMinutes: 60, days: [1], fromHour: 9, toHour: 10, timeZone: 'Mars/Olympus' }))).toMatch(/not a time zone/);
+    const { days } = await crm.visit<{ days: DaySlots[] }>('booking.slots', 'new-york-call');
+    const start = days[0]?.starts[0] ?? '';
+    expect(days[0]?.times).toEqual(['09:00']);
+    // Nine in the morning in New York is early afternoon in UTC, winter or summer.
+    expect(['13:00:00.000Z', '14:00:00.000Z']).toContain(start.slice(11));
+    const meeting = await book('new-york-call', start, 30);
+    expect(meeting).toMatchObject({ hostId: AIKO, otherHostIds: [], startsAt: start });
+    // The same moment written on the page's own clock is the same slot, so it is gone.
+    expect(await refusal(book('new-york-call', `${days[0]?.date}T09:00`, 31))).toMatch(/just been taken/);
+    expect(await refusal(book('new-york-call', 'whenever', 32))).toBeTruthy();
+    newYork = start;
+  });
+
+  it('book everyone on a page into one meeting when the page says so, and only when all are free', async () => {
+    await crm.call(MAYA, 'booking.savePage', { name: 'Panel', hostIds: [MAYA, AIKO], durationMinutes: 60, days: [1, 2, 3, 4, 5, 6, 7], fromHour: 9, toHour: 15, attendance: 'all' });
+    const { days } = await crm.visit<{ days: DaySlots[] }>('booking.slots', 'panel');
+    // Aiko's New York call above takes one hour out of the first day for the whole panel.
+    expect(days.flatMap((day) => day.starts)).not.toContain(newYork);
+    expect(days.flatMap((day) => day.starts)).not.toContain(`${slot}:00.000Z`);
+    const start = days[0]?.starts[0] ?? '';
+    const meeting = await book('panel', start, 40);
+    expect(meeting).toMatchObject({ hostId: MAYA, otherHostIds: [AIKO], startsAt: start });
+    expect(await refusal(book('panel', start, 41))).toMatch(/just been taken/);
+    // Sitting in on the panel makes Aiko busy on her own page too.
+    const hers = await crm.visit<{ days: DaySlots[] }>('booking.slots', 'new-york-call');
+    expect(hers.days.flatMap((day) => day.starts)).not.toContain(start);
   });
 
   it('share a slot between the people on a page in turn, then close it', async () => {

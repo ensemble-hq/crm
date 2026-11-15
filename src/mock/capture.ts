@@ -1,4 +1,6 @@
 import type { BookingPage, BookingPageSettings, CaptureApi, DaySlots, Form, FormSettings, Meeting, Submission } from '../contracts/capture';
+import { canOffer, freeHosts, requestedStart, slotsFor } from '../lib/booking';
+import { isTimeZone, zoneName, zonedParts, zonedToUtc } from '../lib/zones';
 import type { PropertyValue } from '../contracts/metadata';
 import type { CrmRecord, Reference } from '../contracts/records';
 import { MOCK_NOW, MOCK_TODAY, objects, users } from './definitions';
@@ -39,8 +41,8 @@ export const forms: StoredForm[] = [
 ];
 
 export const pages: StoredPage[] = [
-  { id: 'intro-call', name: '30-minute intro call', hostIds: ['usr_maya'], durationMinutes: 30, days: [1, 2, 3, 4, 5], fromHour: 9, toHour: 17 },
-  { id: 'team-demo', name: 'Demo with the team', hostIds: ['usr_priya', 'usr_jonas', 'usr_dario'], durationMinutes: 45, days: [1, 2, 3, 4], fromHour: 10, toHour: 16 },
+  { id: 'intro-call', name: '30-minute intro call', hostIds: ['usr_maya'], durationMinutes: 30, days: [1, 2, 3, 4, 5], fromHour: 9, toHour: 17, timeZone: 'UTC', attendance: 'turn' },
+  { id: 'team-demo', name: 'Demo with the team', hostIds: ['usr_priya', 'usr_jonas', 'usr_dario'], durationMinutes: 45, days: [1, 2, 3, 4], fromHour: 10, toHour: 16, timeZone: 'UTC', attendance: 'turn' },
 ];
 
 let submissions: Submission[] | undefined;
@@ -85,12 +87,12 @@ function seed(): void {
       const day = dayAt(1 + Math.floor(random() * 13));
       if (!page.days.includes(day.weekday)) continue;
       const hour = page.fromHour + Math.floor(random() * (page.toHour - page.fromHour));
-      const startsAt = `${day.date}T${pad(hour)}:00`;
+      const startsAt = zonedToUtc(day.date, hour * 60, page.timeZone).toISOString();
       const hostId = page.hostIds[index % page.hostIds.length] as string;
       // Nobody is seeded into two meetings at once.
-      if (!freeHosts(page, startsAt).includes(hostId)) continue;
+      if (!freeHosts(page.hostIds, page.durationMinutes, startsAt, meetings).includes(hostId)) continue;
       counter += 1;
-      meetings.push({ id: `mtg_${counter}`, bookingPageId: page.id, contactId: (contacts[Math.floor(random() * contacts.length)] as CrmRecord).id, hostId, startsAt, durationMinutes: page.durationMinutes });
+      meetings.push({ id: `mtg_${counter}`, bookingPageId: page.id, contactId: (contacts[Math.floor(random() * contacts.length)] as CrmRecord).id, hostId, otherHostIds: [], startsAt, durationMinutes: page.durationMinutes });
     }
   }
 }
@@ -121,28 +123,8 @@ function withCount(page: StoredPage): BookingPage {
   return { ...page, booked: (meetings ?? []).filter((meeting) => meeting.bookingPageId === page.id).length };
 }
 
-/** The hosts free at a time: those with no meeting overlapping it. */
-function freeHosts(page: StoredPage, startsAt: string): string[] {
-  const start = Date.parse(startsAt);
-  const end = start + page.durationMinutes * 60_000;
-  return page.hostIds.filter((hostId) => !(meetings ?? []).some((meeting) => meeting.hostId === hostId && Date.parse(meeting.startsAt) < end && Date.parse(meeting.startsAt) + meeting.durationMinutes * 60_000 > start));
-}
-
-function slotsFor(page: StoredPage): DaySlots[] {
-  seed();
-  const days: DaySlots[] = [];
-  for (let offset = 1; days.length < 8 && offset < 40; offset += 1) {
-    const day = dayAt(offset);
-    if (!page.days.includes(day.weekday)) continue;
-    const times: string[] = [];
-    for (let minutes = page.fromHour * 60; minutes + page.durationMinutes <= page.toHour * 60; minutes += page.durationMinutes) {
-      const time = `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
-      if (freeHosts(page, `${day.date}T${time}`).length > 0) times.push(time);
-    }
-    if (times.length > 0) days.push({ date: day.date, times });
-  }
-  return days;
-}
+/** The mock's clock: noon on its fixed today. */
+const mockNow = () => new Date(`${MOCK_TODAY}T12:00:00Z`);
 
 export type CaptureDeps = {
   respond: <T>(compute: () => T) => Promise<T>;
@@ -215,6 +197,7 @@ export function createCaptureApi(deps: CaptureDeps): CaptureApi {
       deps.respond(() => {
         const { id, ...settings } = input;
         if (settings.toHour <= settings.fromHour) throw new Error('The last start time has to be after the first.');
+        if (!isTimeZone(settings.timeZone)) throw new Error(`"${settings.timeZone}" is not a time zone.`);
         if (id) return withCount(Object.assign(findPage(id), settings));
         const base = settings.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'meeting';
         let slug = base;
@@ -232,8 +215,9 @@ export function createCaptureApi(deps: CaptureDeps): CaptureApi {
 
     listSlots: (bookingPageId) =>
       deps.respond(() => {
+        seed();
         const page = findPage(bookingPageId);
-        return { page: withCount(page), days: slotsFor(page) };
+        return { page: withCount(page), days: slotsFor(page, meetings ?? [], mockNow()) };
       }),
 
     bookMeeting: (input) =>
@@ -241,18 +225,22 @@ export function createCaptureApi(deps: CaptureDeps): CaptureApi {
         seed();
         const page = findPage(input.bookingPageId);
         if (input.name.trim() === '' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(input.email.trim())) throw new Error('Enter your name and a valid email address.');
-        const free = freeHosts(page, input.startsAt);
-        if (free.length === 0) throw new Error('That time has just been taken. Please choose another.');
-        // Among the hosts who are free, the booking goes to whoever is next in turn.
+        const startsAt = requestedStart(page, input.startsAt);
+        const offered = startsAt !== undefined && slotsFor(page, meetings ?? [], mockNow()).some((day) => day.starts.includes(startsAt));
+        const free = offered ? freeHosts(page.hostIds, page.durationMinutes, startsAt, meetings ?? []) : [];
+        if (!offered || !canOffer(page, free)) throw new Error('That time has just been taken. Please choose another.');
+        // Taking turns: the booking goes to whoever is free and next. All together: everyone is in the one meeting.
         const position = turn.get(page.id) ?? 0;
-        const hostId = free[position % free.length] as string;
+        const hostId = (page.attendance === 'all' ? page.hostIds[0] : free[position % free.length]) as string;
+        const otherHostIds = page.attendance === 'all' ? page.hostIds.filter((other) => other !== hostId) : [];
         turn.set(page.id, position + 1);
         const { record } = deps.upsertContact({ name: input.name.trim(), email: input.email.trim(), source: 'website', lifecycleStage: 'lead', leadStatus: 'new' });
         counter += 1;
-        const meeting: Meeting = { id: `mtg_new_${counter}`, bookingPageId: page.id, contactId: record.id, hostId, startsAt: input.startsAt, durationMinutes: page.durationMinutes };
+        const meeting: Meeting = { id: `mtg_new_${counter}`, bookingPageId: page.id, contactId: record.id, hostId, otherHostIds, startsAt, durationMinutes: page.durationMinutes };
         meetings?.push(meeting);
-        const host = users.find((user) => user.id === hostId)?.name ?? 'the team';
-        deps.logActivity(record.id, 'meeting', `Meeting booked: ${page.name}`, `With ${host} on ${input.startsAt.replace('T', ' at ')}, for ${page.durationMinutes} minutes.`);
+        const names = [hostId, ...otherHostIds].map((userId) => users.find((user) => user.id === userId)?.name ?? 'someone on the team');
+        const local = zonedParts(startsAt, page.timeZone);
+        deps.logActivity(record.id, 'meeting', `Meeting booked: ${page.name}`, `With ${names.join(' and ')} on ${local.date} at ${local.time} (${zoneName(page.timeZone)} time), for ${page.durationMinutes} minutes.`);
         return meeting;
       }),
 

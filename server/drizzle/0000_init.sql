@@ -116,6 +116,7 @@ CREATE TABLE "meetings" (
 	"booking_page_id" text NOT NULL,
 	"contact_id" text NOT NULL,
 	"host_id" text NOT NULL,
+	"other_host_ids" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"starts_at" text NOT NULL,
 	"duration_minutes" integer NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
