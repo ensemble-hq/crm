@@ -1,4 +1,5 @@
-import { BarChart3, Pencil, Pin, PinOff, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { BarChart3, Pencil, Pin, PinOff, Plus, Trash2, X } from 'lucide-react';
+import { Mark } from '../ui/Mark';
 import { type CSSProperties, type FormEvent, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, useQuery } from '../api';
@@ -326,7 +327,7 @@ export function ReportBuilder() {
         <div className="m-cluster" data-gap="2" style={{ flexWrap: 'nowrap' }}>
           <input className="m-input" id="report-ask" value={ask} placeholder="Describe the report: total amount of won deals by owner" onChange={(event) => setAsk(event.target.value)} style={{ flex: 1 }} />
           <button type="submit" className="m-button" disabled={ask.trim() === ''}>
-            <Sparkles size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Draft it
+            <Mark size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Draft it
           </button>
         </div>
         {missed ? (

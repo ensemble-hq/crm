@@ -1,4 +1,5 @@
-import { ChevronRight, House, Sparkles } from 'lucide-react';
+import { ChevronRight, House } from 'lucide-react';
+import { Mark } from '../ui/Mark';
 import type { CSSProperties, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { api, useQuery } from '../api';
@@ -127,7 +128,7 @@ export function Dashboard() {
           ) : (
             <p className="m-cluster" data-gap="2" data-align="start" style={{ ...muted, flexWrap: 'nowrap', margin: 0, minBlockSize: '1.5em' }}>
               <span style={{ display: 'inline-flex', paddingBlockStart: 2, flexShrink: 0 }}>
-                <Sparkles size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />
+                <Mark size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />
               </span>
               <span>{data ? briefing : 'Reading your day…'}</span>
             </p>

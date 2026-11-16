@@ -1,5 +1,6 @@
 import { ArrowUp, AudioLines, Paperclip, X } from 'lucide-react';
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { Mark } from '../ui/Mark';
 import { parseCsv } from '../lib/csv';
 import { ICON, initials, small } from '../ui/styles';
 import type { Attachment, ChatMessage } from './types';
@@ -177,7 +178,7 @@ export function Thread({
             <div className="m-message-body" data-streaming={message.streaming && message.text ? '' : undefined}>
               <div className="m-stack" data-gap="3">
                 <ToolRows message={message} />
-                {message.text === '' && message.streaming && !message.tools?.some((tool) => tool.status === 'running') ? <span style={small}>{activity || 'Thinking'}…</span> : null}
+                {message.text === '' && message.streaming && !message.tools?.some((tool) => tool.status === 'running') ? <span className="m-cluster" data-gap="2" style={small}><span style={{ display: 'inline-flex', color: 'var(--m-color-fg-default)' }}><Mark size={22} busy /></span> {activity || 'Thinking'}…</span> : null}
                 {message.text.split('\n\n').map((paragraph, index) =>
                   paragraph ? (
                     // biome-ignore lint/suspicious/noArrayIndexKey: paragraphs only ever append

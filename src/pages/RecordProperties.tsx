@@ -1,4 +1,5 @@
-import { Pencil, Sparkles } from 'lucide-react';
+import { Pencil } from 'lucide-react';
+import { Mark } from '../ui/Mark';
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { api, useQuery } from '../api';
 import type { ObjectDefinition, PropertyDefinition, PropertyValue as Value } from '../contracts/metadata';
@@ -229,7 +230,7 @@ function Judged({ property, record, onSaved }: { property: PropertyDefinition; r
     <div className="m-stack" data-gap="1" style={{ alignItems: 'flex-end' }}>
       {last ? <p style={{ ...small, margin: 0, textAlign: 'end' }}>{last.reason}</p> : null}
       <button type="button" className="m-button" data-variant="ghost" data-size="sm" disabled={busy} title={property.judged} onClick={() => void ask()}>
-        <Sparkles size={ICON.inline} strokeWidth={ICON.strokeWidth} aria-hidden /> {busy ? 'Asking the model…' : last ? 'Ask the model again' : 'Ask the model'}
+        <Mark size={ICON.inline + 2} busy={busy} /> {busy ? 'Asking the model…' : last ? 'Ask the model again' : 'Ask the model'}
       </button>
       {problem ? (
         <p className="m-field-error" role="alert" style={{ margin: 0, textAlign: 'end' }}>

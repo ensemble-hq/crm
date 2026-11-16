@@ -1,4 +1,5 @@
-import { Archive, Building2, Handshake, Inbox as InboxIcon, MailOpen, RotateCcw, Search, Send, Sparkles, User } from 'lucide-react';
+import { Archive, Building2, Handshake, Inbox as InboxIcon, MailOpen, RotateCcw, Search, Send, User } from 'lucide-react';
+import { Mark } from '../ui/Mark';
 import { type CSSProperties, type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, useQuery } from '../api';
@@ -328,7 +329,7 @@ function Thread({ conversationId, onChanged }: { conversationId: string; onChang
                 )
               }
             >
-              <Sparkles size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Draft a reply
+              <Mark size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Draft a reply
             </button>
             <label className="m-sr-only" htmlFor="conversation-template">
               Use a template

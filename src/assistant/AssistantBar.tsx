@@ -1,4 +1,5 @@
-import { ArrowUp, Maximize2, RotateCcw, Sparkles, X } from 'lucide-react';
+import { ArrowUp, Maximize2, RotateCcw, X } from 'lucide-react';
+import { Mark } from '../ui/Mark';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useWorkspace } from '../app/workspace';
@@ -83,7 +84,7 @@ export function AssistantBar({ offset }: { /** Width of the sidebar, so the bar 
           >
             <div className="m-cluster" data-justify="between" style={{ padding: 'var(--m-space-2) var(--m-space-3)', borderBlockEnd: 'var(--m-border-width-thin) solid var(--m-color-border-muted)' }}>
               <span className="m-cluster" data-gap="2">
-                <Sparkles size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />
+                <Mark size={ICON.nav + 2} busy={assistant.working} />
                 <span style={{ fontWeight: 'var(--m-font-weight-medium)' }}>Assistant</span>
                 <span className="m-badge">Looking at {about}</span>
               </span>
@@ -135,8 +136,8 @@ export function AssistantBar({ offset }: { /** Width of the sidebar, so the bar 
             border: 'var(--m-border-width-thin) solid var(--m-color-border-default)',
           }}
         >
-          <span style={{ display: 'inline-flex', color: 'var(--m-color-fg-muted)' }}>
-            <Sparkles size={ICON.nav} strokeWidth={ICON.strokeWidth} aria-hidden />
+          <span style={{ display: 'inline-flex', color: 'var(--m-color-fg-default)' }}>
+            <Mark size={ICON.nav + 4} busy={assistant.working} />
           </span>
           <label className="m-sr-only" htmlFor="assistant-bar">
             Ask the assistant

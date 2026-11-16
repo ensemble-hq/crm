@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="96 8 832 832">
+  <style>
+    .head { fill: #1a1f2e; }
+    @media (prefers-color-scheme: dark) { .head { fill: #f4f4f6; } }
+  </style>
+  <defs>
+    <linearGradient id="star" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8F5CFA"/><stop offset="1" stop-color="#6A3DF0"/></linearGradient>
+  </defs>
+  <path class="head" fill-rule="evenodd" d="M128 672C128 440 300 258 512 258C724 258 896 440 896 672A96 96 0 0 1 800 768H224A96 96 0 0 1 128 672ZM314 544v62a42 42 0 0 0 84 0v-62a42 42 0 0 0-84 0ZM626 544v62a42 42 0 0 0 84 0v-62a42 42 0 0 0-84 0Z"/>
+  <path fill="url(#star)" d="M812 78Q829.280 168.720 920 186Q829.280 203.280 812 294Q794.720 203.280 704 186Q794.720 168.720 812 78Z"/>
+</svg>

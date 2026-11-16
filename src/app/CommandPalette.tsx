@@ -1,4 +1,5 @@
-import { ArrowRight, type LucideIcon, Search, Sparkles } from 'lucide-react';
+import { ArrowRight, type LucideIcon, Search } from 'lucide-react';
+import { Mark } from '../ui/Mark';
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, useQuery } from '../api';
@@ -7,7 +8,7 @@ import { objectIcon } from '../ui/icons';
 import { ICON, small } from '../ui/styles';
 import { useWorkspace } from './workspace';
 
-type Item = { key: string; label: string; hint?: string; group: string; icon: LucideIcon; run: () => void };
+type Item = { key: string; label: string; hint?: string; group: string; icon: LucideIcon | typeof Mark; run: () => void };
 
 const PAGES: Array<{ label: string; to: string }> = [
   { label: 'Today', to: '/' },
@@ -91,7 +92,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
               key: 'ask',
               label: `Ask the assistant: “${text.trim()}”`,
               group: 'Assistant',
-              icon: Sparkles,
+              icon: Mark,
               run: () => {
                 assistant.send(text.trim());
                 navigate('/assistant');

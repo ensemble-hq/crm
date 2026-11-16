@@ -1,4 +1,5 @@
-import { AlertTriangle, ArrowRight, CheckCircle2, History, Sparkles } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, History } from 'lucide-react';
+import { Mark } from '../ui/Mark';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { api, useQuery } from '../api';
@@ -75,7 +76,7 @@ export function RecordBrief({ recordId, onPlan }: { recordId: string; onPlan?: (
                 <span style={small}>Nothing is planned.</span>
                 <span>
                   <button type="button" className="m-button" data-size="sm" onClick={act}>
-                    <Sparkles {...icon} /> {brief.suggestion}
+                    <Mark {...icon} /> {brief.suggestion}
                   </button>
                 </span>
               </>

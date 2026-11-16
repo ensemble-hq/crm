@@ -1,4 +1,5 @@
-import { RotateCcw, Sparkles } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
+import { Mark } from '../ui/Mark';
 import { useState } from 'react';
 import { useWorkspace } from '../app/workspace';
 import { Canvas } from '../assistant/Canvas';
@@ -35,14 +36,10 @@ export function AssistantPage() {
                 style={{
                   display: 'grid',
                   placeItems: 'center',
-                  inlineSize: 44,
-                  blockSize: 44,
-                  borderRadius: 'var(--m-radius-full)',
-                  background: 'var(--m-color-fg-default)',
-                  color: 'var(--m-color-bg-canvas)',
+                  color: 'var(--m-color-fg-default)',
                 }}
               >
-                <Sparkles size={20} strokeWidth={ICON.strokeWidth} />
+                <Mark size={72} busy={assistant.working} />
               </span>
               <h1 style={{ fontSize: 'var(--m-font-size-3xl)', fontWeight: 'var(--m-font-weight-medium)', letterSpacing: 'var(--m-font-tracking-tight)', lineHeight: 'var(--m-font-leading-tight)' }}>
                 What do you want to do, {firstName}?
@@ -65,7 +62,7 @@ export function AssistantPage() {
           <>
             <div className="m-cluster" data-justify="between" style={{ padding: 'var(--m-space-2) var(--m-space-3)' }}>
               <span className="m-cluster" data-gap="2" style={{ fontWeight: 'var(--m-font-weight-medium)' }}>
-                <Sparkles size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Assistant
+                <Mark size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Assistant
               </span>
               <button type="button" className="m-button" data-variant="ghost" data-size="sm" disabled={assistant.working} onClick={assistant.reset}>
                 <RotateCcw size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> New conversation

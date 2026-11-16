@@ -1,4 +1,5 @@
-import { ArrowRightLeft, Check, Circle, CircleSlash, Pause, Play, Plus, RotateCcw, Sparkles, X } from 'lucide-react';
+import { ArrowRightLeft, Check, Circle, CircleSlash, Pause, Play, Plus, RotateCcw, X } from 'lucide-react';
+import { Mark } from '../ui/Mark';
 import { type FormEvent, useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { api, useQuery } from '../api';
@@ -276,7 +277,7 @@ function Assessment({ run, busy, act }: { run: MigrationRun; busy: boolean; act:
     <section className="m-card m-stack" data-gap="3" aria-label="What the model makes of your account" style={{ padding: 'var(--m-space-4)' }}>
       <div className="m-stack" data-gap="1">
         <span className="m-cluster" data-gap="2" style={medium}>
-          <Sparkles size={ICON.nav} strokeWidth={ICON.strokeWidth} aria-hidden /> Beyond the standard things
+          <Mark size={ICON.nav} strokeWidth={ICON.strokeWidth} aria-hidden /> Beyond the standard things
         </span>
         <span style={small}>The plan above brings everything HubSpot has as standard, and needs no model. With a model connected, it can also look at what else your account uses, such as tickets, quotes, workflows and forms, and put forward what to bring, what to set up here, and what this CRM would need built. Nothing happens until you accept it.</span>
       </div>
@@ -285,7 +286,7 @@ function Assessment({ run, busy, act }: { run: MigrationRun; busy: boolean; act:
       ) : (
         <div>
           <button type="button" className="m-button" data-size="sm" disabled={busy || looking || !idle || !settings.data} onClick={() => void look()}>
-            {looking ? <span className="m-spinner" aria-hidden style={{ inlineSize: 12, blockSize: 12 }} /> : <Sparkles size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />} {looking ? 'Looking at your account…' : found ? 'Look again' : 'Look at my account'}
+            <Mark size={ICON.button + 2} busy={looking} /> {looking ? 'Looking at your account…' : found ? 'Look again' : 'Look at my account'}
           </button>
         </div>
       )}

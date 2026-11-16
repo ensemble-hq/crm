@@ -1,4 +1,4 @@
-import { Sparkles } from 'lucide-react';
+import { Mark } from '../ui/Mark';
 import { type FormEvent, useEffect, useState } from 'react';
 import { api, useQuery } from '../api';
 import { useWorkspace } from '../app/workspace';
@@ -57,7 +57,7 @@ export function AssistantSettingsCard() {
       <form className="m-card-body m-stack" data-gap="3" onSubmit={(event) => void save(event)}>
         <div className="m-cluster" data-justify="between">
           <h2 className="m-cluster" data-gap="2" style={cardTitle}>
-            <Sparkles size={ICON.nav} strokeWidth={ICON.strokeWidth} aria-hidden /> Assistant
+            <Mark size={ICON.nav} strokeWidth={ICON.strokeWidth} aria-hidden /> Assistant
           </h2>
           {data.configured ? (
             <span className="m-badge" data-tone="success">

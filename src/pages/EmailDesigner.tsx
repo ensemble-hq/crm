@@ -1,4 +1,5 @@
-import { AlignCenter, AlignLeft, ArrowDown, ArrowUp, Columns2, Copy, GripVertical, Heading, Image, Mail, Megaphone, Minus, Monitor, MousePointerClick, MoveVertical, PenLine, Quote, Redo2, Send, Smartphone, Sparkles, Text, Trash2, Type, Undo2, WandSparkles } from 'lucide-react';
+import { AlignCenter, AlignLeft, ArrowDown, ArrowUp, Columns2, Copy, GripVertical, Heading, Image, Mail, Megaphone, Minus, Monitor, MousePointerClick, MoveVertical, PenLine, Quote, Redo2, Send, Smartphone, Text, Trash2, Type, Undo2 } from 'lucide-react';
+import { Mark } from '../ui/Mark';
 import { type CSSProperties, type DragEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { api, useQuery } from '../api';
@@ -242,7 +243,7 @@ function AskModel({ title, placeholder, ideas, busy, onAsk }: { title: string; p
   return (
     <div className="m-stack" data-gap="2">
       <span className="m-cluster" data-gap="1" style={{ ...medium, fontSize: 'var(--m-font-size-sm)' }}>
-        <Sparkles size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden style={{ color: 'var(--m-color-accent-text)' }} /> {title}
+        <Mark size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden style={{ color: 'var(--m-color-accent-text)' }} /> {title}
       </span>
       <textarea
         className="m-input"
@@ -258,7 +259,7 @@ function AskModel({ title, placeholder, ideas, busy, onAsk }: { title: string; p
         style={{ resize: 'vertical' }}
       />
       <button type="button" className="m-button" data-variant="primary" data-size="sm" disabled={busy || !prompt.trim()} onClick={() => ask(prompt)}>
-        {busy ? <span className="m-spinner" data-size="sm" role="status" aria-label="Writing" /> : <WandSparkles size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />} {busy ? 'Writing…' : 'Write it'}
+        <Mark size={ICON.button + 2} busy={busy} label={busy ? 'Writing' : undefined} /> {busy ? 'Writing…' : 'Write it'}
       </button>
       <div className="m-cluster" data-gap="1">
         {ideas.map((idea) => (
@@ -284,7 +285,7 @@ function StartScreen({ busy, problem, onAsk, onPick }: { busy: boolean; problem?
         {problem ? <ModelProblem problem={problem} /> : null}
         <div className="m-cluster" data-gap="2">
           <button type="button" className="m-button" data-variant="primary" disabled={busy || !prompt.trim()} onClick={() => onAsk(prompt.trim())}>
-            {busy ? <span className="m-spinner" data-size="sm" role="status" aria-label="Writing" /> : <WandSparkles size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />} {busy ? 'Writing your email…' : 'Write it for me'}
+            <Mark size={ICON.button + 2} busy={busy} label={busy ? 'Writing' : undefined} /> {busy ? 'Writing your email…' : 'Write it for me'}
           </button>
           {['Welcome a new customer and tell them what happens next', 'Announce a new feature to existing customers', 'Win back a deal that has gone quiet'].map((idea) => (
             <button key={idea} type="button" className="m-badge" disabled={busy} onClick={() => setPrompt(idea)} style={{ cursor: 'pointer', border: 0 }}>

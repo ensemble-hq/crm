@@ -1,0 +1,83 @@
+/* The CRM's mark. Still when idle; while the model is working its eyes blink and stars come and go over its head. */
+.crm-mark {
+  flex-shrink: 0;
+  overflow: visible;
+}
+.crm-mark-eye,
+.crm-mark-star {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+/* At rest there is one star, over the right shoulder. */
+.crm-mark-star[data-at='left'],
+.crm-mark-star[data-at='middle'] {
+  opacity: 0;
+}
+.crm-mark[data-busy] .crm-mark-eye {
+  animation: crm-mark-blink 2.8s ease-in-out infinite;
+}
+.crm-mark[data-busy] .crm-mark-star {
+  opacity: 0;
+  animation: crm-mark-twinkle 2.1s ease-in-out infinite;
+}
+.crm-mark[data-busy] .crm-mark-star[data-at='left'] {
+  animation-delay: 0s;
+}
+.crm-mark[data-busy] .crm-mark-star[data-at='middle'] {
+  animation-delay: 0.7s;
+}
+.crm-mark[data-busy] .crm-mark-star[data-at='right'] {
+  animation-delay: 1.4s;
+}
+@keyframes crm-mark-blink {
+  0%,
+  42%,
+  50%,
+  88%,
+  100% {
+    transform: scaleY(1);
+  }
+  46%,
+  92%,
+  96% {
+    transform: scaleY(0.08);
+  }
+  94% {
+    transform: scaleY(1);
+  }
+}
+/* A star swells into view, holds a moment and fades, turning a little as it goes. */
+@keyframes crm-mark-twinkle {
+  0%,
+  55%,
+  100% {
+    opacity: 0;
+    transform: scale(0.3) rotate(-20deg);
+  }
+  22% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+  34% {
+    opacity: 1;
+    transform: scale(0.92) rotate(6deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .crm-mark[data-busy] .crm-mark-eye {
+    animation: none;
+  }
+  /* No movement: the stars breathe in place instead. */
+  .crm-mark[data-busy] .crm-mark-star {
+    animation: crm-mark-glow 2.4s ease-in-out infinite;
+  }
+}
+@keyframes crm-mark-glow {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}

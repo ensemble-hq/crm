@@ -1,4 +1,6 @@
-import { Bookmark, Eye, House, Inbox, type LucideIcon, Monitor, Moon, PanelLeft, PanelLeftOpen, Search, Settings, Sparkles, Sun } from 'lucide-react';
+import { Bookmark, Eye, House, Inbox, type LucideIcon, Monitor, Moon, PanelLeft, PanelLeftOpen, Search, Settings, Sun } from 'lucide-react';
+import { Mark } from '../ui/Mark';
+import { useSharedAssistant } from '../assistant/context';
 import { type CSSProperties, useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api, useQuery } from '../api';
@@ -12,7 +14,7 @@ import { Notifications } from './Notifications';
 import { type ColorMode, useColorMode } from './colorMode';
 import { useWorkspace } from './workspace';
 
-type NavItem = { to: string; label: string; icon: LucideIcon; count?: number };
+type NavItem = { to: string; label: string; icon: LucideIcon | typeof Mark; count?: number };
 
 const FONT_FEATURES = "'calt' on, 'ss03' on, 'cv09' on, 'cv02' on, 'cv03' on, 'cv04' on";
 
@@ -25,6 +27,7 @@ const pinned: NavItem[] = [
 
 function SidebarLink({ item, current, collapsed = false }: { item: NavItem; current: boolean; collapsed?: boolean }) {
   const Icon = item.icon;
+  const assistant = useSharedAssistant();
   return (
     <li>
       <Link
@@ -36,7 +39,8 @@ function SidebarLink({ item, current, collapsed = false }: { item: NavItem; curr
         style={{ ...(current ? { boxShadow: 'inset 0 0 0 1px var(--m-color-border-default)' } : {}), ...(collapsed ? { justifyContent: 'center' } : {}) }}
       >
         <span style={{ display: 'inline-flex', color: current ? 'inherit' : 'var(--m-color-fg-subtle)' }}>
-          <Icon size={ICON.nav} strokeWidth={ICON.strokeWidth} aria-hidden />
+          {/* The assistant's own link shows when it is working, wherever you are. */}
+          {Icon === Mark ? <Mark size={ICON.nav + 2} busy={assistant.working} /> : <Icon size={ICON.nav} strokeWidth={ICON.strokeWidth} aria-hidden />}
         </span>
         <span className={collapsed ? 'm-sr-only' : undefined} style={collapsed ? undefined : { flex: 1 }}>
           {item.label}
@@ -73,7 +77,7 @@ function Sidebar({ collapsed, onToggle, onSearch }: { collapsed: boolean; onTogg
   const due = useQuery(() => (taskObject ? api.listRecords({ objectId: taskObject.id, viewId: taskObject.views[0]?.id, page: 1, pageSize: 1 }) : Promise.resolve(undefined)), [taskObject?.id, workspace.revision]);
   const unread = useQuery(() => api.inboxCounts(), [workspace.revision]);
   const primary: NavItem[] = [
-    { to: '/assistant', label: 'Assistant', icon: Sparkles },
+    { to: '/assistant', label: 'Assistant', icon: Mark },
     { to: '/', label: 'Today', icon: House, count: due.data?.total },
     { to: '/inbox', label: 'Inbox', icon: Inbox, count: unread.data?.mineUnread },
   ];
@@ -123,13 +127,9 @@ function Sidebar({ collapsed, onToggle, onSearch }: { collapsed: boolean; onTogg
                   placeItems: 'center',
                   inlineSize: 28,
                   blockSize: 28,
-                  borderRadius: 'var(--m-radius-md)',
-                  background: 'var(--m-color-fg-default)',
-                  color: 'var(--m-color-bg-canvas)',
-                  fontWeight: 'var(--m-font-weight-semibold)',
                 }}
               >
-                {workspace.name.slice(0, 1)}
+                <Mark size={28} />
               </span>
               {workspace.name}
             </span>

@@ -1,4 +1,5 @@
-import { ArrowDown, ArrowUp, CheckSquare, Mail, Pause, Pencil, Phone, Play, Plus, Send, Sparkles, Trash2, UserMinus } from 'lucide-react';
+import { ArrowDown, ArrowUp, CheckSquare, Mail, Pause, Pencil, Phone, Play, Plus, Send, Trash2, UserMinus } from 'lucide-react';
+import { Mark } from '../ui/Mark';
 import { type CSSProperties, useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, useQuery } from '../api';
@@ -445,7 +446,7 @@ export function SequenceDetail() {
                   <span style={small}>{detail.data.total > detail.data.enrollments.length ? `The most recent ${detail.data.enrollments.length} of ${detail.data.total.toLocaleString('en-US')}` : `${detail.data.total.toLocaleString('en-US')} in all`}</span>
                 </div>
                 <Link to="/contacts" className="m-button" data-size="sm">
-                  <Sparkles size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Enrol from contacts
+                  <Mark size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden /> Enrol from contacts
                 </Link>
               </div>
               {detail.data.enrollments.length === 0 ? <p style={{ ...small, margin: 0 }}>Nobody yet. Select contacts in the contacts list and choose “Enrol in sequence”.</p> : null}
