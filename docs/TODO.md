@@ -83,7 +83,7 @@ Nothing below can be worked around. A customer cannot be given an instance until
 | Mariachi installed, not linked | Every `@mariachi/*` package is linked from a checkout beside this repo, so nobody else can install it. The CRM now needs Mariachi's `main`, which is ahead of the last release (0.1.0) | A Mariachi release with the streaming flag, and `@mariachi/design` published; then point `package.json` at the published versions |
 | Migrations that are kept | The schema is one initial migration, regenerated on every change | Stop regenerating at the first deployment; every change after that is its own migration |
 | Organization name | "Northwind" is written into the workspace and the email rules | A setting, filled in when the instance is created |
-| Licence and README | Neither exists | A decision on the licence |
+| Licence | Chosen: the Sustainable Use License 1.0, free to run and not to resell (`LICENSE.md`) | A lawyer's read, and the legal name of the licensor once the company has one |
 
 ## 2. The HubSpot importer
 
@@ -191,7 +191,7 @@ These are yours to make. Each one holds up something above.
 - **Who pays for AI tokens:** Ensemble credits, or the customer's own key. The email designer and model-filled fields make this more pressing, because both spend tokens outside the assistant.
 - **What the importer promises:** the list of things that do not migrate cleanly, and how the pre-migration report says so.
 - **How strong the update promise is** for instances whose core code a customer has changed.
-- **The licence** for the public repository.
+- **The licence** for the public repository: chosen (Sustainable Use License 1.0), still to be read by a lawyer.
 - **When Mariachi is released** with what the CRM now depends on.
 - **How a "build" proposal becomes built.** When the importer's model finds something the account relies on that the CRM lacks, it writes a brief. Something has to take that brief and change the instance's code: Ensemble's builder, presumably. The CRM needs to know where to send it.
 
