@@ -129,7 +129,7 @@ function Sidebar({ collapsed, onToggle, onSearch }: { collapsed: boolean; onTogg
                   blockSize: 28,
                 }}
               >
-                <Mark size={28} />
+                <Mark size={28} lively />
               </span>
               {workspace.name}
             </span>

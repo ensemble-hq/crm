@@ -27,6 +27,8 @@ export type MarkProps = {
   size?: number | string;
   /** The model is working: blink, and let the stars come and go. */
   busy?: boolean;
+  /** Come to life under the pointer, as it does when the model is working. */
+  lively?: boolean;
   /** Leave the star out, for places too small to hold it. */
   plain?: boolean;
   /** Read out by a screen reader. Left out, the mark is decoration. */
@@ -38,10 +40,10 @@ export type MarkProps = {
   'aria-hidden'?: boolean | 'true' | 'false';
 };
 
-export function Mark({ size = 16, busy = false, plain = false, label, style, className }: MarkProps) {
+export function Mark({ size = 16, busy = false, lively = false, plain = false, label, style, className }: MarkProps) {
   const id = useId();
   return (
-    <svg className={className ? `crm-mark ${className}` : 'crm-mark'} data-busy={busy ? '' : undefined} width={size} height={size} viewBox="96 8 832 832" fill="none" role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : true} style={style}>
+    <svg className={className ? `crm-mark ${className}` : 'crm-mark'} data-busy={busy ? '' : undefined} data-lively={lively ? '' : undefined} width={size} height={size} viewBox="96 8 832 832" fill="none" role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : true} style={style}>
       <defs>
         <linearGradient id={`${id}-star`} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="#8F5CFA" />

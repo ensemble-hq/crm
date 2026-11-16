@@ -1,4 +1,5 @@
-/* The CRM's mark. Still when idle; while the model is working its eyes blink and stars come and go over its head. */
+/* The CRM's mark. Still when idle; while the model is working its eyes blink and stars come and go over its head.
+   It does the same under the pointer in the sidebar, and wherever it is marked lively. */
 .crm-mark {
   flex-shrink: 0;
   overflow: visible;
@@ -13,20 +14,20 @@
 .crm-mark-star[data-at='middle'] {
   opacity: 0;
 }
-.crm-mark[data-busy] .crm-mark-eye {
+.crm-mark:is([data-busy], [data-lively]:hover, .m-sidebar-link:hover *, .m-sidebar-link:focus-visible *) .crm-mark-eye {
   animation: crm-mark-blink 2.8s ease-in-out infinite;
 }
-.crm-mark[data-busy] .crm-mark-star {
+.crm-mark:is([data-busy], [data-lively]:hover, .m-sidebar-link:hover *, .m-sidebar-link:focus-visible *) .crm-mark-star {
   opacity: 0;
   animation: crm-mark-twinkle 2.1s ease-in-out infinite;
 }
-.crm-mark[data-busy] .crm-mark-star[data-at='left'] {
+.crm-mark:is([data-busy], [data-lively]:hover, .m-sidebar-link:hover *, .m-sidebar-link:focus-visible *) .crm-mark-star[data-at='left'] {
   animation-delay: 0s;
 }
-.crm-mark[data-busy] .crm-mark-star[data-at='middle'] {
+.crm-mark:is([data-busy], [data-lively]:hover, .m-sidebar-link:hover *, .m-sidebar-link:focus-visible *) .crm-mark-star[data-at='middle'] {
   animation-delay: 0.7s;
 }
-.crm-mark[data-busy] .crm-mark-star[data-at='right'] {
+.crm-mark:is([data-busy], [data-lively]:hover, .m-sidebar-link:hover *, .m-sidebar-link:focus-visible *) .crm-mark-star[data-at='right'] {
   animation-delay: 1.4s;
 }
 @keyframes crm-mark-blink {
@@ -64,11 +65,11 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .crm-mark[data-busy] .crm-mark-eye {
+  .crm-mark:is([data-busy], [data-lively]:hover, .m-sidebar-link:hover *, .m-sidebar-link:focus-visible *) .crm-mark-eye {
     animation: none;
   }
   /* No movement: the stars breathe in place instead. */
-  .crm-mark[data-busy] .crm-mark-star {
+  .crm-mark:is([data-busy], [data-lively]:hover, .m-sidebar-link:hover *, .m-sidebar-link:focus-visible *) .crm-mark-star {
     animation: crm-mark-glow 2.4s ease-in-out infinite;
   }
 }
