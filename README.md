@@ -7,12 +7,12 @@
 
 # Ensemble CRM
 
-**A complete CRM you run as your own instance and change by asking.**
+**An open-source CRM you can take, change by asking, and run as your own.**
 
-It does what teams use HubSpot for, it is built so the assistant does most of the data entry,<br>
-and every part of it can be reached by an agent as easily as by a person.
+Bring it into [Ensemble](https://shipensemble.com), say what you want different, and try each change on a running copy.<br>
+It becomes your team's CRM, on your own instance, with no developer needed.
 
-[What it does](#what-it-does) · [A look around](#a-look-around) · [Built for agents](#built-for-agents) · [Moving in from HubSpot](#moving-in-from-hubspot) · [Run it](#run-it) · [Status](#status)
+[Take it into Ensemble](#take-it-into-ensemble) · [What it does](#what-it-does) · [A look around](#a-look-around) · [Built for agents](#built-for-agents) · [Moving in from HubSpot](#moving-in-from-hubspot) · [Run it yourself](#run-it-yourself) · [Status](#status)
 
 <br>
 
@@ -27,7 +27,29 @@ and every part of it can be reached by an agent as easily as by a person.
 
 ## What it is
 
-Ensemble CRM is the first template for [Ensemble](docs/PLAN.md), a hosted platform where a team takes a working product, runs it as their own instance, and reshapes it without writing code.
+Ensemble CRM is a whole, working CRM, published in the open so that anyone can take it and make it theirs. It does what teams use HubSpot for, the assistant does most of the data entry, and an agent can reach every part of it as easily as a person can.
+
+It is also the first template for [Ensemble](https://shipensemble.com), where the people who know a product change it themselves. That is the short way to use it: you don't set anything up, you don't write code, and you don't need an engineer to get from this repository to a CRM your team works in.
+
+## Take it into Ensemble
+
+1. **Bring it in.** Start a project in Ensemble from this repository. Ensemble reads the code, works out how to run it, and starts your own copy: the app, its API and its database.
+2. **Say what you want different.** In plain words, the way you would tell a colleague. Ensemble asks a question or two, shows you a plan, and builds the change on its own running copy, so you can click through it before anything is kept.
+3. **Keep what works.** Accept a change and it becomes part of your CRM. Throw away the ones that don't. Your instance is yours: your own database, your own version of the code.
+
+The kind of thing you can ask for:
+
+- "Call deals 'opportunities', and add a renewal date that reminds the owner 30 days before."
+- "We sell through partners. Add partners as their own object and show which partner brought each deal."
+- "Put our logo and colours on the booking pages."
+- "Every Monday, email me the deals that haven't moved in two weeks."
+
+Most of these need no new code, because objects, fields, pipelines and workflows are data. When a change does need code, Ensemble's agent writes it, runs the tests, and shows it to you running. Either way you never see git, packages or a terminal.
+
+> [!NOTE]
+> This is pre-release. You can read the code and run the demo today. Taking it into Ensemble as a hosted, working instance opens with the first release; [request access](https://shipensemble.com/request-access) to be told when. See [Status](#status).
+
+## How it is built to be changed
 
 Three ideas run through it:
 
@@ -142,7 +164,9 @@ A move is a list of steps you can see. Each step reads one kind of thing a page 
 > [!NOTE]
 > The importer has been tested against a stand-in account built from HubSpot's API documentation. It has not yet been run against a real HubSpot account.
 
-## Run it
+## Run it yourself
+
+You don't need any of this to use the CRM through Ensemble. It is here for developers who want to run the code on their own computer.
 
 **The demo, with no backend.** Everything runs in the browser on generated data.
 
@@ -225,7 +249,7 @@ This is pre-release software. It works end to end in development and is not yet 
 
 What stands between here and a first release, in short:
 
-- Sign-in and email through Ensemble. Today there are development stand-ins for both.
+- Hosted instances on Ensemble, with sign-in and email through it. Today there are development stand-ins for both, and the "Take it into Ensemble" path above is not open yet.
 - The importer proven on a real HubSpot account.
 - Gmail and Outlook sync, which comes straight after.
 
@@ -233,4 +257,4 @@ The full list, and the order it will be done in, is in [docs/TODO.md](docs/TODO.
 
 ## Licence
 
-Not yet chosen. Until a licence is added, the code is published for reading and is not licensed for reuse.
+The CRM is meant to be open source, free for anyone to take and change. The licence has not been chosen yet, so until one is added here the code is published for reading and is not licensed for reuse.
