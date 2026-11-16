@@ -1,5 +1,5 @@
 import { column, defineTable, index, type InferEntity } from '@mariachi/database';
-import type { StepCounts, StepSpec } from '../../../src/contracts/migration';
+import type { Assessment, StepCounts, StepSpec } from '../../../src/contracts/migration';
 
 /** One move into the CRM from another system. */
 export const migrationRunsTable = defineTable(
@@ -19,6 +19,8 @@ export const migrationRunsTable = defineTable(
     startedBy: column.text().notNull(),
     /** Held by the worker carrying the run, so two never work the same run. */
     lockedUntil: column.timestamp(),
+    /** What the connected model made of the account, and what was decided about each thing it put forward. */
+    assessment: column.json().$type<Assessment>(),
     error: column.text(),
     startedAt: column.timestamp(),
     finishedAt: column.timestamp(),

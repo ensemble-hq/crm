@@ -57,6 +57,8 @@ export class FakeHubSpot implements MigrationSource {
   ];
   schemas: FakeSchema[] = [];
   objects: Record<string, FakeObject[]> = { contacts: [], companies: [], deals: [], notes: [], calls: [], emails: [], meetings: [] };
+  /** Things that are not records: workflows, forms and the like, by the path HubSpot serves them at. */
+  setup: Record<string, Array<{ name: string }>> = {};
   /** Every path asked for, in order. */
   asked: string[] = [];
   /** Set to make the next matching request fail once, the way HubSpot does when it is having a bad moment. */
@@ -79,6 +81,7 @@ export class FakeHubSpot implements MigrationSource {
     }
     if (path === '/crm/v3/owners') return this.paged(this.owners.filter((owner) => Boolean(owner.archived) === (query.archived === 'true')), query);
     if (path === '/crm/v3/schemas') return { results: this.schemas };
+    if (this.setup[path]) return { results: this.setup[path] };
     const properties = path.match(/^\/crm\/v3\/properties\/([^/]+)$/);
     if (properties) {
       const type = properties[1] as string;

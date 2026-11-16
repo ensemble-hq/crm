@@ -1,6 +1,6 @@
 {
-  "id": "bbcb4b9b-fab8-494b-9c36-8d867f7425b8",
-  "prevId": "b31445dc-fccc-4150-beb0-87a22acf78a7",
+  "id": "d3305f5f-bac1-4c15-b52a-1b1f32fc40b7",
+  "prevId": "ac43f0c4-cd4b-47fc-aaf0-2f1dd3e1fc7d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2442,6 +2442,12 @@
         "locked_until": {
           "name": "locked_until",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "assessment": {
+          "name": "assessment",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },

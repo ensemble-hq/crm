@@ -383,7 +383,7 @@ const records: StepHandler<'records'> = {
     const lookups: Lookups = {
       owners,
       option(property, raw) {
-        const known = optionLinks.get(property.id)?.get(raw);
+        const known = optionLinks.get(property.id)?.get(raw) ?? SAME_CHOICE[`${objectId}.${property.id}`]?.[raw];
         if (known) return known;
         const label = labelLinks.get(property.id)?.get(raw);
         const same = sameOption([...(property.options ?? []), ...(added.get(property.id) ?? [])], raw, label);

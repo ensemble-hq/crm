@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { assistantReplySchema, assistantSettingsSchema, assistantTurnSchema, assistantUsageSchema, saveAssistantSettingsSchema } from './assistant';
 import { auditCheckSchema, auditPageSchema, auditQuerySchema } from './audit';
 import { erasureSchema, personalDataSchema } from './privacy';
-import { addStepSchema, changeStepSchema, createMigrationSchema, migrationRunSchema, peekSchema, startMigrationSchema } from './migration';
+import { addStepSchema, changeStepSchema, createMigrationSchema, decideProposalSchema, migrationRunSchema, peekSchema, startMigrationSchema } from './migration';
 import { designReplySchema, designRequestSchema, emailDesignSchema } from './emailDesign';
 import { MAX_ATTACHMENTS, fileContentSchema, fileInfoSchema, uploadFileSchema } from './files';
 import { briefSchema } from './brief';
@@ -1135,6 +1135,25 @@ export const operations: Operation[] = [
     title: 'Skip, restore, retry or remove a step',
     description: 'Changes one step of a move. "skip" leaves it out, "restore" puts a skipped step back, "retry" runs a failed step again from where it stopped, and "remove" takes out a step that has not started. Skipping or retrying the step a move stopped at lets the move carry on. The contacts step cannot be skipped or removed, because it carries across who has asked not to be emailed.',
     input: changeStepSchema,
+    output: migrationRunSchema,
+    effect: 'write',
+  },
+  {
+    name: 'migrations.assess',
+    method: 'assessMigration',
+    title: 'Have the model look at the HubSpot account',
+    description: 'Reads what the account has beyond the standard things the plan already brings (tickets, products, quotes, tasks, workflows, forms, lists, marketing emails and more), and has the connected model put forward additions: steps to bring more across, things to set up here to match, and features the account relies on that this CRM lacks. Nothing changes until a person accepts a proposal with migrations.decide. Needs a model connected in Settings; the standard plan works without one.',
+    input: z.string(),
+    output: migrationRunSchema,
+    effect: 'write',
+    slow: true,
+  },
+  {
+    name: 'migrations.decide',
+    method: 'decideMigrationProposal',
+    title: 'Accept or dismiss a proposal',
+    description: 'Decides one thing the model put forward for a move. Accepting a "step" proposal creates the object it needs, if any, and adds its steps to the plan. Accepting a "setup" or "build" proposal records that it is wanted.',
+    input: decideProposalSchema,
     output: migrationRunSchema,
     effect: 'write',
   },

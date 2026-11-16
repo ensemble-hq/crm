@@ -1,10 +1,11 @@
-import { ArrowRightLeft, Check, Circle, CircleSlash, Pause, Play, Plus, RotateCcw, X } from 'lucide-react';
+import { ArrowRightLeft, Check, Circle, CircleSlash, Pause, Play, Plus, RotateCcw, Sparkles, X } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { api, useQuery } from '../api';
 import { Page } from '../app/Page';
 import { useWorkspace } from '../app/workspace';
-import type { MigrationRun, MigrationStep, StepSpec } from '../contracts/migration';
+import { useSharedAssistant } from '../assistant/context';
+import type { MigrationRun, MigrationStep, Proposal, StepSpec } from '../contracts/migration';
 import { ICON, figure, medium, plainList, rowDivider, small, tabular } from '../ui/styles';
 
 /**
@@ -189,6 +190,8 @@ export function MoveIn() {
               </ol>
             </section>
 
+            {open || shown.assessment ? <Assessment run={shown} busy={busy} act={act} /> : null}
+
             {open ? (
               <section className="m-card m-stack" data-gap="3" aria-label="Something particular to your account" style={{ padding: 'var(--m-space-4)' }}>
                 <div className="m-stack" data-gap="1">
@@ -230,6 +233,106 @@ export function MoveIn() {
 
       </div>
     </Page>
+  );
+}
+
+const KIND_WORDS: Record<Proposal['proposal']['kind'], { label: string; accept: string; accepted: string }> = {
+  step: { label: 'Bring across', accept: 'Add to the plan', accepted: 'Added to the plan' },
+  setup: { label: 'Set up here', accept: 'Have the assistant set it up', accepted: 'Handed to the assistant' },
+  build: { label: 'Needs building', accept: 'We want this', accepted: 'Wanted' },
+};
+
+/**
+ * The layer on top of the fixed plan: with a model connected, it looks at what else the account
+ * has and puts forward additions. Nothing it proposes happens until someone accepts it here.
+ */
+function Assessment({ run, busy, act }: { run: MigrationRun; busy: boolean; act: (work: () => Promise<unknown>) => Promise<void> }) {
+  const settings = useQuery(() => api.getAssistantSettings(), []);
+  const assistant = useSharedAssistant();
+  const navigate = useNavigate();
+  const [looking, setLooking] = useState(false);
+  const found = run.assessment;
+  const idle = run.status !== 'running';
+  const over = !OPEN.includes(run.status);
+
+  async function look() {
+    setLooking(true);
+    await act(() => api.assessMigration(run.id));
+    setLooking(false);
+  }
+
+  function accept(item: Proposal) {
+    void act(async () => {
+      await api.decideMigrationProposal({ runId: run.id, proposalId: item.id, accept: true });
+      // Something to set up is the assistant's to do: it plans the changes and asks before making them.
+      if (item.proposal.kind === 'setup') {
+        assistant.send(item.proposal.prompt);
+        navigate('/assistant');
+      }
+    });
+  }
+
+  return (
+    <section className="m-card m-stack" data-gap="3" aria-label="What the model makes of your account" style={{ padding: 'var(--m-space-4)' }}>
+      <div className="m-stack" data-gap="1">
+        <span className="m-cluster" data-gap="2" style={medium}>
+          <Sparkles size={ICON.nav} strokeWidth={ICON.strokeWidth} aria-hidden /> Beyond the standard things
+        </span>
+        <span style={small}>The plan above brings everything HubSpot has as standard, and needs no model. With a model connected, it can also look at what else your account uses, such as tickets, quotes, workflows and forms, and put forward what to bring, what to set up here, and what this CRM would need built. Nothing happens until you accept it.</span>
+      </div>
+      {over ? null : settings.data && !settings.data.configured ? (
+        <span style={small}>No model is connected. <Link to="/settings" style={{ color: 'var(--m-color-accent-text)' }}>Connect one in Settings</Link> to use this.</span>
+      ) : (
+        <div>
+          <button type="button" className="m-button" data-size="sm" disabled={busy || looking || !idle || !settings.data} onClick={() => void look()}>
+            {looking ? <span className="m-spinner" aria-hidden style={{ inlineSize: 12, blockSize: 12 }} /> : <Sparkles size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />} {looking ? 'Looking at your account…' : found ? 'Look again' : 'Look at my account'}
+          </button>
+        </div>
+      )}
+      {found ? (
+        <>
+          <p style={{ margin: 0 }}>{found.summary}</p>
+          {found.found.length > 0 ? (
+            <details>
+              <summary style={{ ...small, cursor: 'pointer' }}>What it was shown</summary>
+              <ul style={{ ...small, margin: 'var(--m-space-1) 0 0', paddingInlineStart: 'var(--m-space-4)' }}>
+                {found.found.map((item) => (
+                  <li key={item.area}>{item.label}: {item.count === null ? item.note : `${number(item.count)}${item.more ? ' or more' : ''}`}{item.examples.length > 0 ? `, such as ${item.examples.slice(0, 3).join(', ')}` : ''}</li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+          {found.proposals.length === 0 ? <span style={small}>It found nothing that needs more than the plan above.</span> : null}
+          <ul style={plainList}>
+            {found.proposals.map((item, index) => {
+              const words = KIND_WORDS[item.proposal.kind];
+              return (
+                <li key={item.id} className="m-stack" data-gap="2" style={{ paddingBlock: 'var(--m-space-3)', ...(index === 0 ? {} : rowDivider), ...(item.status === 'dismissed' ? { opacity: 0.55 } : {}) }}>
+                  <div className="m-stack" data-gap="1">
+                    <span className="m-cluster" data-gap="2">
+                      <span style={medium}>{item.proposal.title}</span>
+                      <span className="m-badge">{words.label}</span>
+                    </span>
+                    <span style={small}>{item.proposal.why}</span>
+                    {item.proposal.kind === 'build' ? <span style={small}>{item.proposal.brief}</span> : null}
+                    {item.proposal.kind === 'setup' ? <span style={small}>It would ask the assistant: “{item.proposal.prompt}”</span> : null}
+                    {item.proposal.kind === 'step' && item.proposal.object ? <span style={small}>Adds a new kind of record, {item.proposal.object.plural}, and brings them across with their fields.</span> : null}
+                  </div>
+                  {item.status === 'proposed' ? (
+                    <div className="m-cluster" data-gap="2">
+                      <button type="button" className="m-button" data-size="sm" data-variant="primary" disabled={busy || !idle || (over && item.proposal.kind === 'step')} onClick={() => accept(item)}>{words.accept}</button>
+                      <button type="button" className="m-button" data-size="sm" data-variant="ghost" disabled={busy || !idle} onClick={() => void act(() => api.decideMigrationProposal({ runId: run.id, proposalId: item.id, accept: false }))}>Not needed</button>
+                    </div>
+                  ) : (
+                    <span style={small}>{item.status === 'accepted' ? words.accepted : 'Not needed'}</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      ) : null}
+    </section>
   );
 }
 

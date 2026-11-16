@@ -808,6 +808,8 @@ export const mockApi: CrmApi = {
   cancelMigration: () => Promise.reject(new Error('The demo has no moves from other systems.')),
   addMigrationStep: () => Promise.reject(new Error('The demo has no moves from other systems.')),
   changeMigrationStep: () => Promise.reject(new Error('The demo has no moves from other systems.')),
+  assessMigration: () => Promise.reject(new Error('The demo has no moves from other systems.')),
+  decideMigrationProposal: () => Promise.reject(new Error('The demo has no moves from other systems.')),
   peekMigrationSource: () => Promise.reject(new Error('The demo has no moves from other systems.')),
 
   // The demo has no model to ask.

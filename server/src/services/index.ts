@@ -264,6 +264,13 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     'migrations.addStep': (ctx, input) => migrations.addStep(ctx, input),
     'migrations.changeStep': (ctx, input) => migrations.changeStep(ctx, input),
     'migrations.peek': (ctx, input) => migrations.peek(ctx, input),
+    // The model's look at the account is a layer on top of the fixed plan: read what else is there, ask, keep the answer.
+    'migrations.assess': async (ctx, input) => {
+      const found = await migrations.survey(ctx, input);
+      const { answer, model } = await assistant.assessMove(ctx, found);
+      return migrations.keepAssessment(ctx, input, found, answer, model);
+    },
+    'migrations.decide': (ctx, input) => migrations.decide(ctx, input),
   };
 
   // The list in the contract covers the whole CRM; the server serves the ones it has built so far.

@@ -132,6 +132,71 @@ export const migrationStepSchema = z.object({
 });
 export type MigrationStep = z.infer<typeof migrationStepSchema>;
 
+/** One thing the survey of the other system found that the fixed plan does not bring. */
+export const surveyItemSchema = z.object({
+  /** What it is, such as `tickets` or `workflows`. */
+  area: z.string(),
+  label: z.string(),
+  /** How many were seen. Null when it could not be read. `more` says there are others beyond these. */
+  count: z.number().int().nullable(),
+  more: z.boolean(),
+  /** A few names, to show what kind of thing they are. */
+  examples: z.array(z.string()),
+  /** Field names, for things made of records. */
+  fields: z.array(z.string()).optional(),
+  note: z.string().optional(),
+});
+export type SurveyItem = z.infer<typeof surveyItemSchema>;
+
+const proposalBase = {
+  title: z.string().min(1).max(120).describe('A few words naming the thing, as the team would.'),
+  why: z.string().min(1).max(600).describe('One or two plain sentences: what in the account calls for this.'),
+};
+
+/**
+ * What the model puts forward after looking at an account. It never changes the fixed plan for
+ * HubSpot's own things; these are additions, and nothing happens until a person accepts one.
+ *
+ * - `step`: something to bring across that the plan does not cover. Accepting it adds the steps.
+ * - `setup`: something this CRM can already do that should be set up to match (a report, a workflow, a view). Accepting it hands `prompt` to the assistant.
+ * - `build`: something the account relies on that this CRM does not have. `brief` says what to build and where it should show.
+ */
+export const proposedSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('step'),
+    ...proposalBase,
+    /** A `records` or `activities` step. For `records`, `to` is an existing object id, or the id the new `object` will get. */
+    spec: stepSpecSchema,
+    /** A new kind of record to create first, when nothing here fits. */
+    object: z.object({ singular: z.string().min(1).max(60), plural: z.string().min(1).max(60) }).optional(),
+  }),
+  z.object({ kind: z.literal('setup'), ...proposalBase, prompt: z.string().min(1).max(2000).describe('What to ask the assistant to set up, written as the request itself.') }),
+  z.object({ kind: z.literal('build'), ...proposalBase, brief: z.string().min(1).max(3000).describe('What to build: what it does, what data it holds or shows, and where in the CRM it belongs.') }),
+]);
+export type Proposed = z.infer<typeof proposedSchema>;
+
+/** What the model answers with. */
+export const assessmentAnswerSchema = z.object({
+  summary: z.string().min(1).max(1500).describe('Three or four plain sentences for the person moving in: what stands out about this account beyond the standard things.'),
+  proposals: z.array(proposedSchema).max(30),
+});
+export type AssessmentAnswer = z.infer<typeof assessmentAnswerSchema>;
+
+export const proposalSchema = z.object({ id: z.string(), status: z.enum(['proposed', 'accepted', 'dismissed']), proposal: proposedSchema });
+export type Proposal = z.infer<typeof proposalSchema>;
+
+export const assessmentSchema = z.object({
+  at: z.string(),
+  model: z.string(),
+  summary: z.string(),
+  found: z.array(surveyItemSchema),
+  proposals: z.array(proposalSchema),
+});
+export type Assessment = z.infer<typeof assessmentSchema>;
+
+export const decideProposalSchema = z.object({ runId: z.string(), proposalId: z.string(), accept: z.boolean() });
+export type DecideProposal = z.infer<typeof decideProposalSchema>;
+
 export const migrationRunSchema = z.object({
   id: z.string(),
   source: z.literal('hubspot'),
@@ -145,6 +210,8 @@ export const migrationRunSchema = z.object({
   startedAt: z.string().nullable(),
   finishedAt: z.string().nullable(),
   steps: z.array(migrationStepSchema),
+  /** What the connected model made of the account, when it has been asked. */
+  assessment: assessmentSchema.nullable(),
 });
 export type MigrationRun = z.infer<typeof migrationRunSchema>;
 
@@ -198,6 +265,10 @@ export interface MigrationApi {
   cancelMigration(runId: string): Promise<MigrationRun>;
   addMigrationStep(input: AddStep): Promise<MigrationRun>;
   changeMigrationStep(input: ChangeStep): Promise<MigrationRun>;
+  /** Has the connected model look at the account and put forward what the fixed plan does not cover. */
+  assessMigration(runId: string): Promise<MigrationRun>;
+  /** Accepts or dismisses one thing the model put forward. */
+  decideMigrationProposal(input: DecideProposal): Promise<MigrationRun>;
   /** Reads from the other system, to see what an account has before adding steps for it. */
   peekMigrationSource(input: Peek): Promise<unknown>;
 }

@@ -314,6 +314,7 @@ CREATE TABLE "migration_runs" (
 	"key_encrypted" text,
 	"started_by" text NOT NULL,
 	"locked_until" timestamp with time zone,
+	"assessment" jsonb,
 	"error" text,
 	"started_at" timestamp with time zone,
 	"finished_at" timestamp with time zone,

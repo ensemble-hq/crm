@@ -2,6 +2,8 @@ import { sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ObjectDefinition } from '../../src/contracts/metadata';
 import type { MigrationRun, MigrationStep } from '../../src/contracts/migration';
+import type { AIAdapter, AIMessage } from '@mariachi/ai';
+import { registerModelProvider } from '../src/assistant/providers';
 import { FakeHubSpot } from './fake-hubspot';
 import { type Crm, JONAS, MAYA, PRIYA, refusal, startCrm } from './harness';
 
@@ -62,7 +64,7 @@ describe('planning a move', () => {
     expect(planned.status).toBe('draft');
     expect(planned.hasKey).toBe(true);
     expect(JSON.stringify(planned)).not.toContain(KEY);
-    expect(planned.steps.map((item) => item.title)).toEqual(['People', 'Deal stages', 'Company fields', 'Contact fields', 'Deal fields', 'Companies', 'Contacts', 'Deals', 'Custom objects', 'Notes', 'Calls', 'Emails', 'Meetings']);
+    expect(planned.steps.map((item) => item.title)).toEqual(['People', 'Deal stages', 'Company fields', 'Contact fields', 'Deal fields', 'Companies', 'Contacts', 'Deals', 'Tasks', 'Custom objects', 'Notes', 'Calls', 'Emails', 'Meetings']);
     expect(planned.steps.every((item) => item.status === 'waiting')).toBe(true);
     const stored = await crm.rows<{ key: string }>(sql`select key_encrypted as key from migration_runs`);
     expect(stored[0]?.key).toBeTruthy();
@@ -373,5 +375,133 @@ describe('activity history', () => {
     // Run again: the history is not logged twice.
     await run();
     expect(await crm.rows(sql`select 1 from activities`)).toHaveLength(logged.length);
+  });
+});
+
+describe('tasks', () => {
+  beforeEach(fill);
+
+  it('come across as tasks, done or not, on what they were about', async () => {
+    hubspot.add('tasks', { hs_task_subject: 'Send the anvil quote', hs_task_status: 'COMPLETED', hs_task_priority: 'HIGH', hs_task_type: 'CALL', hs_timestamp: '2026-11-20T09:00:00.000Z', hubspot_owner_id: '501' }, { id: 'tk1', associations: { contacts: ['p1'], deals: ['d1'] } });
+    hubspot.add('tasks', { hs_task_subject: 'Chase the signature', hs_task_status: 'NOT_STARTED' }, { id: 'tk2' });
+    const done = await run();
+    expect(done.status).toBe('done');
+    const [chase, send] = await records('tasks');
+    const wile = (await records('contacts')).find((contact) => contact.properties.email === 'wile@acme.example');
+    const [deal] = await records('deals');
+    expect(send?.properties).toMatchObject({ name: 'Send the anvil quote', status: 'done', priority: 'high', type: 'call', dueDate: '2026-11-20', owner: PRIYA, contact: wile?.id, deal: deal?.id });
+    expect(chase?.properties).toMatchObject({ name: 'Chase the signature', status: 'open' });
+    // No choices were invented for what HubSpot calls its statuses.
+    expect((await definition('tasks')).properties.find((item) => item.id === 'status')?.options?.map((option) => option.id)).toEqual(['open', 'done']);
+  });
+});
+
+describe('a model looking at the account', () => {
+  // A stand-in model: it answers with whatever the test lined up, and keeps what it was shown.
+  let answers: unknown[] = [];
+  const heard: AIMessage[][] = [];
+  const scripted = {
+    async generate(messages: AIMessage[]) {
+      heard.push(messages);
+      const base = { usage: { inputTokens: 300, outputTokens: 80, totalTokens: 380 }, model: 'scripted', latencyMs: 1, content: '' };
+      return answers.length > 0 ? { ...base, toolCalls: [{ id: `c${heard.length}`, name: 'assess', arguments: answers.shift() }] } : { ...base, content: 'I have nothing.' };
+    },
+  } as unknown as AIAdapter;
+  registerModelProvider({ id: 'scripted-mover', label: 'Scripted', hint: '', needsKey: false, needsBaseUrl: false, defaultModel: 'scripted', create: () => scripted });
+
+  const tickets = { kind: 'step', title: 'Support tickets', why: 'The account has tickets with a custom severity field.', object: { singular: 'Ticket', plural: 'Tickets' }, spec: { kind: 'records', from: 'tickets', to: 'tickets', fields: [{ from: 'subject', to: 'name' }], links: [{ from: 'contacts', to: 'contact' }] } };
+  const workflow = { kind: 'setup', title: 'Welcome new customers', why: 'A workflow called "Welcome new customers" is in use.', prompt: 'Create a workflow that sends the welcome email when a deal is won.' };
+  const quotes = { kind: 'build', title: 'Quotes', why: 'The account has 3 quotes.', brief: 'A quote that belongs to a deal, with line items and a status, shown on the deal page.' };
+
+  beforeEach(() => {
+    fill();
+    heard.length = 0;
+    hubspot.properties.tickets = [{ name: 'subject', label: 'Subject', type: 'string', fieldType: 'text', hubspotDefined: true }, { name: 'severity', label: 'Severity', type: 'enumeration', fieldType: 'select', options: [{ label: 'Minor', value: 'minor' }, { label: 'Major', value: 'major' }] }];
+    hubspot.add('tickets', { subject: 'Anvil arrived dented', severity: 'major' }, { id: 't1', associations: { contacts: ['p1'] } });
+    hubspot.add('quotes', { hs_title: 'Anvils, bulk: quote 1' });
+    hubspot.setup['/automation/v4/flows'] = [{ name: 'Welcome new customers' }];
+  });
+  const connect = () => crm.call(MAYA, 'assistant.saveSettings', { provider: 'scripted-mover', model: 'scripted' });
+
+  it('is not needed for the plan, and says what is missing when asked without one', async () => {
+    const planned = await plan();
+    expect(planned.assessment).toBeNull();
+    expect(await refusal(crm.call(MAYA, 'migrations.assess', planned.id))).toMatch(/model/i);
+    expect((await run('import', planned.id)).status).toBe('done');
+  });
+
+  it('is shown what else the account has, and puts forward additions without changing the plan', async () => {
+    await connect();
+    const planned = await plan();
+    answers = [{ summary: 'Beyond the usual, this account runs support tickets, quotes and one workflow.', proposals: [tickets, workflow, quotes] }];
+    const assessed = await crm.call<MigrationRun>(MAYA, 'migrations.assess', planned.id);
+    expect(assessed.assessment?.found.map((item) => item.area)).toEqual(['tickets', 'quotes', 'workflows']);
+    expect(assessed.assessment?.found[0]).toMatchObject({ count: 1, examples: ['Anvil arrived dented'] });
+    expect(assessed.assessment?.found[0]?.fields).toContain('severity');
+    const shown = heard[0]?.map((message) => String(message.content)).join('\n') ?? '';
+    expect(shown).toContain('tickets');
+    expect(shown).toContain('Welcome new customers');
+    expect(shown).toContain('lifecycleStage');
+    // It is never shown the key, or the contacts themselves.
+    expect(shown).not.toContain(KEY);
+    expect(shown).not.toContain('wile@acme.example');
+    expect(assessed.assessment?.proposals.map((item) => [item.proposal.kind, item.status])).toEqual([['step', 'proposed'], ['setup', 'proposed'], ['build', 'proposed']]);
+    expect(assessed.steps.map((item) => item.title)).toEqual(planned.steps.map((item) => item.title));
+    expect(await crm.rows(sql`select 1 from assistant_turns where question like 'Assess%'`)).toHaveLength(1);
+  });
+
+  it('adds the steps, and the object they need, only when a proposal is accepted', async () => {
+    await connect();
+    const planned = await plan();
+    answers = [{ summary: 'Tickets, quotes and a workflow.', proposals: [tickets, workflow, quotes] }];
+    const assessed = await crm.call<MigrationRun>(MAYA, 'migrations.assess', planned.id);
+    const [step, setup, build] = assessed.assessment?.proposals ?? [];
+    expect(await definition('tickets')).toBeUndefined();
+
+    const accepted = await crm.call<MigrationRun>(MAYA, 'migrations.decide', { runId: planned.id, proposalId: step?.id, accept: true });
+    expect(accepted.steps.slice(-2).map((item) => item.title)).toEqual(['Ticket fields', 'Support tickets']);
+    expect(accepted.steps.at(-1)?.addedBy).toBe(MAYA);
+    expect(await definition('tickets')).toMatchObject({ plural: 'Tickets', custom: true });
+    await crm.call(MAYA, 'migrations.decide', { runId: planned.id, proposalId: setup?.id, accept: true });
+    const decided = await crm.call<MigrationRun>(MAYA, 'migrations.decide', { runId: planned.id, proposalId: build?.id, accept: false });
+    expect(decided.assessment?.proposals.map((item) => item.status)).toEqual(['accepted', 'accepted', 'dismissed']);
+    expect(await refusal(crm.call(MAYA, 'migrations.decide', { runId: planned.id, proposalId: step?.id, accept: true }))).toMatch(/already/i);
+    expect(await refusal(crm.call(JONAS, 'migrations.decide', { runId: planned.id, proposalId: build?.id, accept: true }))).toMatch(/can't/i);
+
+    const done = await run('import', planned.id);
+    expect(done.status).toBe('done');
+    // What to build can still be decided once the move is over.
+    expect((await crm.call<MigrationRun>(MAYA, 'migrations.decide', { runId: planned.id, proposalId: build?.id, accept: true })).assessment?.proposals[2]?.status).toBe('accepted');
+    const [ticket] = await records('tickets');
+    const wile = (await records('contacts')).find((contact) => contact.properties.email === 'wile@acme.example');
+    const severity = (await definition('tickets')).properties.find((item) => item.label === 'Severity');
+    expect(ticket?.properties).toMatchObject({ name: 'Anvil arrived dented', contact: wile?.id, [severity?.id ?? '']: 'major' });
+  });
+
+  it('is told when what it proposes cannot work, and is asked again', async () => {
+    await connect();
+    const planned = await plan();
+    answers = [
+      { summary: 'Contacts again.', proposals: [{ ...tickets, spec: { kind: 'records', from: 'contacts', to: 'contacts' } }] },
+      { summary: 'Tickets.', proposals: [{ ...tickets, spec: { ...tickets.spec, fields: [{ from: 'subject', to: 'headline' }] } }] },
+      { summary: 'Tickets.', proposals: [tickets] },
+    ];
+    const assessed = await crm.call<MigrationRun>(MAYA, 'migrations.assess', planned.id);
+    expect(assessed.assessment?.proposals).toHaveLength(1);
+    expect(heard).toHaveLength(3);
+    const told = heard[2]?.map((message) => String(message.content)).join('\n') ?? '';
+    expect(told).toMatch(/already planned/);
+    expect(told).toMatch(/headline/);
+  });
+
+  it('keeps what was decided when asked to look again', async () => {
+    await connect();
+    const planned = await plan();
+    answers = [{ summary: 'First look.', proposals: [tickets, quotes] }, { summary: 'Second look.', proposals: [tickets, workflow] }];
+    const first = await crm.call<MigrationRun>(MAYA, 'migrations.assess', planned.id);
+    await crm.call(MAYA, 'migrations.decide', { runId: planned.id, proposalId: first.assessment?.proposals[1]?.id, accept: false });
+    const second = await crm.call<MigrationRun>(MAYA, 'migrations.assess', planned.id);
+    expect(second.assessment?.summary).toBe('Second look.');
+    expect(second.assessment?.proposals.map((item) => [item.proposal.title, item.status])).toEqual([['Quotes', 'dismissed'], ['Support tickets', 'proposed'], ['Welcome new customers', 'proposed']]);
   });
 });

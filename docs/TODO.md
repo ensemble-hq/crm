@@ -23,13 +23,16 @@ Nothing below can be worked around. A customer cannot be given an instance until
 
 Partly built. A move is a stored run of steps (see `server/src/services/migration`); each step keeps its progress, counts and issues, and steps can be added, skipped and retried. It has only run against a stand-in account built from HubSpot's API documentation.
 
-**Built:** people, deal pipelines and stages, custom fields and their choices, companies, contacts, unsubscribe and bounce status (written with the contact, and the step cannot be skipped), deals, custom objects, and notes, calls, emails and meetings. Check mode, pause, resume, retry, re-run without duplicates.
+**Built:** people, deal pipelines and stages, custom fields and their choices, companies, contacts, unsubscribe and bounce status (written with the contact, and the step cannot be skipped), deals, tasks, custom objects, and notes, calls, emails and meetings. Check mode, pause, resume, retry, re-run without duplicates.
+
+**Built, on top of the fixed plan:** with a model connected, it surveys what else the account has and proposes steps to add, things to set up here, and features to build. A person accepts or dismisses each. Accepting a step creates the object it needs and adds the steps; accepting a set-up hands the request to the assistant; accepting a build records that it is wanted.
 
 **Not built yet:**
 
 - A run against a real HubSpot account. Needs a test account or a customer's key. Expect field names and paging details to need correcting.
-- The model assessing the account: reading what it has, planning the steps, and saying what is used in HubSpot that this CRM lacks.
-- Tasks, and the "last contacted" and "last activity" dates that history should set.
+- Anything acting on an accepted "build" proposal. It is kept as a written brief on the move; how an instance asks Ensemble to change its own code is not decided (see Open decisions).
+- The survey's paths for workflows, forms, lists and marketing emails are from memory of HubSpot's documentation and are the likeliest part to be wrong against a real account. A path that fails is reported as unreadable, not as absent.
+- The "last contacted" and "last activity" dates that history should set.
 - Every contact on a deal with their role (only the first contact and company are linked today), and association labels.
 - Products and line items, tickets as a planned step, quotes.
 - Lists as segments, saved views, email templates, sequences, forms and their submissions.
@@ -124,6 +127,7 @@ These are yours to make. Each one holds up something above.
 - **How strong the update promise is** for instances whose core code a customer has changed.
 - **The licence** for the public repository.
 - **When Mariachi is released** with what the CRM now depends on.
+- **How a "build" proposal becomes built.** When the importer's model finds something the account relies on that the CRM lacks, it writes a brief. Something has to take that brief and change the instance's code: Ensemble's builder, presumably. The CRM needs to know where to send it.
 
 ## 6. Later, after the first release
 

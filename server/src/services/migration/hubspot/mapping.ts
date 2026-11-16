@@ -39,6 +39,14 @@ export const STANDARD: Record<string, Standard[]> = {
     { to: 'priority', from: ['hs_priority'] },
     { to: 'owner', from: ['hubspot_owner_id'] },
   ],
+  tasks: [
+    { to: 'name', from: ['hs_task_subject'] },
+    { to: 'type', from: ['hs_task_type'] },
+    { to: 'dueDate', from: ['hs_timestamp'] },
+    { to: 'priority', from: ['hs_task_priority'] },
+    { to: 'status', from: ['hs_task_status'] },
+    { to: 'owner', from: ['hubspot_owner_id'] },
+  ],
 };
 
 /** HubSpot's standard fields that have no property in the template and are worth having: they become properties like a custom field does. */
@@ -51,6 +59,9 @@ export const ALSO_BRING: Record<string, string[]> = {
 /** Choices that mean the same thing under another name. Keyed by `<object>.<property>`. */
 export const SAME_CHOICE: Record<string, Record<string, string>> = {
   'contacts.lifecycleStage': { marketingqualifiedlead: 'mql', salesqualifiedlead: 'sql' },
+  'tasks.status': { COMPLETED: 'done', NOT_STARTED: 'open', IN_PROGRESS: 'open', WAITING: 'open', DEFERRED: 'open' },
+  'tasks.type': { TODO: 'todo', CALL: 'call', EMAIL: 'email' },
+  'tasks.priority': { LOW: 'low', MEDIUM: 'medium', HIGH: 'high' },
 };
 
 /** Fields whose choices another step looks after, or that are not choices here at all. */

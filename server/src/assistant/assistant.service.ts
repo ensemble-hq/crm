@@ -11,6 +11,8 @@ import { designEmail } from './email-designer';
 import type { Operation } from '../../../src/contracts/operations';
 import type { Activity, JudgeRecords, JudgeResult, ListResult, RecordDetail, Workspace } from '../../../src/contracts/records';
 import { judge } from './judge';
+import { assessMove } from './move-assessor';
+import type { AssessmentAnswer, SurveyItem } from '../../../src/contracts/migration';
 import { and, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { type AssistantSettingsRow, type AssistantTurnRow, assistantSettingsTable, assistantTurnsTable } from '../schema';
@@ -234,6 +236,30 @@ export class AssistantService {
       await this.turns
         .create(ctx, { id: `turn_${randomUUID().replace(/-/g, '').slice(0, 12)}`, userId: ctx.userId ?? actorOf(ctx).signedInId, question: `Design an email: ${input.prompt}`.slice(0, 500), ...used, lookups: 0, plannedSteps: 0, durationMs: Date.now() - started, error: failure ?? null })
         .catch((error: unknown) => ctx.logger.error({ error }, 'An email design could not be recorded'));
+    }
+  }
+
+  /** Has the model look at an account that is moving in, and put forward what the fixed plan does not cover. */
+  async assessMove(ctx: Context, found: SurveyItem[]): Promise<{ answer: AssessmentAnswer; model: string }> {
+    const started = Date.now();
+    const used = { provider: '', model: '', inputTokens: 0, outputTokens: 0, rounds: 0 };
+    let failure: string | undefined;
+    try {
+      const { adapter, model, provider } = await this.adapter(ctx);
+      Object.assign(used, { provider, model });
+      const workspace = (await this.call(ctx, 'workspace.get', undefined)) as Workspace;
+      const result = await assessMove({ adapter, model }, { found, objects: workspace.objects }).catch((error: unknown) => {
+        throw new ConflictError(`The model could not assess the account: ${error instanceof Error ? error.message : String(error)}`);
+      });
+      Object.assign(used, { inputTokens: result.inputTokens, outputTokens: result.outputTokens, rounds: result.rounds });
+      return { answer: result.answer, model };
+    } catch (error) {
+      failure = error instanceof Error ? error.message : String(error);
+      throw error;
+    } finally {
+      await this.turns
+        .create(ctx, { id: `turn_${randomUUID().replace(/-/g, '').slice(0, 12)}`, userId: ctx.userId ?? actorOf(ctx).signedInId, question: 'Assess the HubSpot account being moved in', ...used, lookups: found.length, plannedSteps: 0, durationMs: Date.now() - started, error: failure ?? null })
+        .catch((error: unknown) => ctx.logger.error({ error }, 'An assessment could not be recorded'));
     }
   }
 

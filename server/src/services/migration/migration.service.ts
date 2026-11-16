@@ -1,6 +1,7 @@
 import { ConflictError, type Context, NotFoundError, ValidationError } from '@mariachi/core';
 import type { Encryption } from '@mariachi/encryption';
-import type { AddStep, ChangeStep, CreateMigration, MigrationIssue, MigrationRun, Peek, RunMode, RunStatus, StartMigration, StepSpec } from '../../../../src/contracts/migration';
+import type { AddStep, AssessmentAnswer, ChangeStep, CreateMigration, DecideProposal, MigrationIssue, MigrationRun, Peek, RunMode, RunStatus, StartMigration, StepSpec, SurveyItem } from '../../../../src/contracts/migration';
+import { surveyHubSpot } from './hubspot/survey';
 import type { MigrationRunRow, MigrationStepRow } from '../../schema';
 import { actingContext, actorOf, assertAllowed } from '../people/access';
 import type { PeopleService } from '../people/people.service';
@@ -37,6 +38,7 @@ function hubspotPlan(addPeople: boolean): NewStep[] {
     // Who has unsubscribed comes across in the same write as the contact, so this step cannot be left out.
     { title: 'Contacts', spec: { kind: 'records', from: 'contacts', to: 'contacts', match: 'email', emailStatus: true, links: [{ from: 'companies', to: 'company' }] }, required: true },
     { title: 'Deals', spec: { kind: 'records', from: 'deals', to: 'deals', links: [{ from: 'companies', to: 'company' }, { from: 'contacts', to: 'contact' }] } },
+    { title: 'Tasks', spec: { kind: 'records', from: 'tasks', to: 'tasks', links: [{ from: 'contacts', to: 'contact' }, { from: 'companies', to: 'company' }, { from: 'deals', to: 'deal' }] } },
     { title: 'Custom objects', spec: { kind: 'objects' } },
     { title: 'Notes', spec: { kind: 'activities', from: 'notes', as: 'note' } },
     { title: 'Calls', spec: { kind: 'activities', from: 'calls', as: 'call' } },
@@ -173,6 +175,63 @@ export class MigrationService {
     }
   }
 
+  // The layer on top: what a connected model makes of the account
+
+  /** Reads what the account has beyond what the plan brings. */
+  async survey(ctx: Context, runId: string): Promise<SurveyItem[]> {
+    assertAllowed(actorOf(ctx), 'manageSettings', 'look at the account being moved');
+    const run = await this.run(ctx, runId);
+    if (!OPEN.includes(run.status as RunStatus)) throw new ConflictError('This move is over. Plan a new one to have the account looked at.');
+    if (!run.keyEncrypted) throw new ValidationError('The key for HubSpot is no longer stored.');
+    try {
+      return await surveyHubSpot(this.sourceFor(await this.encryption.decrypt(run.keyEncrypted, AAD)));
+    } catch (error) {
+      throw new ValidationError(explain(error));
+    }
+  }
+
+  /** Keeps what the model put forward. Asking again replaces what was not yet decided and keeps what was. */
+  async keepAssessment(ctx: Context, runId: string, found: SurveyItem[], answer: AssessmentAnswer, model: string): Promise<MigrationRun> {
+    const run = await this.run(ctx, runId);
+    const decided = (run.assessment?.proposals ?? []).filter((item) => item.status !== 'proposed');
+    const fresh = answer.proposals.filter((proposal) => !decided.some((item) => item.proposal.kind === proposal.kind && item.proposal.title.toLowerCase() === proposal.title.toLowerCase()));
+    await this.runs.update(ctx, run.id, { assessment: { at: new Date().toISOString(), model, summary: answer.summary, found, proposals: [...decided, ...fresh.map((proposal) => ({ id: id('prp'), status: 'proposed' as const, proposal }))] } });
+    return this.get(ctx, run.id);
+  }
+
+  async decide(ctx: Context, input: DecideProposal): Promise<MigrationRun> {
+    const actor = actorOf(ctx);
+    assertAllowed(actor, 'manageSettings', 'change the plan of a move');
+    const run = await this.run(ctx, input.runId);
+    const assessment = run.assessment;
+    const entry = assessment?.proposals.find((item) => item.id === input.proposalId);
+    if (!assessment || !entry) throw new NotFoundError('proposal', input.proposalId);
+    if (entry.status === 'accepted') throw new ConflictError('That was already accepted.');
+    // Steps can only join a move that is still open. What to set up or build can be decided at any time.
+    if (input.accept && entry.proposal.kind === 'step' && !OPEN.includes(run.status as RunStatus)) throw new ConflictError('This move is over, so no more steps can be added to it. Plan another move to bring this across.');
+    await this.transaction(ctx, async () => {
+      const { proposal } = entry;
+      if (input.accept && proposal.kind === 'step') {
+        const steps: NewStep[] = [];
+        const wanted = proposal.spec;
+        if (wanted.kind === 'records') {
+          const objects = await this.crm.workspace.definitions(ctx);
+          let object = objects.find((item) => item.id === wanted.to);
+          if (!object && proposal.object) object = await this.crm.settings.createObject(ctx, { ...proposal.object, icon: 'box' });
+          if (!object) throw new ValidationError(`There is no object "${wanted.to}" to bring these into.`);
+          const spec = { ...wanted, to: object.id };
+          await this.checkSpec(ctx, spec);
+          // Their custom fields first, then the records.
+          steps.push({ title: `${object.singular} fields`, spec: { kind: 'fields', from: spec.from, to: object.id } }, { title: proposal.title, spec });
+        } else steps.push({ title: proposal.title, spec: proposal.spec });
+        const last = (await this.steps.ofRun(ctx, run.id)).at(-1);
+        await this.insertSteps(ctx, run.id, last?.position ?? -1, steps, actor.userId);
+      }
+      await this.runs.update(ctx, run.id, { assessment: { ...assessment, proposals: assessment.proposals.map((item) => (item.id === entry.id ? { ...item, status: input.accept ? ('accepted' as const) : ('dismissed' as const) } : item)) } });
+    });
+    return this.get(ctx, run.id);
+  }
+
   // What the worker calls
 
   /**
@@ -295,6 +354,7 @@ export class MigrationService {
       createdAt: new Date(run.createdAt).toISOString(),
       startedAt: iso(run.startedAt),
       finishedAt: iso(run.finishedAt),
+      assessment: run.assessment ?? null,
       steps: steps.map((step) => ({
         id: step.id,
         position: step.position,
