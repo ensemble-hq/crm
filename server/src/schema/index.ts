@@ -3,6 +3,7 @@ export * from './assistant';
 export * from './capture';
 export * from './email';
 export * from './files';
+export * from './migrations';
 export * from './notifications';
 export * from './objects';
 export * from './people';

@@ -13,7 +13,7 @@
       "name": "crm-api",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": [
-        "server"
+        "api"
       ],
       "port": 5184
     },

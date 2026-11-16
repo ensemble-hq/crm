@@ -21,16 +21,24 @@ Nothing below can be worked around. A customer cannot be given an instance until
 
 ## 2. The HubSpot importer
 
-Not started. Only CSV import exists. This is the reason the template exists, so it comes before any other feature.
+Partly built. A move is a stored run of steps (see `server/src/services/migration`); each step keeps its progress, counts and issues, and steps can be added, skipped and retried. It has only run against a stand-in account built from HubSpot's API documentation.
 
-- Records, properties, pipelines and stages, associations, owners.
-- Activity history: emails, calls, meetings, notes, tasks.
-- Unsubscribe status and consent. This is a legal requirement and the importer must treat a failure here as blocking.
-- Lists (as segments), saved views, email templates, sequences, forms and their submissions.
+**Built:** people, deal pipelines and stages, custom fields and their choices, companies, contacts, unsubscribe and bounce status (written with the contact, and the step cannot be skipped), deals, custom objects, and notes, calls, emails and meetings. Check mode, pause, resume, retry, re-run without duplicates.
+
+**Not built yet:**
+
+- A run against a real HubSpot account. Needs a test account or a customer's key. Expect field names and paging details to need correcting.
+- The model assessing the account: reading what it has, planning the steps, and saying what is used in HubSpot that this CRM lacks.
+- Tasks, and the "last contacted" and "last activity" dates that history should set.
+- Every contact on a deal with their role (only the first contact and company are linked today), and association labels.
+- Products and line items, tickets as a planned step, quotes.
+- Lists as segments, saved views, email templates, sequences, forms and their submissions.
+- Subscription types and consent per purpose (today: unsubscribed from everything, or bounced).
 - Workflows, translated where they can be and listed where they cannot.
 - Attachments and files.
-- The pre-migration report: what will not come across cleanly, every page with a HubSpot form embed, every workflow and sequence that is mid-run, every report and dashboard to rebuild, every booking link and tracked address to redirect.
-- Needs a HubSpot test account or a real export to be trusted. It can be started from the public API documentation.
+- Several pipelines as pipelines. Today the others arrive as stages named with their pipeline, plus a Pipeline field.
+- The pre-migration report beyond counts: pages with a HubSpot form embed, workflows and sequences mid-run, reports and dashboards to rebuild, booking links and tracked addresses to redirect.
+- Changes made in HubSpot after the move are brought by running it again; nothing runs on its own, and nothing deleted in HubSpot is removed here.
 - Needs a decision: what the importer promises (see Open decisions).
 
 ## 3. First-release features not started

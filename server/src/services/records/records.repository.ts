@@ -104,6 +104,25 @@ export class RecordsRepository extends DrizzleRepository<RecordRow> {
       from jsonb_to_recordset(${JSON.stringify(records)}::jsonb) as item(id text, "objectId" text, properties jsonb)`);
   }
 
+  /** Adds records brought from another system, keeping the day each was first created there. */
+  async insertImported(ctx: Context, records: Array<{ id: string; objectId: string; properties: Record<string, PropertyValue>; createdAt?: string }>): Promise<void> {
+    if (records.length === 0) return;
+    await this.db.execute(sql`
+      insert into records (id, tenant_id, object_id, properties, created_at)
+      select item.id, ${ctx.tenantId}, item."objectId", item.properties, coalesce(item."createdAt"::timestamptz, now())
+      from jsonb_to_recordset(${JSON.stringify(records)}::jsonb) as item(id text, "objectId" text, properties jsonb, "createdAt" text)`);
+  }
+
+  /** The records of an object whose property holds one of these texts, ignoring case: text, lower-cased, to record id. The oldest wins. */
+  async idsByText(ctx: Context, objectId: string, propertyId: string, values: string[]): Promise<Map<string, string>> {
+    const wanted = [...new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean))];
+    if (wanted.length === 0) return new Map();
+    const rows = await this.rows<{ key: string; id: string }>(
+      sql`select lower(records.properties->>${propertyId}::text) as key, records.id from records where ${this.scope(ctx, sql`records.object_id = ${objectId}`, sql`lower(records.properties->>${propertyId}::text) in (${sql.join(wanted.map((value) => sql`${value}`), sql`, `)})`)} order by records.created_at desc`,
+    );
+    return new Map(rows.map((row) => [row.key, row.id]));
+  }
+
   /** Merges changes into many records in one statement. */
   async patchMany(ctx: Context, changes: Array<{ id: string; changes: Record<string, PropertyValue> }>): Promise<void> {
     if (changes.length === 0) return;

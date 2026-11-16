@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { FilesApi } from './files';
+import type { MigrationApi } from './migration';
 import type { AssistantApi } from './assistant';
 import type { AuditApi } from './audit';
 import type { PrivacyApi } from './privacy';
@@ -230,7 +231,7 @@ export type DeletedList = z.infer<typeof deletedListSchema>;
 export const restoreResultSchema = z.object({ restored: z.number().int(), skipped: z.array(z.object({ id: z.string(), reason: z.string() })) });
 export type RestoreResult = z.infer<typeof restoreResultSchema>;
 
-export interface CrmApi extends InboxApi, ReportsApi, SequencesApi, WorkflowsApi, CaptureApi, TeamApi, SalesApi, BriefApi, AssistantApi, AuditApi, PrivacyApi, FilesApi {
+export interface CrmApi extends InboxApi, ReportsApi, SequencesApi, WorkflowsApi, CaptureApi, TeamApi, SalesApi, BriefApi, AssistantApi, AuditApi, PrivacyApi, FilesApi, MigrationApi {
   getWorkspace(): Promise<Workspace>;
   listRecords(query: ListQuery): Promise<ListResult>;
   summarize(query: SummaryQuery): Promise<SummaryRow[]>;

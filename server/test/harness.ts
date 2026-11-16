@@ -13,6 +13,7 @@ import { PLACEMENT, roles, teams } from '../../src/mock/team';
 import { TENANT_ID } from '../src/config';
 import { DevEmailProvider } from '../src/email/dev.provider';
 import { createServices, registerServices } from '../src/services/index';
+import type { MigrationSource } from '../src/services/migration/source';
 import { TEST_DATABASE_URL } from './global-setup';
 
 /**
@@ -30,7 +31,7 @@ let migrated = false;
 
 export type Crm = Awaited<ReturnType<typeof startCrm>>;
 
-export async function startCrm(options: { push?: (ctx: Context, userId: string, data: unknown) => Promise<void> } = {}) {
+export async function startCrm(options: { push?: (ctx: Context, userId: string, data: unknown) => Promise<void>; migrationSource?: (key: string) => MigrationSource } = {}) {
   if (!database) {
     database = createPostgresDatabase({ url: TEST_DATABASE_URL, poolMax: 5 });
     await database.connect();
@@ -64,7 +65,7 @@ export async function startCrm(options: { push?: (ctx: Context, userId: string, 
   }
 
   const email = new DevEmailProvider(db);
-  const deps = { db, transaction: database.transaction, source: 'test', email, files: createStorage({ adapter: 'memory' }), ...(options.push ? { push: options.push } : {}), secretsKey: 'test-secrets-key-0123456789-0123456789', appOrigin: 'http://crm.test' };
+  const deps = { db, transaction: database.transaction, source: 'test', email, files: createStorage({ adapter: 'memory' }), ...(options.push ? { push: options.push } : {}), ...(options.migrationSource ? { migrationSource: options.migrationSource } : {}), secretsKey: 'test-secrets-key-0123456789-0123456789', appOrigin: 'http://crm.test' };
   const communication = createCommunication({}, { logger: quiet });
   registerServices(communication, deps);
   const services = createServices(deps);

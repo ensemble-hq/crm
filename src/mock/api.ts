@@ -799,6 +799,17 @@ export const mockApi: CrmApi = {
       return { changed, unchanged, skipped: 0 };
     }),
 
+  // The demo has no other system to move in from.
+  listMigrations: () => respond(() => []),
+  getMigration: () => Promise.reject(new Error('The demo has no moves from other systems.')),
+  createMigration: () => Promise.reject(new Error('Moving in from HubSpot needs your own workspace. The demo has nowhere to keep a key.')),
+  startMigration: () => Promise.reject(new Error('The demo has no moves from other systems.')),
+  pauseMigration: () => Promise.reject(new Error('The demo has no moves from other systems.')),
+  cancelMigration: () => Promise.reject(new Error('The demo has no moves from other systems.')),
+  addMigrationStep: () => Promise.reject(new Error('The demo has no moves from other systems.')),
+  changeMigrationStep: () => Promise.reject(new Error('The demo has no moves from other systems.')),
+  peekMigrationSource: () => Promise.reject(new Error('The demo has no moves from other systems.')),
+
   // The demo has no model to ask.
   judgeRecords: () => Promise.reject(new Error('This needs a model, which the demo does not have. On your own workspace, connect one in Settings.')),
   listJudgements: () => respond(() => []),

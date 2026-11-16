@@ -280,6 +280,69 @@ CREATE TABLE "files" (
 );
 
 --> statement-breakpoint
+CREATE TABLE "migration_issues" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"run_id" text NOT NULL,
+	"step_id" text NOT NULL,
+	"level" text NOT NULL,
+	"source_id" text,
+	"message" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
+CREATE TABLE "migration_links" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"source" text NOT NULL,
+	"kind" text NOT NULL,
+	"source_id" text NOT NULL,
+	"target_id" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
+CREATE TABLE "migration_runs" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"source" text NOT NULL,
+	"status" text DEFAULT 'draft' NOT NULL,
+	"mode" text DEFAULT 'check' NOT NULL,
+	"key_encrypted" text,
+	"started_by" text NOT NULL,
+	"locked_until" timestamp with time zone,
+	"error" text,
+	"started_at" timestamp with time zone,
+	"finished_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
+CREATE TABLE "migration_steps" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"run_id" text NOT NULL,
+	"position" integer NOT NULL,
+	"title" text NOT NULL,
+	"spec" jsonb NOT NULL,
+	"status" text DEFAULT 'waiting' NOT NULL,
+	"required" boolean DEFAULT false NOT NULL,
+	"cursor" jsonb,
+	"counts" jsonb NOT NULL,
+	"note" text,
+	"error" text,
+	"added_by" text DEFAULT 'plan' NOT NULL,
+	"started_at" timestamp with time zone,
+	"finished_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--> statement-breakpoint
 CREATE TABLE "notifications" (
 	"id" text PRIMARY KEY NOT NULL,
 	"tenant_id" text NOT NULL,
@@ -526,6 +589,16 @@ CREATE INDEX "messages_header_idx" ON "messages" USING btree ("tenant_id","messa
 CREATE INDEX "messages_outgoing_idx" ON "messages" USING btree ("tenant_id","status","next_attempt_at");
 --> statement-breakpoint
 CREATE INDEX "files_tenant_id_idx" ON "files" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX "migration_issues_step_idx" ON "migration_issues" USING btree ("tenant_id","step_id","created_at");
+--> statement-breakpoint
+CREATE UNIQUE INDEX "migration_links_source_idx" ON "migration_links" USING btree ("tenant_id","source","kind","source_id");
+--> statement-breakpoint
+CREATE INDEX "migration_links_target_idx" ON "migration_links" USING btree ("tenant_id","source","kind","target_id");
+--> statement-breakpoint
+CREATE INDEX "migration_runs_status_idx" ON "migration_runs" USING btree ("tenant_id","status");
+--> statement-breakpoint
+CREATE INDEX "migration_steps_run_idx" ON "migration_steps" USING btree ("tenant_id","run_id","position");
 --> statement-breakpoint
 CREATE INDEX "notifications_user_idx" ON "notifications" USING btree ("tenant_id","user_id","created_at");
 --> statement-breakpoint

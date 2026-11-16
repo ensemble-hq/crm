@@ -30,6 +30,8 @@ const crmSchema = z.object({
   filesEndpoint: z.string().optional(),
   filesAccessKeyId: z.string().optional(),
   filesSecretAccessKey: z.string().optional(),
+  /** Where HubSpot's API is, for moving an account in. Changed only to point at a stand-in. */
+  hubspotApiUrl: z.string().url().default('https://api.hubapi.com'),
   /** Apply pending migrations when the server starts, as a hosted instance does. */
   migrateOnStart: z.boolean().default(true),
 });
@@ -54,6 +56,7 @@ registerConfigSection(CRM_CONFIG, {
     filesEndpoint: optional(read('FILES_ENDPOINT')),
     filesAccessKeyId: optional(read('FILES_ACCESS_KEY_ID')),
     filesSecretAccessKey: optional(read('FILES_SECRET_ACCESS_KEY')),
+    hubspotApiUrl: optional(read('HUBSPOT_API_URL')),
     migrateOnStart: optional(read('MIGRATE_ON_START')) === undefined ? undefined : read('MIGRATE_ON_START') === 'true',
   }),
 });

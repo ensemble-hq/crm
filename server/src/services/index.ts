@@ -21,6 +21,10 @@ import { InboxService } from './inbox/inbox.service';
 import { MailService } from './inbox/mail.service';
 import { BookingPagesRepository, CaptureService, FormsRepository, MeetingsRepository, SubmissionsRepository } from './capture/capture.service';
 import { ImportService } from './import/import.service';
+import { hubspotSteps } from './migration/hubspot/steps';
+import { MigrationService } from './migration/migration.service';
+import { type MigrationSource, hubspotSource } from './migration/source';
+import { IssuesRepository, Links, RunsRepository, StepsRepository } from './migration/steps';
 import { NotificationsRepository } from './notifications/notifications.repository';
 import { NotificationsService } from './notifications/notifications.service';
 import { actingContext, assertAgentMay } from './people/access';
@@ -56,6 +60,10 @@ export interface ServiceDeps {
   secretsKey: string;
   /** Where people reach the app, for links in email. */
   appOrigin: string;
+  /** Reads the system an account is being moved from, given its key. Left out, this is HubSpot's API. */
+  migrationSource?: (key: string) => MigrationSource;
+  /** Where HubSpot's API is. */
+  hubspotApiUrl?: string;
   /** Sends something to one person's open browsers. Absent where there is no live connection. */
   push?: Push;
 }
@@ -101,7 +109,19 @@ export function createServices(deps: ServiceDeps) {
   const capture = new CaptureService(new FormsRepository(deps.db), new SubmissionsRepository(deps.db), new BookingPagesRepository(deps.db), new MeetingsRepository(deps.db), recordsRepository, events, activityRepository, people, workspace, rules);
   const privacy = new PrivacyService(deps.db, recordsRepository, events, workspace);
   const importer = new ImportService(recordsRepository, events, workspace, people);
-  return { people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences, settings, sales, capture, agents, audit, rules, privacy, files };
+  const migrations = new MigrationService(
+    new RunsRepository(deps.db),
+    new StepsRepository(deps.db),
+    new IssuesRepository(deps.db),
+    new Links(deps.db, 'hubspot'),
+    { db: deps.db, records: recordsRepository, settings, workspace, people: peopleRepository, rules, activities: activityRepository },
+    people,
+    createEncryption({ adapter: 'local', keys: { primary: deps.secretsKey } }),
+    deps.transaction,
+    deps.migrationSource ?? ((key) => hubspotSource(key, deps.hubspotApiUrl ?? 'https://api.hubapi.com')),
+    hubspotSteps,
+  );
+  return { migrations, people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences, settings, sales, capture, agents, audit, rules, privacy, files };
 }
 
 /** How long a slow operation, such as a turn of the assistant on a model, may run. */
@@ -115,7 +135,7 @@ type Handler = (ctx: Context, input: any) => Promise<unknown>;
  * is left out of what the server offers.
  */
 export function registerServices(communication: CommunicationLayer, deps: ServiceDeps): Operation[] {
-  const { files, people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences, settings, sales, capture, agents, audit, rules, privacy } = createServices(deps);
+  const { migrations, files, people, workspace, records, activity, brief, notifications, workflows, runner, importer, inbox, mail, reports, sequences, settings, sales, capture, agents, audit, rules, privacy } = createServices(deps);
 
   // The assistant reaches the CRM the way everything else does: through the operations, as the person asking.
   const assistant = new AssistantService(new AssistantSettingsRepository(deps.db), createEncryption({ adapter: 'local', keys: { primary: deps.secretsKey } }), operations, (ctx, operation, input) => communication.call(ctx, operation, input), new AssistantTurnsRepository(deps.db), deps.push, (ctx, recordId, propertyId, value, reason, model) => records.setJudged(ctx, recordId, propertyId, value, reason, model));
@@ -235,6 +255,15 @@ export function registerServices(communication: CommunicationLayer, deps: Servic
     'dashboards.save': (ctx, input) => reports.saveDashboard(ctx, input),
     'forecast.get': (ctx) => reports.forecast(ctx),
     'forecast.setGoal': (ctx, input) => reports.setGoal(ctx, input),
+    'migrations.list': (ctx) => migrations.list(ctx),
+    'migrations.get': (ctx, input) => migrations.get(ctx, input),
+    'migrations.create': (ctx, input) => migrations.create(ctx, input),
+    'migrations.start': (ctx, input) => migrations.start(ctx, input),
+    'migrations.pause': (ctx, input) => migrations.pause(ctx, input),
+    'migrations.cancel': (ctx, input) => migrations.cancel(ctx, input),
+    'migrations.addStep': (ctx, input) => migrations.addStep(ctx, input),
+    'migrations.changeStep': (ctx, input) => migrations.changeStep(ctx, input),
+    'migrations.peek': (ctx, input) => migrations.peek(ctx, input),
   };
 
   // The list in the contract covers the whole CRM; the server serves the ones it has built so far.

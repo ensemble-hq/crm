@@ -154,6 +154,16 @@ export class EmailRules {
     return this.describe(ctx, input.email);
   }
 
+  /**
+   * An address arrives from another system already stopped there. It is stopped here too, and
+   * nothing that is stopped here is ever loosened by what the other system says.
+   */
+  async carryOver(ctx: Context, email: string, status: 'unsubscribed' | 'blocked', reason: string): Promise<void> {
+    const existing = await this.row(ctx, clean(email));
+    if (existing?.status === 'blocked' || existing?.status === status) return;
+    await this.write(ctx, email, status, status === 'blocked' ? 'bounce' : 'recipient', reason, null);
+  }
+
   /** The email service says the address does not exist or complained. */
   async bounced(ctx: Context, email: string, reason: string): Promise<void> {
     await this.write(ctx, email, 'blocked', 'bounce', reason, null);

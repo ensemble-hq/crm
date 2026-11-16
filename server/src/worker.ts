@@ -27,7 +27,7 @@ async function main(): Promise<void> {
 
   const events = lifecycle.manage('events', new DefaultEvents({ bus: createEventBus({ adapter: 'redis-streams', url: config.redis.url, prefix: config.serviceName }), source: config.serviceName }, { logger, tracer, metrics }), { priority: 20 });
   const settings = useConfigSection<CrmSettings>(CRM_CONFIG);
-  const { runner, mail, sequences, reports, settings: shape } = createServices({ db: database.db, transaction: database.transaction, source: config.serviceName, email: createEmailProvider(settings, database.db), files: createFileStorage(settings), secretsKey: settings.secretsKey, appOrigin: settings.appOrigin });
+  const { runner, mail, sequences, reports, settings: shape, migrations } = createServices({ hubspotApiUrl: settings.hubspotApiUrl, db: database.db, transaction: database.transaction, source: config.serviceName, email: createEmailProvider(settings, database.db), files: createFileStorage(settings), secretsKey: settings.secretsKey, appOrigin: settings.appOrigin });
 
   // Live updates: once the work a change sets off is done, open browsers are told what to read again.
   const live = lifecycle.manage('live', createLive(config.redis.url, config.serviceName, { logger, tracer, metrics }), { priority: 25 });
@@ -121,6 +121,27 @@ async function main(): Promise<void> {
   let hourly: NodeJS.Timeout | undefined;
   lifecycle.startup.register({ name: 'formula-refresh', priority: 96, fn: async () => void (hourly = setInterval(() => void refresh(), 3_600_000), void refresh()) });
   lifecycle.shutdown.register({ name: 'formula-refresh', priority: 96, fn: async () => clearInterval(hourly) });
+
+  // A move from another system is carried a stretch at a time, for as long as one is under way. Each
+  // stretch saves where it got to, so stopping the worker loses nothing.
+  let moving = false;
+  let stopping = false;
+  const move = async () => {
+    if (moving) return;
+    moving = true;
+    try {
+      const ctx = { traceId: `move-${Date.now()}`, userId: null, tenantId: TENANT_ID, scopes: [], identityType: 'service', logger };
+      // New fields and objects arrive with a move, so open browsers read the workspace again after each stretch.
+      while (!stopping && (await migrations.advance(ctx))) await announce(live, ctx, { topic: 'settings' });
+    } catch (error) {
+      logger.error({ error }, 'A move from another system hit a problem; it will be picked up again');
+    } finally {
+      moving = false;
+    }
+  };
+  let mover: NodeJS.Timeout | undefined;
+  lifecycle.startup.register({ name: 'migrations', priority: 97, fn: async () => void (mover = setInterval(() => void move(), 3_000)) });
+  lifecycle.shutdown.register({ name: 'migrations', priority: 97, fn: async () => void ((stopping = true), clearInterval(mover)) });
 
   let timer: NodeJS.Timeout | undefined;
   lifecycle.startup.register({ name: 'email-sweep', priority: 95, fn: async () => void (timer = setInterval(() => void sweep(), settings.sweepSeconds * 1000)) });

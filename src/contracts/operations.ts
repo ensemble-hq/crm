@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { assistantReplySchema, assistantSettingsSchema, assistantTurnSchema, assistantUsageSchema, saveAssistantSettingsSchema } from './assistant';
 import { auditCheckSchema, auditPageSchema, auditQuerySchema } from './audit';
 import { erasureSchema, personalDataSchema } from './privacy';
+import { addStepSchema, changeStepSchema, createMigrationSchema, migrationRunSchema, peekSchema, startMigrationSchema } from './migration';
 import { designReplySchema, designRequestSchema, emailDesignSchema } from './emailDesign';
 import { MAX_ATTACHMENTS, fileContentSchema, fileInfoSchema, uploadFileSchema } from './files';
 import { briefSchema } from './brief';
@@ -1062,6 +1063,88 @@ export const operations: Operation[] = [
     description: 'Finds records of one object that share a value that should be one of a kind: an email address for contacts, a website for companies, otherwise the name. Returns the sets, largest first. Merge a pair with records.merge once a person has agreed.',
     input: duplicatesQuerySchema,
     output: duplicatesSchema,
+    effect: 'read',
+  },
+  {
+    name: 'migrations.list',
+    method: 'listMigrations',
+    title: 'List moves from other systems',
+    description: 'Returns every move into this CRM from another system (HubSpot), newest first, each with its steps and what every step has done so far.',
+    input: none,
+    output: z.array(migrationRunSchema),
+    effect: 'read',
+  },
+  {
+    name: 'migrations.get',
+    method: 'getMigration',
+    title: 'Get a move and its steps',
+    description: 'Returns one move with its steps in order. Each step says what it does (`spec`), where it stands, how many things it read, added, changed, left out and could not bring, and the first issues it raised. Use it to report progress or to see why a step failed.',
+    input: z.string(),
+    output: migrationRunSchema,
+    effect: 'read',
+  },
+  {
+    name: 'migrations.create',
+    method: 'createMigration',
+    title: 'Plan a move from HubSpot',
+    description: 'Stores the HubSpot key and lays out the steps. Nothing is read or written until the move is started. The key is typed by a person in the app, never passed around.',
+    input: createMigrationSchema,
+    output: migrationRunSchema,
+    effect: 'write',
+    internal: true,
+  },
+  {
+    name: 'migrations.start',
+    method: 'startMigration',
+    title: 'Start or resume a move',
+    description: 'Starts a planned move, or resumes one that was paused or stopped at a failed step. Mode "check" reads everything and reports what would come across without writing anything; mode "import" writes. Running an import again later makes nothing twice: what is already here is brought up to date.',
+    input: startMigrationSchema,
+    output: migrationRunSchema,
+    effect: 'write',
+  },
+  {
+    name: 'migrations.pause',
+    method: 'pauseMigration',
+    title: 'Pause a move',
+    description: 'Stops a move after the page it is on. Everything done so far is kept, and starting it again carries on from there.',
+    input: z.string(),
+    output: migrationRunSchema,
+    effect: 'write',
+  },
+  {
+    name: 'migrations.cancel',
+    method: 'cancelMigration',
+    title: 'Cancel a move',
+    description: 'Ends a move for good and forgets the HubSpot key. What was already brought across stays.',
+    input: z.string(),
+    output: migrationRunSchema,
+    effect: 'write',
+  },
+  {
+    name: 'migrations.addStep',
+    method: 'addMigrationStep',
+    title: 'Add a step to a move',
+    description: 'Adds a step for something particular to this account that the plan does not cover. Look first with migrations.peek. Kinds: "fields" turns the custom fields of a HubSpot object type into properties of a CRM object; "records" brings every record of a HubSpot object type (contacts, companies, deals, tickets, products, or a custom object type id such as 2-12345) into a CRM object, with `fields` mapping HubSpot field names to property ids, `links` mapping associations to link properties, and `match` naming a property that says a record is already here; "activities" logs an engagement type (notes, calls, emails, meetings, or another) on the records it is associated with. The CRM object and any property a field maps to must exist first: create them with objects.create and properties.create, or put a "fields" step before the "records" step. A step can be added before the move starts or while it runs, and goes last unless `afterStepId` says where.',
+    input: addStepSchema,
+    output: migrationRunSchema,
+    effect: 'write',
+  },
+  {
+    name: 'migrations.changeStep',
+    method: 'changeMigrationStep',
+    title: 'Skip, restore, retry or remove a step',
+    description: 'Changes one step of a move. "skip" leaves it out, "restore" puts a skipped step back, "retry" runs a failed step again from where it stopped, and "remove" takes out a step that has not started. Skipping or retrying the step a move stopped at lets the move carry on. The contacts step cannot be skipped or removed, because it carries across who has asked not to be emailed.',
+    input: changeStepSchema,
+    output: migrationRunSchema,
+    effect: 'write',
+  },
+  {
+    name: 'migrations.peek',
+    method: 'peekMigrationSource',
+    title: 'Look at the HubSpot account',
+    description: 'Reads one path of the HubSpot API with the stored key and returns what HubSpot answers, to find out what an account has before adding steps for it. Useful paths: /crm/v3/schemas (custom objects), /crm/v3/properties/<objectType> (fields), /crm/v3/pipelines/<objectType>, /crm/v3/objects/<objectType> with query limit=5 (a few records). Reading only.',
+    input: peekSchema,
+    output: z.unknown(),
     effect: 'read',
   },
 ];

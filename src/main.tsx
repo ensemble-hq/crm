@@ -10,6 +10,7 @@ import { AssistantPage } from './pages/Assistant';
 import { ComingSoon } from './pages/ComingSoon';
 import { Dashboard } from './pages/Dashboard';
 import { DeletedRecords } from './pages/DeletedRecords';
+import { MoveIn } from './pages/MoveIn';
 import { EmailDesigner } from './pages/EmailDesigner';
 import { Forecast } from './pages/Forecast';
 import { FormBuilder, Forms, PublicForm } from './pages/Forms';
@@ -67,6 +68,7 @@ createRoot(root).render(
           <Route path="settings/people" element={<People />} />
           <Route path="settings/audit" element={<AuditLog />} />
           <Route path="settings/deleted" element={<DeletedRecords />} />
+          <Route path="settings/move-in" element={<MoveIn />} />
           <Route path="queue" element={<TaskQueue />} />
           <Route path=":objectId" element={<RecordList />} />
           <Route path=":objectId/:recordId" element={<RecordDetail />} />

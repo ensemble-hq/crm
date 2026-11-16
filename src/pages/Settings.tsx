@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, ChevronRight, Pencil, Plus, ScrollText, Settings as SettingsIcon, Trash2, Users } from 'lucide-react';
+import { ArrowRightLeft, ArrowDown, ArrowUp, ChevronRight, Pencil, Plus, ScrollText, Settings as SettingsIcon, Trash2, Users } from 'lucide-react';
 import { AssistantSettingsCard } from './AssistantSettings';
 import { ConditionPicker, ScoreRulesEditor, StageRulesCard } from './DataRules';
 import { parseFormula } from '../lib/formula';
@@ -580,6 +580,20 @@ export function Settings() {
               <span className="m-stack" data-gap="0" style={{ flex: 1, minInlineSize: 0 }}>
                 <span style={medium}>Deleted records</span>
                 <span style={small}>See what was deleted and bring it back</span>
+              </span>
+              <span style={{ display: 'inline-flex', color: 'var(--m-color-fg-subtle)' }}>
+                <ChevronRight size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />
+              </span>
+            </Link>
+          ) : null}
+          {workspace.access.manageSettings ? (
+            <Link to="/settings/move-in" className="m-cluster" data-gap="3" style={{ flexWrap: 'nowrap', padding: 'var(--m-space-3) var(--m-space-4)', color: 'inherit', textDecoration: 'none', ...rowDivider }}>
+              <span style={{ display: 'grid', placeItems: 'center', inlineSize: 32, blockSize: 32, flexShrink: 0, borderRadius: 'var(--m-radius-md)', background: 'var(--m-color-bg-sunken)' }}>
+                <ArrowRightLeft size={ICON.nav} strokeWidth={ICON.strokeWidth} aria-hidden />
+              </span>
+              <span className="m-stack" data-gap="0" style={{ flex: 1, minInlineSize: 0 }}>
+                <span style={medium}>Move in from HubSpot</span>
+                <span style={small}>Bring your account across, step by step</span>
               </span>
               <span style={{ display: 'inline-flex', color: 'var(--m-color-fg-subtle)' }}>
                 <ChevronRight size={ICON.button} strokeWidth={ICON.strokeWidth} aria-hidden />
