@@ -7,10 +7,10 @@
 
 # Ensemble CRM
 
-**A complete CRM with open code. Take it, change it by asking, and run it as your own.**
+**An open-source CRM you can take, change by asking, and run as your own.**
 
 Bring it into [Ensemble](https://shipensemble.com), say what you want different, and try each change on a running copy.<br>
-It becomes your team's CRM, on your own instance, with no developer needed. Free to run; not for resale.
+It becomes your team's CRM, on your own instance, with no developer needed.
 
 [Take it into Ensemble](#take-it-into-ensemble) · [What it does](#what-it-does) · [A look around](#a-look-around) · [Built for agents](#built-for-agents) · [Moving in from HubSpot](#moving-in-from-hubspot) · [Run it yourself](#run-it-yourself) · [Status](#status)
 
@@ -257,6 +257,8 @@ The full list, and the order it will be done in, is in [docs/TODO.md](docs/TODO.
 
 ## Licence
 
-Free to run, not to resell. Ensemble CRM is under the [Sustainable Use License](LICENSE.md): anyone may run it, change it and share it for their own team's use, at no charge. You may not sell it, resell it, or offer it to others as a paid product or service.
+Open source, under the [GNU Affero General Public License, version 3](LICENSE). Copyright (c) 2026 Ensemble.
 
-The code is open to read and change, but this is not an open-source licence in the formal sense, because of that one limit.
+In short, and without replacing the licence: anyone may run it, change it and share it. If you pass it on, or run a changed version as a service for other people, you must make your version's source available to them under the same licence.
+
+The licence covers the code. It does not cover the Ensemble name or logo.
