@@ -8,7 +8,7 @@ import './mark.css';
  * The head takes the colour of the text around it, so it is dark on a light page and light on a
  * dark one with nothing to switch; the eyes are cut out, so whatever is behind shows through. The
  * star keeps its purple in both. With `busy`, the eyes blink and stars come and go over the head
- * (left, middle, right): the sign that the model is working.
+ * (right, then middle, then left): the sign that the model is working.
  */
 
 /** A four-pointed star with drawn-in sides, centred on (x, y). */

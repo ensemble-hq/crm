@@ -15,20 +15,20 @@
   opacity: 0;
 }
 .crm-mark:is([data-busy], [data-lively]:hover, .m-sidebar-link:hover *, .m-sidebar-link:focus-visible *) .crm-mark-eye {
-  animation: crm-mark-blink 2.8s ease-in-out infinite;
+  animation: crm-mark-blink 1.8s ease-in-out infinite;
 }
 .crm-mark:is([data-busy], [data-lively]:hover, .m-sidebar-link:hover *, .m-sidebar-link:focus-visible *) .crm-mark-star {
   opacity: 0;
-  animation: crm-mark-twinkle 2.1s ease-in-out infinite;
+  animation: crm-mark-twinkle 1.2s ease-in-out infinite;
 }
 .crm-mark:is([data-busy], [data-lively]:hover, .m-sidebar-link:hover *, .m-sidebar-link:focus-visible *) .crm-mark-star[data-at='left'] {
-  animation-delay: 0s;
+  animation-delay: 0.8s;
 }
 .crm-mark:is([data-busy], [data-lively]:hover, .m-sidebar-link:hover *, .m-sidebar-link:focus-visible *) .crm-mark-star[data-at='middle'] {
-  animation-delay: 0.7s;
+  animation-delay: 0.4s;
 }
 .crm-mark:is([data-busy], [data-lively]:hover, .m-sidebar-link:hover *, .m-sidebar-link:focus-visible *) .crm-mark-star[data-at='right'] {
-  animation-delay: 1.4s;
+  animation-delay: 0s;
 }
 @keyframes crm-mark-blink {
   0%,
