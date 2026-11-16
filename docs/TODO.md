@@ -83,7 +83,7 @@ Nothing below can be worked around. A customer cannot be given an instance until
 | Mariachi installed, not linked | Every `@mariachi/*` package is linked from a checkout beside this repo, so nobody else can install it. The CRM now needs Mariachi's `main`, which is ahead of the last release (0.1.0) | A Mariachi release with the streaming flag, and `@mariachi/design` published; then point `package.json` at the published versions |
 | Migrations that are kept | The schema is one initial migration, regenerated on every change | Stop regenerating at the first deployment; every change after that is its own migration |
 | Organization name | "Northwind" is written into the workspace and the email rules | A setting, filled in when the instance is created |
-| Licence and README | Neither exists | A decision on the licence |
+| Licence | The README exists and says no licence has been chosen | A decision on the licence |
 
 ## 2. The HubSpot importer
 
