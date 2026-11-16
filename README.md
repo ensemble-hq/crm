@@ -7,10 +7,10 @@
 
 # Ensemble CRM
 
-**An open-source CRM you can take, change by asking, and run as your own.**
+**A complete CRM with open code. Take it, change it by asking, and run it as your own.**
 
 Bring it into [Ensemble](https://shipensemble.com), say what you want different, and try each change on a running copy.<br>
-It becomes your team's CRM, on your own instance, with no developer needed.
+It becomes your team's CRM, on your own instance, with no developer needed. Free to run; not for resale.
 
 [Take it into Ensemble](#take-it-into-ensemble) · [What it does](#what-it-does) · [A look around](#a-look-around) · [Built for agents](#built-for-agents) · [Moving in from HubSpot](#moving-in-from-hubspot) · [Run it yourself](#run-it-yourself) · [Status](#status)
 
@@ -47,7 +47,7 @@ The kind of thing you can ask for:
 Most of these need no new code, because objects, fields, pipelines and workflows are data. When a change does need code, Ensemble's agent writes it, runs the tests, and shows it to you running. Either way you never see git, packages or a terminal.
 
 > [!NOTE]
-> This is pre-release. You can read the code and run the demo today. Taking it into Ensemble as a hosted, working instance opens with the first release; [request access](https://shipensemble.com/request-access) to be told when. See [Status](#status).
+> This is pre-release, and you can take it today. Sign-in and email are development stand-ins for now, so make them your first request: "use Google sign-in", or whatever your team already has. Hosting your finished CRM on Ensemble is being built; [request access](https://shipensemble.com/request-access) to be first in. See [Status](#status).
 
 ## How it is built to be changed
 
@@ -249,7 +249,7 @@ This is pre-release software. It works end to end in development and is not yet 
 
 What stands between here and a first release, in short:
 
-- Hosted instances on Ensemble, with sign-in and email through it. Today there are development stand-ins for both, and the "Take it into Ensemble" path above is not open yet.
+- Hosted instances on Ensemble, with sign-in and email through it. Today there are development stand-ins for both; you can ask Ensemble to put your own in.
 - The importer proven on a real HubSpot account.
 - Gmail and Outlook sync, which comes straight after.
 
@@ -257,4 +257,6 @@ The full list, and the order it will be done in, is in [docs/TODO.md](docs/TODO.
 
 ## Licence
 
-The CRM is meant to be open source, free for anyone to take and change. The licence has not been chosen yet, so until one is added here the code is published for reading and is not licensed for reuse.
+Free to run, not to resell. Ensemble CRM is under the [Sustainable Use License](LICENSE.md): anyone may run it, change it and share it for their own team's use, at no charge. You may not sell it, resell it, or offer it to others as a paid product or service.
+
+The code is open to read and change, but this is not an open-source licence in the formal sense, because of that one limit.
