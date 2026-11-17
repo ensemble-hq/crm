@@ -5,7 +5,7 @@
   <img src="docs/assets/mark-light.svg" alt="" width="96" height="96">
 </picture>
 
-# Ensemble CRM
+# Overture
 
 **An open-source CRM you can take, change by asking, and run as your own.**
 
@@ -27,7 +27,7 @@ It becomes your team's CRM, on your own instance, with no developer needed.
 
 ## What it is
 
-Ensemble CRM is a whole, working CRM, published in the open so that anyone can take it and make it theirs. It does what teams use HubSpot for, the assistant does most of the data entry, and an agent can reach every part of it as easily as a person can.
+Overture is a whole, working CRM, published in the open so that anyone can take it and make it theirs. It does what teams use HubSpot for, the assistant does most of the data entry, and an agent can reach every part of it as easily as a person can.
 
 It is also the first template for [Ensemble](https://shipensemble.com), where the people who know a product change it themselves. That is the short way to use it: you don't set anything up, you don't write code, and you don't need an engineer to get from this repository to a CRM your team works in.
 
